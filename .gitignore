@@ -1,0 +1,67 @@
+# ================================
+# OS / Editor / Miscellaneous
+# ================================
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# ================================
+# IDEs
+# ================================
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+
+# ================================
+# Flutter / Dart
+# ================================
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+
+# ================================
+# Android
+# ================================
+android/.gradle/
+android/local.properties
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# ================================
+# iOS
+# ================================
+ios/Pods/
+
+# ================================
+# Symbolication / Obfuscation
+# ================================
+app.*.symbols
+app.*.map.json
+
+# ================================
+# Node.js (Backend)
+# ================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+.env
