@@ -1,48 +1,105 @@
-# 🛣️ Project Roadmap: Smart Mess Management System
+# 🛣️ Project Roadmap — Mess Hub Platform  
+### Timeline: 8 Weeks (2 Months)
 
-Timeline: **1 Month (4 Weeks)**
-
----
-
-## 📅 Week 1: Foundations
-
-* [ ] Set up GitHub repo & folder structure
-* [ ] Initialize Flutter project (User App + Manager Dashboard + Kiosk as modules)
-* [ ] Initialize Node.js backend (Express + MongoDB + Mongoose setup)
-* [ ] Implement **User Authentication API** (register/login with JWT)
-* [ ] Connect Flutter Auth UI to backend
+This roadmap outlines the structured development plan for the **Mess Hub — Multi-Tenant Mess Discovery & Management Platform**, divided into weekly sprints across two months.
 
 ---
 
-## 📅 Week 2: Core Features
+## 📅 Month 1: Core Platform & Customer Experience
 
-* [ ] Implement **Leave Management API**
-* [ ] Create **Leave Calendar UI** in User App
-* [ ] Build **Meal Logging API** for kiosk (Monthly + Daily users)
-* [ ] Build Kiosk UI (Photo Grid + PIN Entry + Daily User Button)
-* [ ] Connect Kiosk to backend for real-time logging
+### 🧱 **Week 1–2: Backend Foundation & API Design**  
+**🎯 Goal:** Build a secure and scalable backend foundation.
 
----
+#### 🖥️ Backend
+- [ ] Finalize full database schema (**Users**, **Messes**, **Memberships**).  
+- [ ] Implement **Authentication API** (`/api/auth`) with Phone + OTP + JWT.  
+- [ ] Implement **Mess Registration API** (`POST /api/messes`) for owners.  
+- [ ] Set up **JWT protection middleware** for route security.
 
-## 📅 Week 3: Manager Dashboard
-
-* [ ] Build Manager Dashboard UI in Flutter
-* [ ] Implement **Live Meal Tracking API**
-* [ ] Add **User Oversight (list & history)** in dashboard
-* [ ] Implement **Rule Configuration API** (rebates, leave rules)
-* [ ] Test real-time counters update on dashboard
+#### 📱 Frontend
+- [ ] Initialize **Flutter project** with Clean Architecture folder structure.  
+- [ ] Set up **Riverpod**, **Dio**, and **Routing**.  
+- [ ] Build UI for **Login**, **Registration**, and **Mess Onboarding** screens.
 
 ---
 
-## 📅 Week 4: Billing & Finalization
+### 🍽️ **Week 3–4: Mess Discovery & Membership**  
+**🎯 Goal:** Enable customers to find, view, and join messes.
 
-* [ ] Implement **Automated Billing API** (Invoices generation)
-* [ ] Build Invoice History UI in User App
-* [ ] Add Billing Screen in Manager Dashboard
-* [ ] Full system testing (all flows: user, manager, kiosk)
-* [ ] Documentation (README.md, SYSTEM_DESIGN.md, ROADMAP.md)
-* [ ] Deploy backend (e.g., on Render/Heroku) & test mobile apps
+#### 🖥️ Backend
+- [ ] Implement **Mess Discovery API** (`GET /api/messes/nearby`).  
+- [ ] Implement **Mess Profile API** (`GET /api/messes/:id`).  
+- [ ] Implement **Membership API** (`POST /api/messes/:id/memberships`).  
+
+#### 📱 Frontend (Customer App)
+- [ ] Build **Mess List / Map View** with filtering options.  
+- [ ] Build **Mess Profile Screen** to view detailed info.  
+- [ ] Implement the **Join Mess** workflow.  
+- [ ] Build **My Memberships** screen for customers.
 
 ---
 
-✅ By end of **Week 4**, the system should be fully functional with authentication, leave management, kiosk meal logging, manager dashboard, and automated billing.
+## 🧭 Month 2: Manager Tools & Finalization
+
+### 🧑‍💼 **Week 5–6: Manager Dashboard & Kiosk**  
+**🎯 Goal:** Empower Mess Owners with tools to manage their business.
+
+#### 🖥️ Backend
+- [ ] Implement **Manager Dashboard API** with live statistics.  
+- [ ] Implement APIs to **manage members** and **view their meal history**.  
+- [ ] Build **Kiosk APIs** (get members, log monthly, log daily).  
+
+#### 📱 Frontend (Manager App)
+- [ ] Build **Dashboard UI** with live data using `StreamProvider`.  
+- [ ] Build **Member List UI** to view and manage customers.  
+
+#### 💳 Frontend (Kiosk App)
+- [ ] Build a **Simple Kiosk UI** (member list, daily logs, PIN pad).  
+- [ ] Integrate **Kiosk app with backend APIs** for attendance logging.
+
+---
+
+### 💰 **Week 7–8: Billing, Leaves & Deployment**  
+**🎯 Goal:** Finalize all features, test thoroughly, and prepare for deployment.
+
+#### 🖥️ Backend
+- [ ] Implement **Leave Management API**.  
+- [ ] Implement **Automated Monthly Billing** and **Invoice Generation API**.  
+- [ ] Implement **Rule Configuration API** for managers.  
+
+#### 📱 Frontend (Customer App)
+- [ ] Build UI for **Leave Requests** and **Billing History**.  
+
+#### 🚀 Deployment & Testing
+- [ ] Conduct **Full End-to-End Testing** of all user flows.  
+- [ ] Deploy the backend to a cloud platform (e.g., **Render**, **Heroku**).  
+- [ ] Prepare **Android & iOS builds** for release.  
+- [ ] Finalize and publish **Documentation**.
+
+---
+
+## 🧩 Deliverables by End of Each Phase
+
+| Phase | Deliverables |
+|--------|--------------|
+| **Week 1–2** | Working Authentication, Database Schema, Flutter App Setup |
+| **Week 3–4** | Mess Discovery, Membership Workflow (Customer App) |
+| **Week 5–6** | Manager Dashboard + Kiosk Integration |
+| **Week 7–8** | Billing System, Leave Management, Deployment & Documentation |
+
+---
+
+## 🏁 Final Outcomes
+
+By the end of the 8-week roadmap:
+- ✅ A fully functional **multi-tenant mess management platform**.  
+- ✅ **Three apps**: Customer, Manager, and Kiosk — all integrated with one backend.  
+- ✅ **End-to-End workflow**: Join Mess → Track Meals → Manage Billing → Apply Leaves.  
+- ✅ Deployed backend with clean documentation and maintainable architecture.  
+
+---
+
+> **Author:** Yameesh  
+> **Version:** 1.0  
+> **Document:** ROADMAP.md  
+> **Project:** Mess Hub — Mess Discovery & Management Platform
