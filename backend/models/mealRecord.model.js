@@ -6,7 +6,7 @@ const MealRecordSchema = new mongoose.Schema({
   // Reference to the User who ate the meal.
   customer: {
     type: mongoose.Schema.Types.ObjectId,
-    required: true,
+    required: false,
     ref: 'User',
   },
   // Reference to the Mess where the meal was eaten.
