@@ -4,47 +4,51 @@ import 'package:flutter/material.dart';
 import 'package:mess_management_system/features/auth/presentation/screens/login_screen.dart';
 import 'package:mess_management_system/features/auth/presentation/screens/otp_screen.dart';
 import 'package:mess_management_system/features/auth/presentation/screens/register_screen.dart';
-
-// We will create these screens in the next steps.
-// For now, let's create placeholders so the code doesn't have errors.
-// TODO: Replace these placeholders with the actual screen widgets.
+import 'package:mess_management_system/features/customer_dashboard/presentation/screens/my_memberships_screen.dart';
 
 class AppRouter {
   AppRouter._(); // Private constructor
 
   // --- ROUTE NAMES ---
-  // Define static constant names for your routes. This prevents typos.
   static const String registerRoute = '/register';
   static const String loginRoute = '/login';
   static const String otpRoute = '/otp';
-  static const String homeRoute = '/home';
+  static const String customerHomeRoute = '/customer-home';
 
   // --- ROUTE GENERATOR ---
-  // This function is called whenever a new named route is pushed.
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
       case registerRoute:
         return MaterialPageRoute(builder: (_) => const RegisterScreen());
+
       case loginRoute:
         return MaterialPageRoute(builder: (_) => const LoginScreen());
+
+      // --- THIS IS THE CRITICAL FIX ---
       case otpRoute:
-        // The OTP screen will need arguments like the phone number.
-        // We'll pass them through the 'settings.arguments'.
-        final args = settings.arguments as Map<String, dynamic>;
-        return MaterialPageRoute(
+        // First, check if the arguments are not null AND are of the correct type.
+        if (settings.arguments is Map<String, dynamic>) {
+          final args = settings.arguments as Map<String, dynamic>;
+          return MaterialPageRoute(
             builder: (_) => OtpScreen(
-                  phone: args['phone'],
-                  isRegistration: args['isRegistration'],
-                ));
-      // case homeRoute:
-      //   return MaterialPageRoute(builder: (_) => const HomeScreen());
+              phone: args['phone'],
+              isRegistration: args['isRegistration'],
+            ),
+          );
+        }
+        // If arguments are missing or wrong, redirect to a safe screen (like register).
+        return MaterialPageRoute(builder: (_) => const RegisterScreen());
+      // ------------------------------------
+
+      case customerHomeRoute:
+        return MaterialPageRoute(builder: (_) => const MyMembershipsScreen());
 
       default:
-        // If the route name is not found, show a simple error screen.
+        // If the route name is not found, show a dedicated error screen.
         return MaterialPageRoute(
           builder: (_) => Scaffold(
             body: Center(
-              child: Text('No route defined for ${settings.name}'),
+              child: Text('Error: No route defined for ${settings.name}'),
             ),
           ),
         );

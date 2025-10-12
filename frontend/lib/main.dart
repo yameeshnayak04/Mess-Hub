@@ -2,13 +2,14 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mess_management_system/core/api/dio_client.dart';
-import 'package:mess_management_system/features/auth/presentation/screens/register_screen.dart'; // We will create this screen next
+import 'package:mess_management_system/core/api/dio_client.dart'; // Import DioClient
+import 'package:mess_management_system/core/routing/app_router.dart'; // Import your AppRouter
 
 void main() {
+  // Set up the Dio interceptors before the app starts.
   DioClient.instance.setupInterceptors();
+
   // The ProviderScope is a widget that stores the state of all our providers.
-  // It's essential for Riverpod to work.
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -19,16 +20,14 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Mess Hub',
-      // We define a consistent and modern theme for the entire app here.
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // Use Material 3 design for modern components.
+        // ... (your existing theme data remains the same)
         useMaterial3: true,
-        // Define the primary color swatch.
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepOrange,
           brightness: Brightness.light,
         ),
-        // Define a consistent style for all input fields.
         inputDecorationTheme: InputDecorationTheme(
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
@@ -36,11 +35,10 @@ class MyApp extends StatelessWidget {
           filled: true,
           fillColor: Colors.grey.shade100,
         ),
-        // Define a consistent style for all elevated buttons.
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.deepOrange, // Button color
-            foregroundColor: Colors.white, // Text color
+            backgroundColor: Colors.deepOrange,
+            foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
@@ -52,8 +50,16 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      // The first screen the user will see.
-      home: const RegisterScreen(),
+
+      // --- THIS IS THE CRITICAL FIX ---
+      // 'onGenerateRoute' tells MaterialApp to use our AppRouter to handle all named navigations.
+      // Whenever Navigator.pushNamed is called, this function will run.
+      onGenerateRoute: AppRouter.generateRoute,
+
+      // 'initialRoute' sets the first screen that the app will show.
+      // We use the constant from our AppRouter to avoid typos.
+      initialRoute: AppRouter.loginRoute,
+      // ------------------------------------
     );
   }
 }

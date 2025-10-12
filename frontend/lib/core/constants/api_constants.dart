@@ -12,5 +12,5 @@ class ApiConstants {
   //
   // To connect to the 'localhost' of your computer from the Android Emulator,
   // you MUST use the special alias '10.0.2.2'.
-  static const String baseUrl = "http://10.0.2.2:5000/api";
+  static const String baseUrl = "http://192.168.29.146:3000/api";
 }
