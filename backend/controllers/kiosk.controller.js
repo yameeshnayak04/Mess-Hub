@@ -1,4 +1,4 @@
-// This file contains logic for the on-premise Kiosk tablet.
+// This file contains all logic for the on-premise Kiosk tablet.
 
 const Mess = require('../models/mess.model.js');
 const User = require('../models/user.model.js');
@@ -7,24 +7,31 @@ const MealRecord = require('../models/mealRecord.model.js');
 
 // @desc    Get the list of active members for the Kiosk grid
 // @route   GET /api/kiosk/messes/:messId/active-members
-// @access  Public (but should be network-restricted in production)
+// @access  Public (Kiosk)
 const getActiveMembers = async (req, res) => {
     try {
         const { messId } = req.params;
+        const { startOfDay, endOfDay } = getTodayTimeRange(); // Helper from manager controller
 
-        // Find all active memberships for the given mess.
-        const memberships = await Membership.find({ mess: messId, status: 'active' })
-            .populate('customer', 'name photoUrl'); // Populate customer details.
+        // 1. Find all active members of the mess.
+        const memberships = await Membership.find({ mess: messId, status: 'active' }).select('customer');
+        const memberIds = memberships.map(m => m.customer);
 
-        // TODO: Filter out members who are on leave today. This requires querying the Leave collection.
-        // For now, we return all active members.
-        
-        // Map the data to a clean format for the Kiosk UI.
-        const activeMembers = memberships.map(mem => ({
-            userId: mem.customer._id,
-            name: mem.customer.name,
-            photoUrl: mem.customer.photoUrl,
-        }));
+        // 2. Find members who have already eaten today.
+        const mealsEaten = await MealRecord.find({
+            mess: messId,
+            customer: { $in: memberIds },
+            createdAt: { $gte: startOfDay, $lte: endOfDay }
+        });
+        const eatenMemberIds = mealsEaten.map(m => m.customer.toString());
+
+        // 3. Filter out members who have already eaten.
+        const remainingMemberIds = memberIds.filter(id => !eatenMemberIds.includes(id.toString()));
+
+        // TODO: Filter out members on leave today.
+
+        // 4. Fetch the final list of members to display.
+        const activeMembers = await User.find({ _id: { $in: remainingMemberIds } }).select('name photoUrl');
         
         res.status(200).json(activeMembers);
 
@@ -33,53 +40,36 @@ const getActiveMembers = async (req, res) => {
     }
 };
 
-// @desc    Log a meal for a monthly member
+// @desc    Log a meal for a monthly member via PIN verification
 // @route   POST /api/kiosk/messes/:messId/log-monthly
 // @access  Public (Kiosk)
 const logMonthlyMeal = async (req, res) => {
     const { messId } = req.params;
-    const { customerId, mealType } = req.body; // mealType will be 'Lunch' or 'Dinner'
+    const { userId, pin, mealType } = req.body;
 
     try {
-        // --- VALIDATION ---
-        // 1. Check if this user is an active member of this mess.
-        const membership = await Membership.findOne({ customer: customerId, mess: messId, status: 'active' });
-        if (!membership) {
-            return res.status(403).json({ message: 'This user is not an active member of this mess.' });
+        // Find the user and explicitly select the 'pin' field, which is normally hidden.
+        const user = await User.findById(userId).select('+pin');
+        if (!user || !user.pin) {
+            return res.status(401).json({ message: 'Invalid user or PIN not set.' });
         }
 
-        // 2. Check if the user has already eaten this meal today.
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date();
-        endOfDay.setHours(23, 59, 59, 999);
-
-        const existingRecord = await MealRecord.findOne({
-            customer: customerId,
-            mess: messId,
-            mealType: mealType,
-            createdAt: { $gte: startOfDay, $lte: endOfDay }
-        });
-
-        if (existingRecord) {
-            return res.status(400).json({ message: 'Meal already logged for this user today.' });
+        // Use the method we defined in the user model to compare the entered PIN.
+        const isPinCorrect = await user.comparePin(pin);
+        if (!isPinCorrect) {
+            return res.status(401).json({ message: 'Incorrect PIN.' });
         }
-        
-        // --- LOG MEAL ---
-        // Create a new meal record.
-        await MealRecord.create({
-            customer: customerId,
-            mess: messId,
-            mealType: mealType,
-        });
 
-        res.status(201).json({ message: 'Meal logged successfully.' });
+        // --- At this point, PIN is correct ---
+        // Create the meal record.
+        await MealRecord.create({ mess: messId, customer: userId, mealType });
+
+        res.status(201).json({ message: `Meal logged successfully for ${user.name}.` });
 
     } catch (error) {
         res.status(500).json({ message: 'Server Error', error: error.message });
     }
 };
-
 
 // @desc    Log a meal for a daily (pay-per-meal) user
 // @route   POST /api/kiosk/messes/:messId/log-daily
@@ -87,30 +77,60 @@ const logMonthlyMeal = async (req, res) => {
 const logDailyMeal = async (req, res) => {
     const { messId } = req.params;
     const { mealType } = req.body;
-
-    // To log a daily user, we create a meal record without a customer ID.
-    // First, let's make sure the mess exists.
-    const messExists = await Mess.findById(messId);
-    if (!messExists) {
-        return res.status(404).json({ message: "Mess not found." });
+    try {
+        // Create a meal record without a customer ID.
+        await MealRecord.create({ mess: messId, mealType: mealType });
+        res.status(201).json({ message: 'Daily meal logged successfully.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Server Error', error: error.message });
     }
+};
+
+// @desc    Manager logs a meal for a user who forgot their PIN
+// @route   POST /api/kiosk/messes/:messId/manager-override
+// @access  Public (Kiosk)
+const managerOverride = async (req, res) => {
+    const { messId } = req.params;
+    const { userId, managerPin } = req.body;
 
     try {
+        const mess = await Mess.findById(messId);
+        if (!mess) return res.status(404).json({ message: 'Mess not found.' });
+
+        // Find the manager of this mess and check their PIN.
+        const manager = await User.findById(mess.owner).select('+pin');
+        if (!manager || !manager.pin) return res.status(403).json({ message: 'Manager PIN not set.' });
+
+        const isPinCorrect = await manager.comparePin(managerPin);
+        if (!isPinCorrect) return res.status(403).json({ message: 'Incorrect Manager PIN.' });
+
+        // --- Manager PIN is correct ---
+        // Log the meal for the specified user and set the override flag.
         await MealRecord.create({
             mess: messId,
-            mealType: mealType,
-            // 'customer' field is intentionally left null for daily users.
+            customer: userId,
+            mealType: 'Lunch', // Simplified, could get mealType from request
+            isManagerOverride: true,
         });
 
-        res.status(201).json({ message: 'Daily meal logged successfully.' });
+        res.status(201).json({ message: 'Manager override successful. Meal logged.' });
 
     } catch (error) {
         res.status(500).json({ message: 'Server Error', error: error.message });
     }
 };
 
+// Helper function needed by this controller
+const getTodayTimeRange = () => {
+    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
+    return { startOfDay, endOfDay };
+};
+
+
 module.exports = {
     getActiveMembers,
     logMonthlyMeal,
     logDailyMeal,
+    managerOverride,
 };

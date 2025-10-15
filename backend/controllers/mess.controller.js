@@ -1,111 +1,123 @@
-// This file contains the logic for creating and discovering messes.
+// This file contains the final logic for creating, discovering, and interacting with Mess profiles.
 
 const Mess = require('../models/mess.model.js');
-const User = require('../models/user.model.js');
+const Review = require('../models/review.model.js');
+const WeeklyMenu = require('../models/weeklyMenu.model.js');
+const Membership = require('../models/membership.model.js');
 
-// @desc    Register a new mess
+// @desc    Register a new mess profile
 // @route   POST /api/messes
 // @access  Private (Manager only)
 const registerMess = async (req, res) => {
-    // The 'protect' and 'isManager' middlewares will run before this,
-    // so req.user will contain the authenticated manager's data.
-
-    // Destructure all required mess details from the request body.
-    const {
-        name,
-        address,
-        managerContact,
-        location, // Should be { type: "Point", coordinates: [lng, lat] }
-        serviceType,
-        dailyThaliRate,
-        mealPlans,
-        timings
-    } = req.body;
-
-    // Basic validation
-    if (!name || !address || !location || !serviceType || !managerContact) {
-        return res.status(400).json({ message: "Please provide all required mess details." });
-    }
-
     try {
-        // Check if this manager already owns a mess.
         const existingMess = await Mess.findOne({ owner: req.user._id });
-        if (existingMess) {
-            return res.status(400).json({ message: "You have already registered a mess." });
-        }
+        if (existingMess) return res.status(400).json({ message: "You have already registered a mess." });
 
-        // Create a new mess document in the database.
-        const mess = await Mess.create({
-            name,
-            address,
-            managerContact,
-            location,
-            serviceType,
-            dailyThaliRate,
-            mealPlans,
-            timings,
-            owner: req.user._id, // Link the mess to the logged-in manager.
-        });
-
+        // Create a new mess and link it to the logged-in manager.
+        const mess = await Mess.create({ ...req.body, owner: req.user._id });
         res.status(201).json(mess);
-
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
-// @desc    Get nearby messes based on user's location
-// @route   GET /api/messes/nearby?lat=...&lng=...&radius=...
+// @desc    Get nearby messes based on location and filters
+// @route   GET /api/messes/nearby
 // @access  Private (Customer only)
 const getNearbyMesses = async (req, res) => {
-    // Get latitude, longitude, and radius from the query parameters.
-    const { lat, lng, radius } = req.query; // radius is in kilometers
-
-    if (!lat || !lng) {
-        return res.status(400).json({ message: "Latitude and longitude are required." });
-    }
-
-    // Convert radius from kilometers to meters for MongoDB's $maxDistance operator.
-    const radiusInMeters = (radius || 10) * 1000; // Default to 10km if no radius is provided.
-
-    try {
-        // Use a geospatial query to find messes.
-        const messes = await Mess.find({
-            location: {
-                $nearSphere: {
-                    $geometry: {
-                        type: "Point",
-                        coordinates: [parseFloat(lng), parseFloat(lat)] // [longitude, latitude]
-                    },
-                    $maxDistance: radiusInMeters
-                }
+    const { lat, lng, radius = 10, filter } = req.query;
+    if (!lat || !lng) return res.status(400).json({ message: "Latitude and longitude are required." });
+    
+    const radiusInMeters = parseFloat(radius) * 1000;
+    
+    let query = {
+        location: {
+            $nearSphere: {
+                $geometry: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] },
+                $maxDistance: radiusInMeters
             }
-        });
+        },
+        status: 'active'
+    };
 
+    if (filter) query.cuisine = filter; // e.g., filter=Veg
+    
+    try {
+        // Select only the fields needed for the list view for performance.
+        const messes = await Mess.find(query).select('name address serviceType dailyThaliRate averageRating location');
         res.status(200).json(messes);
-
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
-// @desc    Get the public profile of a single mess
+// @desc    Get the full public profile of a single mess
 // @route   GET /api/messes/:messId
 // @access  Public
 const getMessProfile = async (req, res) => {
     try {
-        // Find the mess by its ID, which is passed as a URL parameter.
-        // We also use .populate() to fetch the owner's details (name and phone) from the User collection.
-        const mess = await Mess.findById(req.params.messId).populate('owner', 'name phone');
-
-        if (!mess) {
-            return res.status(404).json({ message: "Mess not found" });
-        }
-
+        const mess = await Mess.findById(req.params.messId).populate('owner', 'name photoUrl');
+        if (!mess) return res.status(404).json({ message: "Mess not found" });
         res.status(200).json(mess);
-
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
+// @desc    Customer posts a review for a mess
+// @route   POST /api/messes/:messId/reviews
+// @access  Private (Customer only)
+const createReview = async (req, res) => {
+    const { rating, comment } = req.body;
+    const { messId } = req.params;
+    try {
+        const mess = await Mess.findById(messId);
+        if (!mess) return res.status(404).json({ message: 'Mess not found.' });
+
+        // Check if user is an active member before allowing review.
+        const isMember = await Membership.findOne({ mess: messId, customer: req.user._id, status: 'active' });
+        if (!isMember) return res.status(403).json({ message: 'Only active members can post reviews.' });
+
+        // Create the new review
+        const review = await Review.create({ customer: req.user._id, mess: messId, rating, comment });
+
+        // This is a critical operation: update the mess's average rating.
+        // It's more efficient to do this here than to calculate it on every GET request.
+        const reviews = await Review.find({ mess: messId });
+        mess.reviewCount = reviews.length;
+        mess.averageRating = reviews.reduce((acc, item) => item.rating + acc, 0) / reviews.length;
+        await mess.save();
+
+        res.status(201).json(review);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+// @desc    Get all reviews for a mess
+// @route   GET /api/messes/:messId/reviews
+// @access  Public
+const getMessReviews = async (req, res) => {
+    try {
+        const reviews = await Review.find({ mess: req.params.messId }).populate('customer', 'name photoUrl').sort({ createdAt: -1 });
+        res.status(200).json(reviews);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+// @desc    Get the weekly menu for a mess
+// @route   GET /api/messes/:messId/menu
+// @access  Public
+const getWeeklyMenu = async (req, res) => {
+    try {
+        // In a real app, calculate the current weekIdentifier, e.g., '2025-W42'
+        const currentWeekIdentifier = "2025-W42"; // Placeholder
+        const menu = await WeeklyMenu.findOne({ mess: req.params.messId, weekIdentifier: currentWeekIdentifier });
+        if (!menu) return res.status(404).json({ message: 'Menu not set for this week.' });
+        res.status(200).json(menu);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
 
@@ -113,4 +125,7 @@ module.exports = {
     registerMess,
     getNearbyMesses,
     getMessProfile,
+    createReview,
+    getMessReviews,
+    getWeeklyMenu,
 };

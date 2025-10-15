@@ -2,31 +2,24 @@
 
 // Middleware to handle requests for routes that do not exist (404 Not Found).
 const notFound = (req, res, next) => {
-  // Create a new Error object for the non-existent route.
   const error = new Error(`Not Found - ${req.originalUrl}`);
-  // Set the response status code to 404.
   res.status(404);
-  // Pass the error to the next middleware in the chain (which will be our errorHandler).
-  next(error);
+  next(error); // Pass the error to the next middleware (errorHandler).
 };
 
-// Main error handling middleware. This is where all errors will end up.
-// Express recognizes a middleware with 4 arguments (err, req, res, next) as an error handler.
+// Main error handling middleware. Express recognizes this by its 4 arguments.
 const errorHandler = (err, req, res, next) => {
-  // Sometimes, an error might occur but the status code is still 200 (OK).
-  // This line sets the status code to 500 (Internal Server Error) if it's still 200, otherwise keeps the existing error code.
+  // If the error occurs but the status code is still 200, default to 500.
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
   res.status(statusCode);
 
-  // Send a structured JSON response with the error message.
-  // In a development environment, we also send the error stack trace for easier debugging.
-  // In production, we would hide the stack trace for security reasons.
+  // Send a clean JSON error response.
   res.json({
     message: err.message,
-    // The 'stack' property will only be included if the environment is not 'production'.
+    // Only show the detailed stack trace if we are in a development environment.
     stack: process.env.NODE_ENV === 'production' ? null : err.stack,
   });
 };
 
-// Export the middleware functions.
+// Export only the error handling middleware functions from this file.
 module.exports = { notFound, errorHandler };
