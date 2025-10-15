@@ -1,49 +1,67 @@
-// This file defines the data structure for users.
+// This file defines the data structure for all users in the application.
 
-// Import Mongoose, an ODM library for MongoDB, to define schemas and models.
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs'); // We will use bcrypt to hash the PIN
 
-// Define the schema for the User collection.
 const UserSchema = new mongoose.Schema({
-  // 'name' field is a string and is required for every user.
   name: {
     type: String,
-    required: true,
+    required: [true, 'Please provide a name'], // Error message if not provided
   },
-  // 'phone' is a string, required, must be unique, and must be 10 digits.
   phone: {
     type: String,
-    required: true,
-    unique: true,
-    match: [/^\d{10}$/, 'Please fill a valid 10-digit phone number'],
+    required: [true, 'Please provide a phone number'],
+    unique: true, // No two users can have the same phone number
+    match: [/^\d{10}$/, 'Please provide a valid 10-digit phone number'],
   },
-  // 'role' determines if the user is a customer or a mess owner.
-  // 'enum' restricts the value to be one of the specified strings.
   role: {
     type: String,
-    enum: ['customer', 'manager'], // The role can only be 'customer' or 'manager'.
-    required: true,
+    enum: ['customer', 'manager'], // Role must be one of these two values
+    required: [true, 'Please specify a role'],
   },
-  // 'otp' and 'otpExpires' are used for the phone verification process.
-  // They are not required and will only be present temporarily.
+  // This will store the hashed version of the user's Kiosk PIN.
+  pin: {
+    type: String,
+    // We only select the pin when we explicitly need to (e.g., for comparison).
+    // It will not be returned in general user queries.
+    select: false,
+  },
+  photoUrl: {
+    type: String,
+    default: '',
+  },
+  // These fields are temporary for the OTP verification process.
   otp: {
     type: String,
+    select: false,
   },
   otpExpires: {
     type: Date,
-  },
-  // 'photoUrl' can store a link to the user's profile picture for the Kiosk.
-  photoUrl: {
-    type: String,
-    default: '', // Default to an empty string if no photo is provided.
+    select: false,
   },
 }, {
-  // 'timestamps: true' automatically adds 'createdAt' and 'updatedAt' fields.
-  timestamps: true
+  timestamps: true // Automatically adds createdAt and updatedAt fields
 });
 
-// Create the User model from the schema.
-const User = mongoose.model('User', UserSchema);
+// Mongoose "pre-save hook": This function runs automatically right before a user document is saved.
+// We use it to hash the PIN if it has been modified.
+UserSchema.pre('save', async function(next) {
+  // Only run this function if the pin was actually modified (or is new)
+  if (!this.isModified('pin') || !this.pin) {
+    return next();
+  }
+  // Hash the pin with a salt round of 10
+  const salt = await bcrypt.genSalt(10);
+  this.pin = await bcrypt.hash(this.pin, salt);
+  next();
+});
 
-// Export the model to be used in other parts of the application.
+// Method to compare entered PIN with the hashed PIN in the database
+UserSchema.methods.comparePin = async function(enteredPin) {
+    if (!this.pin) return false;
+    return await bcrypt.compare(enteredPin, this.pin);
+};
+
+
+const User = mongoose.model('User', UserSchema);
 module.exports = User;

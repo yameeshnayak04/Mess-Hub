@@ -1,30 +1,18 @@
-// This file defines the data structure for logging every meal.
-
 const mongoose = require('mongoose');
 
 const MealRecordSchema = new mongoose.Schema({
-  // Reference to the User who ate the meal.
-  customer: {
-    type: mongoose.Schema.Types.ObjectId,
-    required: false,
-    ref: 'User',
+  mess: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'Mess' },
+  customer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
+  mealType: { type: String, enum: ['Lunch', 'Dinner'], required: true },
+  
+  // **NEW**: A flag for auditing purposes to track manager overrides.
+  isManagerOverride: {
+    type: Boolean,
+    default: false,
   },
-  // Reference to the Mess where the meal was eaten.
-  mess: {
-    type: mongoose.Schema.Types.ObjectId,
-    required: true,
-    ref: 'Mess',
-  },
-  // The type of meal that was eaten (e.g., Lunch, Dinner).
-  mealType: {
-      type: String,
-      enum: ['Lunch', 'Dinner'], // Assuming only these two for simplicity
-      required: true,
-  }
-}, { timestamps: true }); // The 'createdAt' field will serve as the meal timestamp.
+}, { 
+  timestamps: true 
+});
 
-// Create the MealRecord model from the schema.
 const MealRecord = mongoose.model('MealRecord', MealRecordSchema);
-
-// Export the model.
 module.exports = MealRecord;
