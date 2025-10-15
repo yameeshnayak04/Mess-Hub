@@ -6,8 +6,12 @@ const router = express.Router();
 // Import controller functions.
 const {
     joinMess,
+    getMyProfile,       // <-- New
+    updateMyProfile,    // <-- New
     markLeave,
-    getMyMemberships
+    toggleMealSkip,     // <-- New
+    notifyPayment,      // <-- New
+    getMyMemberships,
 } = require('../controllers/customer.controller.js');
 
 // Import security middleware.
@@ -15,17 +19,22 @@ const { protect, isCustomer } = require('../middlewares/auth.middleware.js');
 
 // --- PROTECTED CUSTOMER ROUTES ---
 // We apply the 'protect' and 'isCustomer' middleware to all routes in this file.
-// This ensures only an authenticated customer can access these endpoints.
+// This is a clean way to protect all endpoints defined below.
 router.use(protect, isCustomer);
 
-// Route for a customer to join a mess (create a membership).
-router.post('/memberships', joinMess);
+// --- Profile Routes ---
+router.route('/me/profile')
+    .get(getMyProfile)       // Get my profile
+    .put(updateMyProfile);   // Update my profile
 
-// Route for a customer to get a list of all their active memberships.
-router.get('/me/memberships', getMyMemberships);
+// --- Membership Routes ---
+router.post('/memberships', joinMess); // Join a new mess
+router.get('/me/memberships', getMyMemberships); // Get all my memberships
+router.post('/memberships/:membershipId/leaves', markLeave); // Mark a formal leave
+router.post('/memberships/:membershipId/toggle-meal', toggleMealSkip); // Toggle "Not Eating"
 
-// Route for a customer to mark a leave for a specific membership.
-router.post('/memberships/:membershipId/leaves', markLeave);
+// --- Payment Routes ---
+router.post('/invoices/:invoiceId/notify-payment', notifyPayment); // Notify manager of payment
 
 
 module.exports = router;

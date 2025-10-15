@@ -1,29 +1,33 @@
-// This file defines the API routes for authentication.
+// This file defines the API routes for authentication and user identity.
 
 const express = require('express');
 const router = express.Router();
 
-// Import the controller functions that contain the logic for each route.
+// Import the controller functions.
 const {
     sendRegistrationOtp,
     verifyRegistrationOtp,
     sendLoginOtp,
-    verifyLoginOtp
+    verifyLoginOtp,
+    setPin, // <-- Import the new PIN function
 } = require('../controllers/auth.controller.js');
 
+// Import the security middleware.
+const { protect } = require('../middlewares/auth.middleware.js');
+
+
 // --- PUBLIC ROUTES ---
-
-// Route to handle sending an OTP for a new user registration.
+// These routes are for the initial sign-up and login process.
 router.post('/register/send-otp', sendRegistrationOtp);
-
-// Route to handle verifying the OTP and creating the new user.
 router.post('/register/verify-otp', verifyRegistrationOtp);
-
-// Route to handle sending an OTP for an existing user to log in.
 router.post('/login/send-otp', sendLoginOtp);
-
-// Route to handle verifying the OTP and logging the user in.
 router.post('/login/verify-otp', verifyLoginOtp);
 
-// Export the router so it can be used in the main index.js file.
+
+// --- PROTECTED ROUTE ---
+// This route is for a logged-in user to set or change their PIN.
+// It is protected to ensure only the authenticated user can change their own PIN.
+router.put('/me/pin', protect, setPin);
+
+
 module.exports = router;

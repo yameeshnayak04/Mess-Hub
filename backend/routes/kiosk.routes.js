@@ -7,19 +7,23 @@ const router = express.Router();
 const {
     getActiveMembers,
     logMonthlyMeal,
-    logDailyMeal
+    logDailyMeal,
+    managerOverride, // <-- New
 } = require('../controllers/kiosk.controller.js');
 
-// --- KIOSK ROUTES ---
+// --- KIOSK ROUTES (Public but should be IP-restricted in production) ---
 
-// Route for the Kiosk to fetch the list of active members to display on the grid.
+// Kiosk fetches the list of active members to display on the grid.
 router.get('/messes/:messId/active-members', getActiveMembers);
 
-// Route for the Kiosk to log a meal for a monthly member after PIN verification.
+// Kiosk logs a meal for a monthly member after PIN verification.
 router.post('/messes/:messId/log-monthly', logMonthlyMeal);
 
-// Route for the Kiosk to log a meal for a pay-per-meal daily user.
+// Kiosk logs a meal for a pay-per-meal daily user.
 router.post('/messes/:messId/log-daily', logDailyMeal);
+
+// Manager uses their own PIN to override and log a meal for a user.
+router.post('/messes/:messId/manager-override', managerOverride);
 
 
 module.exports = router;
