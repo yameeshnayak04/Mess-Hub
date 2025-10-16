@@ -1,6 +1,7 @@
-// This file defines the contract for the customer repository.
+// This file defines the abstract contract for the customer repository.
 
 import 'package:mess_management_system/features/customer_dashboard/domain/entities/invoice.dart';
+import 'package:mess_management_system/features/customer_dashboard/domain/entities/leave.dart';
 import 'package:mess_management_system/features/customer_dashboard/domain/entities/membership.dart';
 
 abstract class CustomerRepository {
@@ -13,4 +14,10 @@ abstract class CustomerRepository {
 
   // Contract for fetching the billing history for a specific membership.
   Future<List<Invoice>> getBillingHistory(String membershipId);
+
+  // You would add the new contracts here as well
+  Future<void> toggleMealSkip(
+      String membershipId, DateTime date, String mealType);
+  Future<List<Invoice>> getMyInvoices();
+  Future<void> notifyPayment(String invoiceId, String? proofUrl);
 }

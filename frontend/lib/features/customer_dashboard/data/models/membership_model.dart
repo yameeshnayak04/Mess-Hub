@@ -1,5 +1,6 @@
 // This file defines the MembershipModel, which represents the raw data from the API.
 
+// We import the entity from the domain layer.
 import 'package:mess_management_system/features/customer_dashboard/domain/entities/membership.dart';
 
 // The MembershipModel extends the Membership entity for easy conversion.
@@ -27,6 +28,7 @@ class MembershipModel extends Membership {
       messName: messData['name'],
       messAddress: messData['address'],
       mealPlanName: mealPlanData['name'],
+      // We cast the number to a double to ensure type safety.
       mealPlanPrice: (mealPlanData['price'] as num).toDouble(),
       status: json['status'],
     );

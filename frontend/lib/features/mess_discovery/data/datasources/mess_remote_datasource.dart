@@ -1,4 +1,4 @@
-// This file is responsible for making the actual API calls for the mess discovery feature.
+// lib/features/mess_discovery/data/datasources/mess_remote_datasource.dart
 
 import 'package:dio/dio.dart';
 import 'package:mess_management_system/core/api/dio_client.dart';
@@ -6,27 +6,37 @@ import 'package:mess_management_system/features/mess_discovery/data/models/mess_
 
 abstract class MessRemoteDataSource {
   Future<List<MessModel>> getNearbyMesses(
-      double lat, double lng, double radius);
+      {required double lat,
+      required double lng,
+      double radius = 10.0,
+      String? filter});
   Future<MessModel> getMessDetails(String messId);
 }
 
 class MessRemoteDataSourceImpl implements MessRemoteDataSource {
-  // Get the singleton instance of our Dio client from the core folder.
+  // Get the singleton instance of our configured Dio client from the core folder.
   final Dio _dio = DioClient.instance.dio;
 
   @override
   Future<List<MessModel>> getNearbyMesses(
-      double lat, double lng, double radius) async {
+      {required double lat,
+      required double lng,
+      double radius = 10.0,
+      String? filter}) async {
     try {
-      // Make the GET request to the '/messes/nearby' endpoint with query parameters.
-      final response = await _dio.get(
-        '/messes/nearby',
-        queryParameters: {
-          'lat': lat,
-          'lng': lng,
-          'radius': radius,
-        },
-      );
+      // Build the query parameters map.
+      final queryParameters = {
+        'lat': lat,
+        'lng': lng,
+        'radius': radius,
+        if (filter != null)
+          'filter': filter, // Add filter only if it's not null
+      };
+
+      // Make the GET request to the '/messes/nearby' endpoint.
+      // The Dio interceptor will automatically add the user's JWT token.
+      final response =
+          await _dio.get('/messes/nearby', queryParameters: queryParameters);
 
       // The response data will be a list of JSON objects.
       // We map over this list and convert each JSON object into a MessModel.

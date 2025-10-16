@@ -30,6 +30,7 @@ dependencies:
   
   # For making API calls
   dio: ^5.4.2+1
+  intl : ^0.18.1
   
   # For saving login token locally
   shared_preferences: ^2.2.2

@@ -1,4 +1,4 @@
-// This file implements the MessRepository contract from the domain layer.
+// lib/features/mess_discovery/data/repositories/mess_repository_impl.dart
 
 import 'package:mess_management_system/features/mess_discovery/data/datasources/mess_remote_datasource.dart';
 import 'package:mess_management_system/features/mess_discovery/domain/entities/mess.dart';
@@ -12,12 +12,15 @@ class MessRepositoryImpl implements MessRepository {
 
   @override
   Future<List<Mess>> getNearbyMesses(
-      double lat, double lng, double radius) async {
+      {required double lat,
+      required double lng,
+      double radius = 10.0,
+      String? filter}) async {
     try {
       // Call the datasource to get a list of MessModels.
-      final messModels =
-          await remoteDataSource.getNearbyMesses(lat, lng, radius);
-      // Since MessModel extends Mess, the list is already of the correct type.
+      final messModels = await remoteDataSource.getNearbyMesses(
+          lat: lat, lng: lng, radius: radius, filter: filter);
+      // Since MessModel extends Mess, the list is already of the correct type (List<Mess>).
       // This is a major benefit of using this inheritance pattern.
       return messModels;
     } catch (e) {

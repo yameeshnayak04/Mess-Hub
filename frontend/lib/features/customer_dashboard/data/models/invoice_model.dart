@@ -13,7 +13,7 @@ class InvoiceModel extends Invoice {
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
     return InvoiceModel(
       id: json['_id'],
-      month: json['month'], // Assuming month is a string like "October 2025"
+      month: json['month'].toString(), // Ensure month is a string
       amount: (json['amount'] as num).toDouble(),
       status: json['status'],
     );

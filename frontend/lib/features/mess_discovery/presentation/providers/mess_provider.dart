@@ -1,4 +1,4 @@
-// This file contains the state management logic for mess discovery using Riverpod.
+// lib/features/mess_discovery/presentation/providers/mess_provider.dart
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mess_management_system/features/mess_discovery/data/datasources/mess_remote_datasource.dart';
@@ -13,8 +13,9 @@ import 'package:mess_management_system/features/mess_discovery/domain/usecases/g
 class MessDiscoveryState {
   final bool isLoading;
   final String? error;
-  final List<Mess> messes; // List of nearby messes
-  final Mess? selectedMess; // Details of a single selected mess
+  final List<Mess> messes; // This will hold the list of nearby messes.
+  final Mess?
+      selectedMess; // This will hold the details of a single selected mess.
 
   const MessDiscoveryState({
     this.isLoading = false,
@@ -23,24 +24,27 @@ class MessDiscoveryState {
     this.selectedMess,
   });
 
-  // copyWith method to easily create new state objects.
+  // copyWith method to easily create new, immutable state objects.
   MessDiscoveryState copyWith({
     bool? isLoading,
     String? error,
     List<Mess>? messes,
+    // Use a helper class to differentiate between setting null and not providing a value
     Mess? selectedMess,
+    bool clearSelectedMess = false,
   }) {
     return MessDiscoveryState(
       isLoading: isLoading ?? this.isLoading,
-      error: error ?? this.error,
+      error: error, // Clear old errors on new state changes
       messes: messes ?? this.messes,
-      selectedMess: selectedMess ?? this.selectedMess,
+      selectedMess:
+          clearSelectedMess ? null : selectedMess ?? this.selectedMess,
     );
   }
 }
 
 // Part 2: Define the Notifier
-// This class contains the logic to fetch data and manage the state.
+// This class contains the logic to fetch data by calling use cases and manages the state.
 class MessDiscoveryNotifier extends StateNotifier<MessDiscoveryState> {
   final GetNearbyMesses _getNearbyMesses;
   final GetMessDetails _getMessDetails;
@@ -49,10 +53,11 @@ class MessDiscoveryNotifier extends StateNotifier<MessDiscoveryState> {
       : super(const MessDiscoveryState());
 
   // Method to fetch nearby messes.
-  Future<void> fetchNearbyMesses(double lat, double lng) async {
+  Future<void> fetchNearbyMesses(
+      {required double lat, required double lng}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final messes = await _getNearbyMesses(lat, lng);
+      final messes = await _getNearbyMesses(lat: lat, lng: lng);
       state = state.copyWith(isLoading: false, messes: messes);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -71,7 +76,7 @@ class MessDiscoveryNotifier extends StateNotifier<MessDiscoveryState> {
   }
 }
 
-// Part 3: Define the Providers (Dependency Injection)
+// Part 3: Define the Providers (for Dependency Injection)
 
 // Provider for the MessRemoteDataSource
 final messRemoteDataSourceProvider = Provider<MessRemoteDataSource>((ref) {

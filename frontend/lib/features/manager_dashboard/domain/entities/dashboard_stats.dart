@@ -1,5 +1,8 @@
-// This file defines the DashboardStats entity, a pure Dart object for the UI.
+// lib/features/manager_dashboard/domain/entities/dashboard_stats.dart
 
+// This entity defines the pure business object for the dashboard statistics.
+// It is UI-agnostic and contains no parsing logic. It perfectly matches the
+// data structure returned by your backend's dashboard-stats API endpoint.
 class DashboardStats {
   final int totalMembers;
   final int membersOnLeave;

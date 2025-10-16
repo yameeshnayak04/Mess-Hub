@@ -10,6 +10,7 @@ class GetMyMemberships {
 
   // The 'call' method makes the class callable like a function.
   Future<List<Membership>> call() {
+    // It simply delegates the call to the repository.
     return repository.getMyMemberships();
   }
 }

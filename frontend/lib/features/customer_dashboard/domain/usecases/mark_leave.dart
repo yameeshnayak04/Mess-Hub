@@ -7,10 +7,14 @@ class MarkLeave {
 
   MarkLeave(this.repository);
 
-  Future<void> call(String membershipId, DateTime startDate, DateTime endDate) {
-    // We could add business logic here, e.g., checking if startDate is before endDate.
+  Future<void> call({
+    required String membershipId,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) {
+    // Use cases are a great place for business rule validation.
     if (startDate.isAfter(endDate)) {
-      throw Exception('Start date cannot be after end date.');
+      throw Exception('Start date cannot be after the end date.');
     }
     return repository.markLeave(membershipId, startDate, endDate);
   }

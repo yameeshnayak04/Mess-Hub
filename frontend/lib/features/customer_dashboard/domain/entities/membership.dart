@@ -1,4 +1,4 @@
-// This file defines the Membership entity, representing a user's subscription to a mess.
+// Defines the Membership entity, representing a user's subscription to a mess.
 
 class Membership {
   final String id;

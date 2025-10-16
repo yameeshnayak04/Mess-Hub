@@ -1,6 +1,7 @@
-// This file contains a reusable widget to display a customer's membership card.
+// This file contains a fully functional, reusable widget for a membership card.
 
 import 'package:flutter/material.dart';
+import 'package:mess_management_system/core/routing/app_router.dart';
 import 'package:mess_management_system/features/customer_dashboard/domain/entities/membership.dart';
 
 class MembershipCard extends StatelessWidget {
@@ -28,23 +29,17 @@ class MembershipCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Text(
-                    membership.messName,
-                    style: textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  child: Text(membership.messName,
+                      style: textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis),
                 ),
                 Chip(
-                  label: Text(
-                    membership.status.toUpperCase(),
-                    style: textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
+                  label: Text(membership.status.toUpperCase(),
+                      style: textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.bold, color: Colors.white)),
                   backgroundColor: membership.status == 'active'
-                      ? Colors.green
+                      ? Colors.green.shade600
                       : Colors.grey,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   visualDensity: VisualDensity.compact,
@@ -60,13 +55,10 @@ class MembershipCard extends StatelessWidget {
                     size: 16, color: Colors.grey.shade600),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    membership.messAddress,
-                    style: textTheme.bodyMedium
-                        ?.copyWith(color: Colors.grey.shade700),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                    child: Text(membership.messAddress,
+                        style: textTheme.bodyMedium
+                            ?.copyWith(color: Colors.grey.shade700),
+                        overflow: TextOverflow.ellipsis)),
               ],
             ),
             const SizedBox(height: 16),
@@ -80,57 +72,58 @@ class MembershipCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'YOUR PLAN',
-                      style: textTheme.labelSmall
-                          ?.copyWith(color: Colors.grey.shade500),
-                    ),
+                    Text('YOUR PLAN',
+                        style: textTheme.labelSmall
+                            ?.copyWith(color: Colors.grey.shade500)),
                     const SizedBox(height: 4),
-                    Text(
-                      membership.mealPlanName,
-                      style: textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
+                    Text(membership.mealPlanName,
+                        style: textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold)),
                   ],
                 ),
-                Text(
-                  '₹${membership.mealPlanPrice.toStringAsFixed(0)} / mo',
-                  style: textTheme.titleLarge?.copyWith(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                Text('₹${membership.mealPlanPrice.toStringAsFixed(0)} / mo',
+                    style: textTheme.titleLarge?.copyWith(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.bold)),
               ],
             ),
             const SizedBox(height: 20),
 
-            // Action Buttons
+            // Action Buttons with Navigation
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () {
-                      // TODO: Navigate to Mark Leave Screen
+                      // Navigate to the Leave Screen, passing the membership ID.
+                      Navigator.pushNamed(
+                        context,
+                        AppRouter.leaveRoute,
+                        arguments: {'membershipId': membership.id},
+                      );
                     },
-                    icon: const Icon(Icons.calendar_today),
+                    icon: const Icon(Icons.calendar_today_outlined),
                     label: const Text('Mark Leave'),
                     style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: colorScheme.primary),
-                    ),
+                        side: BorderSide(color: colorScheme.primary)),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () {
-                      // TODO: Navigate to Billing History Screen
+                      // Navigate to the Billing Screen, passing the membership ID.
+                      Navigator.pushNamed(
+                        context,
+                        AppRouter.billingRoute,
+                        arguments: {'membershipId': membership.id},
+                      );
                     },
-                    icon: const Icon(Icons.receipt_long),
+                    icon: const Icon(Icons.receipt_long_outlined),
                     label: const Text('Billing'),
                     style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: colorScheme.primary),
-                    ),
+                        side: BorderSide(color: colorScheme.primary)),
                   ),
                 ),
               ],

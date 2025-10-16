@@ -1,11 +1,12 @@
-// This file contains the UI for displaying a list of nearby messes.
+// lib/features/mess_discovery/presentation/screens/mess_list_screen.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mess_management_system/core/routing/app_router.dart';
 import 'package:mess_management_system/features/mess_discovery/presentation/providers/mess_provider.dart';
 import 'package:mess_management_system/features/mess_discovery/presentation/widgets/mess_card_widget.dart';
 
-// Use ConsumerStatefulWidget to listen to providers and manage local state.
+// Use a ConsumerStatefulWidget to listen to providers and fetch data in initState.
 class MessListScreen extends ConsumerStatefulWidget {
   const MessListScreen({super.key});
 
@@ -18,14 +19,20 @@ class _MessListScreenState extends ConsumerState<MessListScreen> {
   @override
   void initState() {
     super.initState();
-    // Use WidgetsBinding to call the provider method after the first frame is built.
+    // Use WidgetsBinding to safely call the provider method after the first frame is built.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // For demonstration, we're using hardcoded coordinates for Indore, India.
-      // In a real app, you would get the user's current location using a package like 'geolocator'.
-      ref
-          .read(messDiscoveryProvider.notifier)
-          .fetchNearbyMesses(22.7196, 75.8577);
+      _fetchData();
     });
+  }
+
+  // Helper function to fetch data, used for both initial load and refresh.
+  Future<void> _fetchData() async {
+    // For demonstration, we're using hardcoded coordinates for Indore, India.
+    // In a real app, you would get the user's current location using a package
+    // like 'geolocator' and pass the real lat/lng here.
+    await ref
+        .read(messDiscoveryProvider.notifier)
+        .fetchNearbyMesses(lat: 22.7196, lng: 75.8577);
   }
 
   @override
@@ -35,40 +42,60 @@ class _MessListScreenState extends ConsumerState<MessListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Nearby Messes'),
+        title: const Text('Discover Nearby Messes'),
         actions: [
-          // A refresh button to re-fetch the data.
+          // A button to filter results.
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.filter_list),
+            tooltip: 'Filter',
             onPressed: () {
-              ref
-                  .read(messDiscoveryProvider.notifier)
-                  .fetchNearbyMesses(22.7196, 75.8577);
+              // TODO: Implement filter functionality in a bottom sheet.
             },
           ),
         ],
       ),
-      body: _buildBody(state),
+      // Use RefreshIndicator to allow the user to pull down to refresh the list.
+      body: RefreshIndicator(
+        onRefresh: _fetchData,
+        child: _buildBody(state),
+      ),
     );
   }
 
-  // Helper method to build the body based on the current state.
+  // Helper method to build the body of the screen based on the current state.
   Widget _buildBody(MessDiscoveryState state) {
-    if (state.isLoading) {
-      // Show a loading spinner while data is being fetched.
+    // If the data is loading for the first time, show a centered spinner.
+    if (state.isLoading && state.messes.isEmpty) {
       return const Center(child: CircularProgressIndicator());
-    } else if (state.error != null) {
-      // Show an error message if something went wrong.
+    }
+    // If an error occurred, show an informative message.
+    else if (state.error != null) {
       return Center(
-        child: Text('An error occurred: ${state.error}'),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Text(
+            'An error occurred: ${state.error}\n\nPull down to try again.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16),
+          ),
+        ),
       );
-    } else if (state.messes.isEmpty) {
-      // Show a message if no messes are found.
+    }
+    // If the list of messes is empty, show a helpful prompt.
+    else if (state.messes.isEmpty) {
       return const Center(
-        child: Text('No messes found nearby.'),
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: Text(
+            'No messes found nearby.\nTry expanding your search radius.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18, color: Colors.grey),
+          ),
+        ),
       );
-    } else {
-      // If data is available, display it in a list.
+    }
+    // If data is available, display it in a list using our custom MessCardWidget.
+    else {
       return ListView.builder(
         padding: const EdgeInsets.all(16.0),
         itemCount: state.messes.length,
@@ -77,8 +104,13 @@ class _MessListScreenState extends ConsumerState<MessListScreen> {
           return MessCardWidget(
             mess: mess,
             onTap: () {
-              // TODO: Navigate to MessDetailScreen
-              print('Tapped on mess: ${mess.name}');
+              // When a card is tapped, navigate to the MessDetailScreen,
+              // passing the unique mess ID as an argument.
+              Navigator.pushNamed(
+                context,
+                AppRouter.messDetailRoute,
+                arguments: {'messId': mess.id},
+              );
             },
           );
         },

@@ -1,4 +1,4 @@
-// This file defines the Leave entity.
+// Defines the Leave entity for a formal leave application.
 
 class Leave {
   final String id;

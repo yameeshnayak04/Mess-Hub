@@ -2,37 +2,35 @@
 
 import 'package:dio/dio.dart';
 import 'package:mess_management_system/core/constants/api_constants.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // <-- ADD THIS IMPORT
+import 'package:shared_preferences/shared_preferences.dart'; // Import for token storage
 
 class DioClient {
-  DioClient._();
+  DioClient._(); // Private constructor for Singleton pattern
 
   static final DioClient instance = DioClient._();
 
   final Dio _dio = Dio(
     BaseOptions(
       baseUrl: ApiConstants.baseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 15), // Slightly increased timeout
+      receiveTimeout: const Duration(seconds: 15),
       headers: {'Content-Type': 'application/json'},
     ),
   );
 
   Dio get dio => _dio;
 
-  // --- THIS IS THE CRITICAL UPDATE ---
+  // This function sets up the interceptor to automatically add the JWT token.
   void setupInterceptors() {
     _dio.interceptors.add(
       InterceptorsWrapper(
+        // This function is called before every single request is sent.
         onRequest: (options, handler) async {
-          // <-- Make this function async
-          // This function is called before a request is sent.
-
-          // Get the saved JWT token from SharedPreferences.
+          // Get the saved JWT token from the device's local storage.
           final prefs = await SharedPreferences.getInstance();
           final token = prefs.getString('jwt_token');
 
-          // If a token exists, add it to the Authorization header.
+          // If a token exists, add it to the 'Authorization' header.
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
           }
@@ -41,11 +39,12 @@ class DioClient {
           return handler.next(options); // Continue with the request.
         },
         onResponse: (response, handler) {
-          print('RESPONSE[${response.statusCode}] => DATA: ${response.data}');
+          print('RESPONSE[${response.statusCode}]');
           return handler.next(response);
         },
         onError: (DioException e, handler) {
-          print('ERROR[${e.response?.statusCode}] => MESSAGE: ${e.message}');
+          print(
+              'ERROR[${e.response?.statusCode}] => PATH: ${e.requestOptions.path}');
           return handler.next(e);
         },
       ),
