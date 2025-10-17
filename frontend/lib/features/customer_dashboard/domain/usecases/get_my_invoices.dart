@@ -8,7 +8,7 @@ class GetMyInvoices {
 
   GetMyInvoices(this.repository);
 
-  // Use case for fetching all invoices for the logged-in user.
+  // The use case for fetching all invoices for the logged-in user.
   Future<List<Invoice>> call() {
     return repository.getMyInvoices();
   }

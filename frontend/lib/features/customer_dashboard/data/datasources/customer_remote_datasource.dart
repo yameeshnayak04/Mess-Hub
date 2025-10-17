@@ -16,16 +16,22 @@ abstract class CustomerRemoteDataSource {
 }
 
 class CustomerRemoteDataSourceImpl implements CustomerRemoteDataSource {
+  // Get the singleton instance of our configured Dio client.
   final Dio _dio = DioClient.instance.dio;
 
   @override
   Future<List<MembershipModel>> getMyMemberships() async {
     try {
+      // Make a GET request to the protected route. The Dio interceptor
+      // will automatically add the required JWT token to the headers.
       final response = await _dio.get('/customers/me/memberships');
+
+      // Map the list of JSON objects from the response to a list of MembershipModel.
       return (response.data as List)
-          .map((json) => MembershipModel.fromJson(json))
+          .map((membershipJson) => MembershipModel.fromJson(membershipJson))
           .toList();
     } on DioException catch (e) {
+      // Handle Dio-specific errors and throw a more user-friendly exception.
       throw Exception(
           e.response?.data['message'] ?? 'Failed to fetch memberships');
     }
@@ -38,6 +44,7 @@ class CustomerRemoteDataSourceImpl implements CustomerRemoteDataSource {
       await _dio.post(
         '/customers/memberships/$membershipId/leaves',
         data: {
+          // Convert DateTime objects to ISO 8601 string format, the standard for JSON.
           'startDate': startDate.toIso8601String(),
           'endDate': endDate.toIso8601String(),
         },

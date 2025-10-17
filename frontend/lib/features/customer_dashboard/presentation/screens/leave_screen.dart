@@ -1,9 +1,9 @@
-// This file contains the fully functional UI for marking a formal leave.
+// lib/features/customer_dashboard/presentation/screens/leave_screen.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mess_management_system/features/customer_dashboard/presentation/providers/membership_provider.dart';
-import 'package:intl/intl.dart'; // A package for date formatting
+import 'package:intl/intl.dart';
 
 class LeaveScreen extends ConsumerStatefulWidget {
   final String membershipId;
@@ -14,45 +14,30 @@ class LeaveScreen extends ConsumerStatefulWidget {
 }
 
 class _LeaveScreenState extends ConsumerState<LeaveScreen> {
-  // Local state to hold the selected start and end dates.
   DateTime? _startDate;
   DateTime? _endDate;
 
-  // Function to show the date picker and update the state.
-  Future<void> _selectDate(BuildContext context, bool isStartDate) async {
+  Future<void> _selectDateRange(BuildContext context) async {
     final now = DateTime.now();
-    final initialDate = (isStartDate ? _startDate : _endDate) ?? now;
-
-    final picked = await showDatePicker(
+    final newDateRange = await showDateRangePicker(
       context: context,
-      initialDate: initialDate,
-      firstDate:
-          now.subtract(const Duration(days: 1)), // Cannot select past dates
+      firstDate: now,
       lastDate: now.add(
-          const Duration(days: 60)), // Can apply for leave up to 60 days ahead
+          const Duration(days: 90)), // Can apply for leave up to 90 days ahead
     );
 
-    if (picked != null) {
+    if (newDateRange != null) {
       setState(() {
-        if (isStartDate) {
-          _startDate = picked;
-          // If end date is before the new start date, reset it.
-          if (_endDate != null && _endDate!.isBefore(_startDate!)) {
-            _endDate = null;
-          }
-        } else {
-          _endDate = picked;
-        }
+        _startDate = newDateRange.start;
+        _endDate = newDateRange.end;
       });
     }
   }
 
-  // Function to handle the submission of the leave application.
   Future<void> _submitLeave() async {
     if (_startDate == null || _endDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please select both a start and end date.')),
+        const SnackBar(content: Text('Please select a date range.')),
       );
       return;
     }
@@ -64,21 +49,18 @@ class _LeaveScreenState extends ConsumerState<LeaveScreen> {
         startDate: _startDate!,
         endDate: _endDate!,
       );
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content: Text('Leave application submitted successfully!'),
               backgroundColor: Colors.green),
         );
-        Navigator.of(context).pop(); // Go back to the previous screen
+        Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Error: ${e.toString()}'),
-              backgroundColor: Colors.red),
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
         );
       }
     }
@@ -86,7 +68,6 @@ class _LeaveScreenState extends ConsumerState<LeaveScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Watch the provider to get the loading state.
     final state = ref.watch(customerDashboardProvider);
     final textTheme = Theme.of(context).textTheme;
 
@@ -105,27 +86,30 @@ class _LeaveScreenState extends ConsumerState<LeaveScreen> {
                 'Please select the first and last day of your leave. The rebate will be calculated based on your mess\'s rules.'),
             const SizedBox(height: 32),
 
-            // Date Selection Buttons
-            Row(
-              children: [
-                Expanded(
-                  child: _DateSelector(
-                    label: 'Start Date',
-                    date: _startDate,
-                    onTap: () => _selectDate(context, true),
-                  ),
+            // Date Selection UI
+            InkWell(
+              onTap: () => _selectDateRange(context),
+              borderRadius: BorderRadius.circular(8),
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'Selected Dates',
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8)),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _DateSelector(
-                    label: 'End Date',
-                    date: _endDate,
-                    onTap: () => _selectDate(context, false),
-                    // Disable end date selection until a start date is chosen.
-                    isEnabled: _startDate != null,
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _startDate == null
+                          ? 'Tap to select a date range'
+                          : '${DateFormat('dd MMM').format(_startDate!)} - ${DateFormat('dd MMM, yyyy').format(_endDate!)}',
+                      style: textTheme.titleMedium,
+                    ),
+                    const Icon(Icons.calendar_month_outlined,
+                        color: Colors.deepOrange),
+                  ],
                 ),
-              ],
+              ),
             ),
             const SizedBox(height: 48),
 
@@ -136,56 +120,6 @@ class _LeaveScreenState extends ConsumerState<LeaveScreen> {
                     onPressed: _submitLeave,
                     child: const Text('Submit Application'),
                   ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// A private helper widget for the date selector UI.
-class _DateSelector extends StatelessWidget {
-  final String label;
-  final DateTime? date;
-  final VoidCallback onTap;
-  final bool isEnabled;
-
-  const _DateSelector({
-    required this.label,
-    this.date,
-    required this.onTap,
-    this.isEnabled = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: isEnabled ? onTap : null,
-      borderRadius: BorderRadius.circular(8),
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: TextStyle(color: isEnabled ? null : Colors.grey),
-          border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                  color: isEnabled ? Colors.grey : Colors.grey.shade300)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              date == null
-                  ? 'Select Date'
-                  : DateFormat('dd MMM, yyyy').format(date!),
-              style: TextStyle(
-                  fontSize: 16,
-                  color: date == null ? Colors.grey.shade600 : null),
-            ),
-            Icon(Icons.calendar_month_outlined,
-                color: isEnabled
-                    ? Theme.of(context).colorScheme.primary
-                    : Colors.grey),
           ],
         ),
       ),

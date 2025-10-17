@@ -7,12 +7,17 @@ class ToggleMealSkip {
 
   ToggleMealSkip(this.repository);
 
-  // Use case for toggling the "Not Eating" status for a single meal.
+  // The 'call' method makes the class callable like a function.
+  // It takes all the necessary parameters for the action.
   Future<void> call({
     required String membershipId,
     required DateTime date,
     required String mealType,
   }) {
+    // A simple validation to ensure mealType is one of the expected values.
+    if (mealType != 'Lunch' && mealType != 'Dinner') {
+      throw Exception('Invalid meal type provided.');
+    }
     return repository.toggleMealSkip(membershipId, date, mealType);
   }
 }

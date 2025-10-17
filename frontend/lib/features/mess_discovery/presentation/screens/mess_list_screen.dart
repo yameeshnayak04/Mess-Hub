@@ -17,12 +17,16 @@ class MessListScreen extends ConsumerStatefulWidget {
 class _MessListScreenState extends ConsumerState<MessListScreen> {
   final Completer<GoogleMapController> _mapController = Completer();
   final TextEditingController _searchController = TextEditingController();
-  static const CameraPosition _kDefaultLocation =
-      CameraPosition(target: LatLng(24.6443, 77.3187), zoom: 14.0);
+  static const CameraPosition _kDefaultLocation = CameraPosition(
+      target: LatLng(24.6443, 77.3187), zoom: 12.0); // Zoomed out a bit
 
   @override
   void initState() {
     super.initState();
+    // Add a listener to the search controller to rebuild the UI when text changes,
+    // which helps the suffix icon (clear button) appear/disappear instantly.
+    _searchController.addListener(() => setState(() {}));
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _determinePositionAndFetchMesses();
     });
@@ -35,6 +39,7 @@ class _MessListScreenState extends ConsumerState<MessListScreen> {
   }
 
   Future<void> _determinePositionAndFetchMesses() async {
+    // This function now has more robust error handling and clearer feedback.
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) throw Exception('Location services are disabled.');
@@ -42,33 +47,54 @@ class _MessListScreenState extends ConsumerState<MessListScreen> {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied)
+        if (permission == LocationPermission.denied) {
           throw Exception('Location permissions are denied.');
+        }
       }
-      if (permission == LocationPermission.deniedForever)
-        throw Exception('Location permissions are permanently denied.');
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception(
+            'Location permissions are permanently denied, please enable them in settings.');
+      }
 
       Position position = await Geolocator.getCurrentPosition();
-      final notifier = ref.read(messDiscoveryProvider.notifier);
-      await notifier.fetchNearbyMesses(
-          lat: position.latitude, lng: position.longitude);
 
-      final GoogleMapController controller = await _mapController.future;
-      controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(
-          target: LatLng(position.latitude, position.longitude), zoom: 15.0)));
+      // Fetch messes within a large radius around the user.
+      await _fetchMesses(
+          lat: position.latitude,
+          lng: position.longitude,
+          animateMap: true,
+          radius: 50);
     } catch (e) {
       _fetchForDefaultLocation(e.toString());
     }
   }
 
+  // A unified function for fetching data to reduce code duplication.
+  Future<void> _fetchMesses(
+      {required double lat,
+      required double lng,
+      required double radius,
+      bool animateMap = false}) async {
+    final notifier = ref.read(messDiscoveryProvider.notifier);
+    // Fetch messes within a 50km radius to get all messes "in the city".
+    await notifier.fetchNearbyMesses(lat: lat, lng: lng, radius: radius);
+
+    if (animateMap && mounted) {
+      final GoogleMapController controller = await _mapController.future;
+      controller.animateCamera(CameraUpdate.newCameraPosition(
+          CameraPosition(target: LatLng(lat, lng), zoom: 12.0)));
+    }
+  }
+
   void _fetchForDefaultLocation(String message) {
-    ref.read(messDiscoveryProvider.notifier).fetchNearbyMesses(
-        lat: _kDefaultLocation.target.latitude,
-        lng: _kDefaultLocation.target.longitude);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("$message Showing default location results.")));
+          content: Text("$message Showing results for a default location.")));
     }
+    _fetchMesses(
+        lat: _kDefaultLocation.target.latitude,
+        lng: _kDefaultLocation.target.longitude,
+        radius: 50);
   }
 
   @override
@@ -76,12 +102,15 @@ class _MessListScreenState extends ConsumerState<MessListScreen> {
     final state = ref.watch(messDiscoveryProvider);
     final notifier = ref.read(messDiscoveryProvider.notifier);
 
-    // The markers are now built from the 'filteredMesses' getter, so they update with search.
-    final Set<Marker> markers = state.filteredMesses.map((mess) {
+    // This logic is now safer. It checks for valid coordinates before creating a marker.
+    final Set<Marker> markers = state.filteredMesses.where((mess) {
+      // Safety check: ensure coordinates are valid.
+      return mess.location.coordinates.length == 2;
+    }).map((mess) {
       return Marker(
         markerId: MarkerId(mess.id),
         position: LatLng(mess.location.coordinates[1],
-            mess.location.coordinates[0]), // Map is (lat, lng)
+            mess.location.coordinates[0]), // Map uses (lat, lng)
         infoWindow: InfoWindow(
             title: mess.name,
             snippet: mess.address,
@@ -121,8 +150,7 @@ class _MessListScreenState extends ConsumerState<MessListScreen> {
                         )
                       : null,
                 ),
-                onChanged: notifier
-                    .searchMesses, // This now correctly calls the provider method
+                onChanged: notifier.searchMesses,
               ),
             ),
             Expanded(
@@ -134,10 +162,11 @@ class _MessListScreenState extends ConsumerState<MessListScreen> {
                     mapType: MapType.normal,
                     initialCameraPosition: _kDefaultLocation,
                     onMapCreated: (GoogleMapController controller) {
-                      if (!_mapController.isCompleted)
+                      if (!_mapController.isCompleted) {
                         _mapController.complete(controller);
+                      }
                     },
-                    markers: markers, // Markers now update with search
+                    markers: markers,
                     myLocationEnabled: true,
                     myLocationButtonEnabled: true,
                   ),
@@ -157,11 +186,10 @@ class _MessListScreenState extends ConsumerState<MessListScreen> {
     if (state.error != null) {
       return Center(child: Text('An error occurred: ${state.error}'));
     }
-    // Check the 'filteredMesses' for emptiness to reflect search results.
     if (state.filteredMesses.isEmpty) {
       return Center(
           child: Text(_searchController.text.isEmpty
-              ? 'No messes found nearby.'
+              ? 'No messes found nearby. Ensure you have created some in the database.'
               : 'No messes match your search.'));
     }
 

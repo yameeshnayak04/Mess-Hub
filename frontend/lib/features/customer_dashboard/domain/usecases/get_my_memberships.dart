@@ -1,16 +1,10 @@
-// This file defines the use case for getting a customer's memberships.
+// lib/features/customer_dashboard/domain/usecases/get_my_memberships.dart
 
 import 'package:mess_management_system/features/customer_dashboard/domain/entities/membership.dart';
 import 'package:mess_management_system/features/customer_dashboard/domain/repositories/customer_repository.dart';
 
 class GetMyMemberships {
   final CustomerRepository repository;
-
   GetMyMemberships(this.repository);
-
-  // The 'call' method makes the class callable like a function.
-  Future<List<Membership>> call() {
-    // It simply delegates the call to the repository.
-    return repository.getMyMemberships();
-  }
+  Future<List<Membership>> call() => repository.getMyMemberships();
 }

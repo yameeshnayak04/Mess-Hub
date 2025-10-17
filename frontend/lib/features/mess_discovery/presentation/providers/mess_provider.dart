@@ -67,12 +67,15 @@ class MessDiscoveryNotifier extends StateNotifier<MessDiscoveryState> {
       this._getNearbyMesses, this._getMessDetails, this._joinMess)
       : super(const MessDiscoveryState());
 
-  Future<void> fetchNearbyMesses(
-      {required double lat, required double lng}) async {
+  Future<void> fetchNearbyMesses({
+    required double lat,
+    required double lng,
+    double radius = 10.0, // Default to 10km
+  }) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final messes = await _getNearbyMesses(lat: lat, lng: lng);
-      // We now save the result to 'allMesses'. The UI will use 'filteredMesses'.
+      // We now pass the radius to the use case.
+      final messes = await _getNearbyMesses(lat: lat, lng: lng, radius: radius);
       state = state.copyWith(isLoading: false, allMesses: messes);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());

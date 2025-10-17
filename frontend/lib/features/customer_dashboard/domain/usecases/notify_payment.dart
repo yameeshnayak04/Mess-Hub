@@ -7,11 +7,14 @@ class NotifyPayment {
 
   NotifyPayment(this.repository);
 
-  // Use case for notifying the manager that a payment has been made.
+  // The use case for notifying the manager that a payment has been made.
   Future<void> call({
     required String invoiceId,
-    String? proofUrl, // proofUrl is optional
+    String? proofUrl, // The URL for the payment proof screenshot is optional.
   }) {
+    if (invoiceId.isEmpty) {
+      throw Exception('Invoice ID cannot be empty.');
+    }
     return repository.notifyPayment(invoiceId, proofUrl);
   }
 }

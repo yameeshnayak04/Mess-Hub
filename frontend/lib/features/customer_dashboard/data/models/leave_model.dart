@@ -13,6 +13,7 @@ class LeaveModel extends Leave {
   factory LeaveModel.fromJson(Map<String, dynamic> json) {
     return LeaveModel(
       id: json['_id'],
+      // We need to parse the date string from the JSON into a DateTime object.
       startDate: DateTime.parse(json['startDate']),
       endDate: DateTime.parse(json['endDate']),
       isRebateEligible: json['isRebateEligible'],
