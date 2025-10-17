@@ -1,12 +1,12 @@
-// lib/features/mess_discovery/presentation/screens/mess_list_screen.dart
-
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:mess_management_system/core/routing/app_router.dart';
 import 'package:mess_management_system/features/mess_discovery/presentation/providers/mess_provider.dart';
 import 'package:mess_management_system/features/mess_discovery/presentation/widgets/mess_card_widget.dart';
 
-// Use a ConsumerStatefulWidget to listen to providers and fetch data in initState.
 class MessListScreen extends ConsumerStatefulWidget {
   const MessListScreen({super.key});
 
@@ -15,106 +15,170 @@ class MessListScreen extends ConsumerStatefulWidget {
 }
 
 class _MessListScreenState extends ConsumerState<MessListScreen> {
-  // This is called once when the widget is first created.
+  final Completer<GoogleMapController> _mapController = Completer();
+  final TextEditingController _searchController = TextEditingController();
+  static const CameraPosition _kDefaultLocation =
+      CameraPosition(target: LatLng(24.6443, 77.3187), zoom: 14.0);
+
   @override
   void initState() {
     super.initState();
-    // Use WidgetsBinding to safely call the provider method after the first frame is built.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _fetchData();
+      _determinePositionAndFetchMesses();
     });
   }
 
-  // Helper function to fetch data, used for both initial load and refresh.
-  Future<void> _fetchData() async {
-    // For demonstration, we're using hardcoded coordinates for Indore, India.
-    // In a real app, you would get the user's current location using a package
-    // like 'geolocator' and pass the real lat/lng here.
-    await ref
-        .read(messDiscoveryProvider.notifier)
-        .fetchNearbyMesses(lat: 22.7196, lng: 75.8577);
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _determinePositionAndFetchMesses() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) throw Exception('Location services are disabled.');
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied)
+          throw Exception('Location permissions are denied.');
+      }
+      if (permission == LocationPermission.deniedForever)
+        throw Exception('Location permissions are permanently denied.');
+
+      Position position = await Geolocator.getCurrentPosition();
+      final notifier = ref.read(messDiscoveryProvider.notifier);
+      await notifier.fetchNearbyMesses(
+          lat: position.latitude, lng: position.longitude);
+
+      final GoogleMapController controller = await _mapController.future;
+      controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(
+          target: LatLng(position.latitude, position.longitude), zoom: 15.0)));
+    } catch (e) {
+      _fetchForDefaultLocation(e.toString());
+    }
+  }
+
+  void _fetchForDefaultLocation(String message) {
+    ref.read(messDiscoveryProvider.notifier).fetchNearbyMesses(
+        lat: _kDefaultLocation.target.latitude,
+        lng: _kDefaultLocation.target.longitude);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("$message Showing default location results.")));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Watch the provider to get the current state and rebuild the UI when it changes.
     final state = ref.watch(messDiscoveryProvider);
+    final notifier = ref.read(messDiscoveryProvider.notifier);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Discover Nearby Messes'),
-        actions: [
-          // A button to filter results.
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            tooltip: 'Filter',
-            onPressed: () {
-              // TODO: Implement filter functionality in a bottom sheet.
-            },
+    // The markers are now built from the 'filteredMesses' getter, so they update with search.
+    final Set<Marker> markers = state.filteredMesses.map((mess) {
+      return Marker(
+        markerId: MarkerId(mess.id),
+        position: LatLng(mess.location.coordinates[1],
+            mess.location.coordinates[0]), // Map is (lat, lng)
+        infoWindow: InfoWindow(
+            title: mess.name,
+            snippet: mess.address,
+            onTap: () => Navigator.pushNamed(context, AppRouter.messDetailRoute,
+                arguments: {'messId': mess.id})),
+      );
+    }).toSet();
+
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Discover Messes'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.list_alt_rounded), text: 'List View'),
+              Tab(icon: Icon(Icons.map_rounded), text: 'Map View'),
+            ],
           ),
-        ],
-      ),
-      // Use RefreshIndicator to allow the user to pull down to refresh the list.
-      body: RefreshIndicator(
-        onRefresh: _fetchData,
-        child: _buildBody(state),
+        ),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search by name or address',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            notifier.searchMesses('');
+                          },
+                        )
+                      : null,
+                ),
+                onChanged: notifier
+                    .searchMesses, // This now correctly calls the provider method
+              ),
+            ),
+            Expanded(
+              child: TabBarView(
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _buildListView(state),
+                  GoogleMap(
+                    mapType: MapType.normal,
+                    initialCameraPosition: _kDefaultLocation,
+                    onMapCreated: (GoogleMapController controller) {
+                      if (!_mapController.isCompleted)
+                        _mapController.complete(controller);
+                    },
+                    markers: markers, // Markers now update with search
+                    myLocationEnabled: true,
+                    myLocationButtonEnabled: true,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // Helper method to build the body of the screen based on the current state.
-  Widget _buildBody(MessDiscoveryState state) {
-    // If the data is loading for the first time, show a centered spinner.
-    if (state.isLoading && state.messes.isEmpty) {
+  Widget _buildListView(MessDiscoveryState state) {
+    if (state.isLoading && state.allMesses.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    // If an error occurred, show an informative message.
-    else if (state.error != null) {
+    if (state.error != null) {
+      return Center(child: Text('An error occurred: ${state.error}'));
+    }
+    // Check the 'filteredMesses' for emptiness to reflect search results.
+    if (state.filteredMesses.isEmpty) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Text(
-            'An error occurred: ${state.error}\n\nPull down to try again.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 16),
-          ),
-        ),
-      );
+          child: Text(_searchController.text.isEmpty
+              ? 'No messes found nearby.'
+              : 'No messes match your search.'));
     }
-    // If the list of messes is empty, show a helpful prompt.
-    else if (state.messes.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24.0),
-          child: Text(
-            'No messes found nearby.\nTry expanding your search radius.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 18, color: Colors.grey),
-          ),
-        ),
-      );
-    }
-    // If data is available, display it in a list using our custom MessCardWidget.
-    else {
-      return ListView.builder(
-        padding: const EdgeInsets.all(16.0),
-        itemCount: state.messes.length,
+
+    return RefreshIndicator(
+      onRefresh: _determinePositionAndFetchMesses,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        itemCount: state.filteredMesses.length,
         itemBuilder: (context, index) {
-          final mess = state.messes[index];
+          final mess = state.filteredMesses[index];
           return MessCardWidget(
             mess: mess,
-            onTap: () {
-              // When a card is tapped, navigate to the MessDetailScreen,
-              // passing the unique mess ID as an argument.
-              Navigator.pushNamed(
-                context,
-                AppRouter.messDetailRoute,
-                arguments: {'messId': mess.id},
-              );
-            },
+            onTap: () => Navigator.pushNamed(context, AppRouter.messDetailRoute,
+                arguments: {'messId': mess.id}),
           );
         },
-      );
-    }
+      ),
+    );
   }
 }

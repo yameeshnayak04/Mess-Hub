@@ -16,4 +16,6 @@ abstract class MessRepository {
 
   // Contract for fetching the detailed public profile of a single mess by its ID.
   Future<Mess> getMessDetails(String messId);
+
+  Future<void> joinMess(String messId, String mealPlanId);
 }

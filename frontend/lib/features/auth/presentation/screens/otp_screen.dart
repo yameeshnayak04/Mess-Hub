@@ -53,11 +53,10 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
           // --- ROLE-BASED NAVIGATION LOGIC ---
           if (user.role == 'manager') {
             try {
-              // After login, we make a quick check to see if the manager already has a mess.
+              // After login, make a quick check to see if the manager already has a mess.
               await DioClient.instance.dio.get('/managers/my-mess');
 
-              // If the API call SUCCEEDS (status 200), it means a mess exists.
-              // So, we navigate them to their main dashboard.
+              // If the API call SUCCEEDS (status 200), a mess exists. Navigate to dashboard.
               if (mounted) {
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(
@@ -66,9 +65,9 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 );
               }
             } on DioException catch (e) {
-              // If the API call FAILS with a 404 Not Found, it means no mess exists for this manager.
+              // If the API call FAILS with a 404 Not Found, no mess exists for this manager.
               if (e.response?.statusCode == 404) {
-                // So, we navigate them to the onboarding screen to create one.
+                // Navigate to the onboarding screen to create one.
                 if (mounted) {
                   Navigator.of(context).pushAndRemoveUntil(
                     MaterialPageRoute(
@@ -77,7 +76,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                   );
                 }
               } else {
-                // Handle other potential network errors
+                // Handle other potential network errors (e.g., server is down)
                 throw e;
               }
             }

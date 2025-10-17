@@ -4,12 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mess_management_system/core/api/dio_client.dart'; // Import DioClient
 import 'package:mess_management_system/core/routing/app_router.dart'; // Import your AppRouter
+import 'package:flutter_dotenv/flutter_dotenv.dart'; // Import dotenv
 
-void main() {
-  // Set up the Dio interceptors before the app starts.
+Future<void> main() async {
+  // <-- Make main async
+  // --- ADD THIS BLOCK ---
+  // Load the .env file
+  await dotenv.load(fileName: ".env");
+  // ---------------------
+
   DioClient.instance.setupInterceptors();
-
-  // The ProviderScope is a widget that stores the state of all our providers.
   runApp(const ProviderScope(child: MyApp()));
 }
 

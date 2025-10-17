@@ -7,66 +7,97 @@ import 'package:mess_management_system/features/mess_discovery/domain/entities/m
 import 'package:mess_management_system/features/mess_discovery/domain/repositories/mess_repository.dart';
 import 'package:mess_management_system/features/mess_discovery/domain/usecases/get_mess_details.dart';
 import 'package:mess_management_system/features/mess_discovery/domain/usecases/get_nearby_messes.dart';
+import 'package:mess_management_system/features/mess_discovery/domain/usecases/join_mess.dart';
 
-// Part 1: Define the State
-// This class represents the state of our mess discovery feature.
+// --- State Class (with search logic) ---
 class MessDiscoveryState {
   final bool isLoading;
   final String? error;
-  final List<Mess> messes; // This will hold the list of nearby messes.
-  final Mess?
-      selectedMess; // This will hold the details of a single selected mess.
+  final List<Mess> allMesses;
+  final String searchQuery;
+  final Mess? selectedMess;
 
-  const MessDiscoveryState({
-    this.isLoading = false,
-    this.error,
-    this.messes = const [],
-    this.selectedMess,
-  });
+  // A computed property (getter) to get the filtered list of messes.
+  // The UI will use this to display the correct data.
+  List<Mess> get filteredMesses {
+    if (searchQuery.isEmpty) {
+      return allMesses; // If search is empty, return all messes.
+    } else {
+      // Otherwise, filter the list based on the search query (name or address).
+      return allMesses.where((mess) {
+        final query = searchQuery.toLowerCase();
+        return mess.name.toLowerCase().contains(query) ||
+            mess.address.toLowerCase().contains(query);
+      }).toList();
+    }
+  }
 
-  // copyWith method to easily create new, immutable state objects.
-  MessDiscoveryState copyWith({
-    bool? isLoading,
-    String? error,
-    List<Mess>? messes,
-    // Use a helper class to differentiate between setting null and not providing a value
-    Mess? selectedMess,
-    bool clearSelectedMess = false,
-  }) {
+  const MessDiscoveryState(
+      {this.isLoading = false,
+      this.error,
+      this.allMesses = const [],
+      this.searchQuery = '',
+      this.selectedMess});
+
+  MessDiscoveryState copyWith(
+      {bool? isLoading,
+      String? error,
+      List<Mess>? allMesses,
+      String? searchQuery,
+      Mess? selectedMess,
+      bool clearSelectedMess = false}) {
     return MessDiscoveryState(
       isLoading: isLoading ?? this.isLoading,
-      error: error, // Clear old errors on new state changes
-      messes: messes ?? this.messes,
+      error: error,
+      allMesses: allMesses ?? this.allMesses,
+      searchQuery: searchQuery ?? this.searchQuery,
       selectedMess:
           clearSelectedMess ? null : selectedMess ?? this.selectedMess,
     );
   }
 }
 
-// Part 2: Define the Notifier
-// This class contains the logic to fetch data by calling use cases and manages the state.
+// --- Notifier Class (with join and search methods) ---
 class MessDiscoveryNotifier extends StateNotifier<MessDiscoveryState> {
   final GetNearbyMesses _getNearbyMesses;
   final GetMessDetails _getMessDetails;
+  final JoinMess _joinMess;
 
-  MessDiscoveryNotifier(this._getNearbyMesses, this._getMessDetails)
+  MessDiscoveryNotifier(
+      this._getNearbyMesses, this._getMessDetails, this._joinMess)
       : super(const MessDiscoveryState());
 
-  // Method to fetch nearby messes.
   Future<void> fetchNearbyMesses(
       {required double lat, required double lng}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final messes = await _getNearbyMesses(lat: lat, lng: lng);
-      state = state.copyWith(isLoading: false, messes: messes);
+      // We now save the result to 'allMesses'. The UI will use 'filteredMesses'.
+      state = state.copyWith(isLoading: false, allMesses: messes);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
-  // Method to fetch details of a single mess.
+  // New method to update the search query in the state.
+  void searchMesses(String query) {
+    state = state.copyWith(searchQuery: query);
+  }
+
+  // New method to handle joining a mess.
+  Future<void> joinMess(
+      {required String messId, required String mealPlanId}) async {
+    try {
+      await _joinMess(messId: messId, mealPlanId: mealPlanId);
+    } catch (e) {
+      // Re-throw the error to be handled by the UI (e.g., show a SnackBar).
+      rethrow;
+    }
+  }
+
   Future<void> fetchMessDetails(String messId) async {
-    state = state.copyWith(isLoading: true, error: null);
+    state =
+        state.copyWith(isLoading: true, error: null, clearSelectedMess: true);
     try {
       final mess = await _getMessDetails(messId);
       state = state.copyWith(isLoading: false, selectedMess: mess);
@@ -76,33 +107,25 @@ class MessDiscoveryNotifier extends StateNotifier<MessDiscoveryState> {
   }
 }
 
-// Part 3: Define the Providers (for Dependency Injection)
+// --- Providers (with new use case) ---
+final messRemoteDataSourceProvider =
+    Provider<MessRemoteDataSource>((ref) => MessRemoteDataSourceImpl());
+final messRepositoryProvider = Provider<MessRepository>((ref) =>
+    MessRepositoryImpl(
+        remoteDataSource: ref.watch(messRemoteDataSourceProvider)));
+final getNearbyMessesProvider = Provider<GetNearbyMesses>(
+    (ref) => GetNearbyMesses(ref.watch(messRepositoryProvider)));
+final getMessDetailsProvider = Provider<GetMessDetails>(
+    (ref) => GetMessDetails(ref.watch(messRepositoryProvider)));
+final joinMessProvider = Provider<JoinMess>((ref) =>
+    JoinMess(ref.watch(messRepositoryProvider))); // <-- Add new provider
 
-// Provider for the MessRemoteDataSource
-final messRemoteDataSourceProvider = Provider<MessRemoteDataSource>((ref) {
-  return MessRemoteDataSourceImpl();
-});
-
-// Provider for the MessRepository
-final messRepositoryProvider = Provider<MessRepository>((ref) {
-  return MessRepositoryImpl(
-      remoteDataSource: ref.watch(messRemoteDataSourceProvider));
-});
-
-// Provider for the GetNearbyMesses use case
-final getNearbyMessesProvider = Provider<GetNearbyMesses>((ref) {
-  return GetNearbyMesses(ref.watch(messRepositoryProvider));
-});
-
-// Provider for the GetMessDetails use case
-final getMessDetailsProvider = Provider<GetMessDetails>((ref) {
-  return GetMessDetails(ref.watch(messRepositoryProvider));
-});
-
-// The main StateNotifierProvider that the UI will interact with.
+// The main provider now injects the JoinMess use case.
 final messDiscoveryProvider =
     StateNotifierProvider<MessDiscoveryNotifier, MessDiscoveryState>((ref) {
-  final getNearbyMesses = ref.watch(getNearbyMessesProvider);
-  final getMessDetails = ref.watch(getMessDetailsProvider);
-  return MessDiscoveryNotifier(getNearbyMesses, getMessDetails);
+  return MessDiscoveryNotifier(
+    ref.watch(getNearbyMessesProvider),
+    ref.watch(getMessDetailsProvider),
+    ref.watch(joinMessProvider), // <-- Add new dependency
+  );
 });

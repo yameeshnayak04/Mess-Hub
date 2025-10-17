@@ -1,7 +1,6 @@
 // This file defines the abstract contract for the customer repository.
 
 import 'package:mess_management_system/features/customer_dashboard/domain/entities/invoice.dart';
-import 'package:mess_management_system/features/customer_dashboard/domain/entities/leave.dart';
 import 'package:mess_management_system/features/customer_dashboard/domain/entities/membership.dart';
 
 abstract class CustomerRepository {

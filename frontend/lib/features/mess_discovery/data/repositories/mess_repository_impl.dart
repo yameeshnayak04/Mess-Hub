@@ -40,4 +40,13 @@ class MessRepositoryImpl implements MessRepository {
       rethrow;
     }
   }
+
+  @override
+  Future<void> joinMess(String messId, String mealPlanId) async {
+    try {
+      return await remoteDataSource.joinMess(messId, mealPlanId);
+    } catch (e) {
+      rethrow;
+    }
+  }
 }

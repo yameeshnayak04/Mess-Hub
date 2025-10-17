@@ -11,6 +11,8 @@ abstract class MessRemoteDataSource {
       double radius = 10.0,
       String? filter});
   Future<MessModel> getMessDetails(String messId);
+
+  Future<void> joinMess(String messId, String mealPlanId);
 }
 
 class MessRemoteDataSourceImpl implements MessRemoteDataSource {
@@ -63,6 +65,22 @@ class MessRemoteDataSourceImpl implements MessRemoteDataSource {
     } on DioException catch (e) {
       throw Exception(
           e.response?.data['message'] ?? 'Failed to fetch mess details');
+    }
+  }
+
+  @override
+  Future<void> joinMess(String messId, String mealPlanId) async {
+    try {
+      // Make the POST request to the backend endpoint to create a membership.
+      await _dio.post(
+        '/customers/memberships',
+        data: {
+          'messId': messId,
+          'mealPlanId': mealPlanId,
+        },
+      );
+    } on DioException catch (e) {
+      throw Exception(e.response?.data['message'] ?? 'Failed to join mess');
     }
   }
 }
