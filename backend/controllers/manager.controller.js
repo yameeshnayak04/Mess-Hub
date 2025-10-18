@@ -208,8 +208,23 @@ const getAnalytics = async (req, res) => {
     }
 };
 
+// controllers/manager.controller.js (optional)
+const setManagerPin = async (req, res, next) => {
+  try {
+    const { pin } = req.body;
+    if (!/^\d{4,6}$/.test(pin || '')) return res.status(400).json({ message: 'PIN must be 4–6 digits' });
+    const mess = await Mess.findOne({ owner: req.user._id });
+    const salt = await bcrypt.genSalt(12);
+    mess.managerPinHash = await bcrypt.hash(pin, salt);
+    await mess.save();
+    res.status(200).json({ message: 'Manager PIN set' });
+  } catch (e) { next(e); }
+};
+
+
 
 module.exports = {
+    setManagerPin,
     getMyMess,
     updateMyMess,
     getDashboardStats,

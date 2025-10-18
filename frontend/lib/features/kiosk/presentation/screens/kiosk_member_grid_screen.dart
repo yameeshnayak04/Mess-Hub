@@ -1,5 +1,4 @@
-// This screen displays a grid of all active members for the mess.
-
+// lib/features/kiosk/presentation/screens/kiosk_member_grid_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mess_management_system/features/kiosk/data/models/kiosk_member_model.dart';
@@ -19,7 +18,6 @@ class _KioskMemberGridScreenState extends ConsumerState<KioskMemberGridScreen> {
   @override
   void initState() {
     super.initState();
-    // Fetch the list of active members as soon as the screen loads.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(kioskProvider.notifier).getActiveMembers(widget.messId);
     });
@@ -29,31 +27,26 @@ class _KioskMemberGridScreenState extends ConsumerState<KioskMemberGridScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(kioskProvider);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Select Member'),
-      ),
+      appBar: AppBar(title: const Text('Select Member')),
       body: _buildBody(state),
     );
   }
 
   Widget _buildBody(KioskState state) {
-    if (state.isLoading) {
+    if (state.isLoading)
       return const Center(child: CircularProgressIndicator());
-    }
-    if (state.error != null) {
+    if (state.error != null)
       return Center(child: Text('Error: ${state.error}'));
-    }
     if (state.members.isEmpty) {
       return const Center(
           child: Text('All members have eaten or no members found.'));
     }
 
-    // Display the members in a responsive grid.
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 200, // Max width for each grid item
-        childAspectRatio: 0.9, // Aspect ratio of items
+        maxCrossAxisExtent: 220,
+        childAspectRatio: 0.9,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
       ),
@@ -63,12 +56,9 @@ class _KioskMemberGridScreenState extends ConsumerState<KioskMemberGridScreen> {
         return _MemberTile(
           member: member,
           onTap: () {
-            // When a member is tapped, navigate to the confirmation/PIN screen.
             Navigator.of(context).push(MaterialPageRoute(
-              builder: (context) => KioskPinEntryScreen(
-                messId: widget.messId,
-                member: member,
-              ),
+              builder: (context) =>
+                  KioskPinEntryScreen(messId: widget.messId, member: member),
             ));
           },
         );
@@ -77,11 +67,9 @@ class _KioskMemberGridScreenState extends ConsumerState<KioskMemberGridScreen> {
   }
 }
 
-// A private widget for displaying a single member tile.
 class _MemberTile extends StatelessWidget {
   final KioskMember member;
   final VoidCallback onTap;
-
   const _MemberTile({required this.member, required this.onTap});
 
   @override
@@ -95,12 +83,9 @@ class _MemberTile extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Display user photo or a placeholder icon.
             CircleAvatar(
               radius: 40,
               backgroundColor: Colors.orange.shade100,
-              // TODO: Replace with a NetworkImage when photoUrl is available
-              // backgroundImage: member.photoUrl != null ? NetworkImage(member.photoUrl!) : null,
               child: member.photoUrl == null
                   ? const Icon(Icons.person, size: 40, color: Colors.deepOrange)
                   : null,

@@ -49,32 +49,7 @@ const getActiveMembers = async (req, res) => {
 // @desc    Log a meal for a monthly member via PIN verification
 // @route   POST /api/kiosk/messes/:messId/log-monthly
 // @access  Public (Kiosk)
-const logMonthlyMeal = async (req, res) => {
-    const { messId } = req.params;
-    const { userId, pin, mealType } = req.body;
-
-    try {
-        // Find the user and explicitly select the 'pin' field, which is normally hidden.
-        const user = await User.findById(userId).select('+pin');
-        if (!user || !user.pin) {
-            return res.status(401).json({ message: 'Invalid user or PIN has not been set.' });
-        }
-
-        // Use the 'comparePin' method we defined in the user model to securely check the PIN.
-        const isPinCorrect = await user.comparePin(pin);
-        if (!isPinCorrect) {
-            return res.status(401).json({ message: 'Incorrect PIN.' });
-        }
-
-        // --- PIN is correct, proceed to log the meal ---
-        await MealRecord.create({ mess: messId, customer: userId, mealType });
-
-        res.status(201).json({ message: `Meal logged successfully for ${user.name}.` });
-
-    } catch (error) {
-        res.status(500).json({ message: 'Server Error', error: error.message });
-    }
-};
+const bcrypt = require('bcryptjs');
 
 // @desc    Log a meal for a daily (pay-per-meal) user
 // @route   POST /api/kiosk/messes/:messId/log-daily
@@ -124,9 +99,73 @@ const managerOverride = async (req, res) => {
     }
 };
 
+const logMonthlyMeal = async (req, res, next) => {
+  try {
+    const { messId } = req.params;
+    const { customerId, mealType, pin } = req.body;
+
+    if (!customerId || !mealType || !pin) {
+      return res.status(400).json({ message: 'customerId, mealType and pin are required' });
+    }
+
+    const user = await User.findById(customerId).select('+kioskPinHash');
+    if (!user || !user.kioskPinHash) {
+      return res.status(400).json({ message: 'Kiosk PIN not set for this user' });
+    }
+    const ok = await bcrypt.compare(pin, user.kioskPinHash);
+    if (!ok) return res.status(401).json({ message: 'Invalid PIN' });
+
+    // Validate active membership in this mess
+    const membership = await Membership.findOne({ user: customerId, mess: messId, status: 'active' });
+    if (!membership) return res.status(400).json({ message: 'No active membership' });
+
+    // Validate plan covers current meal
+    const isLunch = mealType.toLowerCase() === 'lunch';
+    const isDinner = mealType.toLowerCase() === 'dinner';
+    const covers =
+      membership.mealPlan === 'Full Day' ||
+      (membership.mealPlan === 'Lunch' && isLunch) ||
+      (membership.mealPlan === 'Dinner' && isDinner);
+    if (!covers) return res.status(400).json({ message: 'Plan does not cover this meal' });
+
+    // Respect leave
+    const { startOfDay, endOfDay } = getTodayTimeRange();
+    const onLeave = await Leave.findOne({
+      user: customerId,
+      mess: messId,
+      startDate: { $lte: endOfDay },
+      endDate: { $gte: startOfDay },
+      status: 'approved',
+    });
+    if (onLeave) return res.status(400).json({ message: 'User is on leave today' });
+
+    // Prevent duplicate for same meal today
+    const existing = await MealRecord.findOne({
+      user: customerId,
+      mess: messId,
+      mealType: isLunch ? 'Lunch' : 'Dinner',
+      createdAt: { $gte: startOfDay, $lte: endOfDay },
+    });
+    if (existing) return res.status(409).json({ message: 'Already marked today' });
+
+    // Create meal record
+    const record = await MealRecord.create({
+      user: customerId,
+      mess: messId,
+      mealType: isLunch ? 'Lunch' : 'Dinner',
+      source: 'kiosk',
+    });
+
+    return res.status(201).json({ message: 'Meal logged', recordId: record._id });
+  } catch (e) {
+    next(e);
+  }
+};
+
 module.exports = {
     getActiveMembers,
     logMonthlyMeal,
     logDailyMeal,
     managerOverride,
+    logMonthlyMeal,
 };

@@ -13,6 +13,7 @@ const {
     getPaymentApprovals,      // <-- New
     updateInvoiceStatus,      // <-- New
     getAnalytics,             // <-- New
+    setManagerPin,            // <-- New
 } = require('../controllers/manager.controller.js');
 
 // Import security middleware.
@@ -38,6 +39,7 @@ router.get('/my-mess/analytics', getAnalytics); // Get simple analytics
 router.get('/my-mess/members', getMessMembers); // Get a list of all members
 router.get('/my-mess/payment-approvals', getPaymentApprovals); // Get payments pending approval
 router.put('/my-mess/invoices/:invoiceId/status', updateInvoiceStatus); // Approve or reject a payment
+router.put('/my-mess/pin', setManagerPin);
 
 
 module.exports = router;

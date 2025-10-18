@@ -39,6 +39,8 @@ const UserSchema = new mongoose.Schema({
     type: Date,
     select: false,
   },
+  kioskPinHash: { type: String, select: false },
+  kioskPinSetAt: { type: Date },
 }, {
   timestamps: true // Automatically adds createdAt and updatedAt fields
 });
@@ -62,6 +64,18 @@ UserSchema.methods.comparePin = async function(enteredPin) {
     return await bcrypt.compare(enteredPin, this.pin);
 };
 
+// Helper to set PIN
+UserSchema.methods.setKioskPin = async function(pin) {
+  const salt = await bcrypt.genSalt(12);
+  this.kioskPinHash = await bcrypt.hash(pin, salt);
+  this.kioskPinSetAt = new Date();
+};
+
+// Helper to verify PIN
+UserSchema.methods.verifyKioskPin = async function(pin) {
+  if (!this.kioskPinHash) return false;
+  return bcrypt.compare(pin, this.kioskPinHash);
+};
 
 const User = mongoose.model('User', UserSchema);
 module.exports = User;

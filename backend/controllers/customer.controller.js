@@ -140,4 +140,30 @@ const getMyMemberships = async (req, res) => {
     }
 };
 
-module.exports = { joinMess, getMyProfile, updateMyProfile, markLeave, toggleMealSkip, notifyPayment, getMyMemberships };
+// controllers/customer.controller.js (additions)
+const setMyKioskPin = async (req, res, next) => {
+  try {
+    const { pin } = req.body;
+    if (!/^\d{4,6}$/.test(pin || '')) {
+      return res.status(400).json({ message: 'PIN must be 4–6 digits' });
+    }
+    const user = await User.findById(req.user._id);
+    await user.setKioskPin(pin);
+    await user.save();
+    return res.status(200).json({ message: 'Kiosk PIN set' });
+  } catch (e) {
+    next(e);
+  }
+};
+
+const getMyKioskPinStatus = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).select('+kioskPinHash');
+    return res.status(200).json({ hasPin: !!user?.kioskPinHash });
+  } catch (e) {
+    next(e);
+  }
+};
+
+
+module.exports = { setMyKioskPin, getMyKioskPinStatus, joinMess, getMyProfile, updateMyProfile, markLeave, toggleMealSkip, notifyPayment, getMyMemberships };

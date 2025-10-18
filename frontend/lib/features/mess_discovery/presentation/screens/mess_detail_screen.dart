@@ -241,42 +241,44 @@ class __MealPlanSelectionSheetState extends State<_MealPlanSelectionSheet> {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(24.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Select a Meal Plan',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          ...widget.mess.mealPlans.map((plan) {
-            return RadioListTile<String>(
-              title: Text(plan.name),
-              subtitle:
-                  Text('₹${plan.currentPrice.toStringAsFixed(0)} / month'),
-              value: plan.id,
-              groupValue: _selectedPlanId,
-              onChanged: (value) => setState(() => _selectedPlanId = value),
-            );
-          }),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: (_selectedPlanId == null || _isLoading)
-                ? null
-                : () {
-                    setState(() => _isLoading = true);
-                    widget.onPlanSelected(_selectedPlanId!);
-                  },
-            child: _isLoading
-                ? const SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(color: Colors.white))
-                : const Text('Confirm & Join'),
-          ),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Select a Meal Plan',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            ...widget.mess.mealPlans.map((plan) {
+              return RadioListTile<String>(
+                title: Text(plan.name),
+                subtitle:
+                    Text('₹${plan.currentPrice.toStringAsFixed(0)} / month'),
+                value: plan.id,
+                groupValue: _selectedPlanId,
+                onChanged: (value) => setState(() => _selectedPlanId = value),
+              );
+            }),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: (_selectedPlanId == null || _isLoading)
+                  ? null
+                  : () {
+                      setState(() => _isLoading = true);
+                      widget.onPlanSelected(_selectedPlanId!);
+                    },
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(color: Colors.white))
+                  : const Text('Confirm & Join'),
+            ),
+          ],
+        ),
       ),
     );
   }

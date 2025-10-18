@@ -12,6 +12,8 @@ const {
     toggleMealSkip,     // <-- New
     notifyPayment,      // <-- New
     getMyMemberships,
+    setMyKioskPin, 
+    getMyKioskPinStatus,
 } = require('../controllers/customer.controller.js');
 
 // Import security middleware.
@@ -35,6 +37,10 @@ router.post('/memberships/:membershipId/toggle-meal', toggleMealSkip); // Toggle
 
 // --- Payment Routes ---
 router.post('/invoices/:invoiceId/notify-payment', notifyPayment); // Notify manager of payment
+
+router.post('/me/kiosk-pin', protect, isCustomer, setMyKioskPin);
+router.get('/me/kiosk-pin', protect, isCustomer, getMyKioskPinStatus);
+
 
 
 module.exports = router;

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mess_management_system/features/auth/presentation/providers/auth_provider.dart';
-import 'package:mess_management_system/features/manager_dashboard/presentation/screens/manager_dashboard_screen.dart';
+import 'package:mess_management_system/features/manager_dashboard/presentation/screens/manager_dashboard_shell.dart';
 import 'package:mess_management_system/features/mess_onboarding/presentation/providers/mess_onboarding_provider.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -226,7 +226,7 @@ class _CreateMessScreenState extends ConsumerState<CreateMessScreen> {
             backgroundColor: Colors.green));
         Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(
-                builder: (context) => const ManagerDashboardScreen()),
+                builder: (context) => const ManagerDashboardShell()),
             (route) => false);
       }
     } catch (e) {
