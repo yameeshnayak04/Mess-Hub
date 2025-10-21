@@ -14,11 +14,8 @@ class MessOnboardingRemoteDataSourceImpl
   @override
   Future<void> createMess(Map<String, dynamic> messData) async {
     try {
-      // Make a POST request to the protected '/messes' route.
-      // The Dio interceptor will automatically add the manager's JWT token.
       await _dio.post('/messes', data: messData);
     } on DioException catch (e) {
-      // Handle Dio-specific errors and throw a more user-friendly exception.
       throw Exception(e.response?.data['message'] ?? 'Failed to create mess');
     }
   }

@@ -10,6 +10,7 @@ import 'package:mess_management_system/features/mess_onboarding/domain/usecases/
 class MessOnboardingState {
   final bool isLoading;
   final String? error;
+
   const MessOnboardingState({this.isLoading = false, this.error});
 
   MessOnboardingState copyWith({bool? isLoading, String? error}) {
@@ -23,6 +24,7 @@ class MessOnboardingState {
 // Notifier class with the business logic
 class MessOnboardingNotifier extends StateNotifier<MessOnboardingState> {
   final CreateMess _createMess;
+
   MessOnboardingNotifier(this._createMess) : super(const MessOnboardingState());
 
   Future<void> createMess(Map<String, dynamic> messData) async {
@@ -41,11 +43,18 @@ class MessOnboardingNotifier extends StateNotifier<MessOnboardingState> {
 final messOnboardingRemoteDataSourceProvider =
     Provider<MessOnboardingRemoteDataSource>(
         (ref) => MessOnboardingRemoteDataSourceImpl());
+
 final messOnboardingRepositoryProvider = Provider<MessOnboardingRepository>(
-    (ref) => MessOnboardingRepositoryImpl(
-        remoteDataSource: ref.watch(messOnboardingRemoteDataSourceProvider)));
+  (ref) => MessOnboardingRepositoryImpl(
+    remoteDataSource: ref.watch(messOnboardingRemoteDataSourceProvider),
+  ),
+);
+
 final createMessProvider = Provider<CreateMess>(
-    (ref) => CreateMess(ref.watch(messOnboardingRepositoryProvider)));
+  (ref) => CreateMess(ref.watch(messOnboardingRepositoryProvider)),
+);
+
 final messOnboardingProvider =
     StateNotifierProvider<MessOnboardingNotifier, MessOnboardingState>(
-        (ref) => MessOnboardingNotifier(ref.watch(createMessProvider)));
+  (ref) => MessOnboardingNotifier(ref.watch(createMessProvider)),
+);

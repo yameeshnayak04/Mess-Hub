@@ -11,10 +11,8 @@ class MessOnboardingRepositoryImpl implements MessOnboardingRepository {
   @override
   Future<void> createMess(Map<String, dynamic> messData) async {
     try {
-      // Delegate the call directly to the remote data source.
-      return await remoteDataSource.createMess(messData);
-    } catch (e) {
-      // Re-throw any errors to be handled by the presentation layer.
+      await remoteDataSource.createMess(messData);
+    } catch (_) {
       rethrow;
     }
   }

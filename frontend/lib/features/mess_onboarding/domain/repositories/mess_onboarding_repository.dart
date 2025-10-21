@@ -2,8 +2,6 @@
 
 // This abstract class defines the contract for the mess onboarding feature.
 abstract class MessOnboardingRepository {
-  // The contract for creating a new mess.
-  // It takes a map of all the form data and sends it to the backend.
-  // It returns void upon success or throws an error on failure.
+  // Create a new mess with a strictly typed payload.
   Future<void> createMess(Map<String, dynamic> messData);
 }
