@@ -54,6 +54,7 @@ class _CreateMessScreenState extends ConsumerState<CreateMessScreen> {
   // State variables
   String _cuisine = 'Veg';
   String _serviceType = 'Both';
+  String? _selectedServiceType = 'Monthly';
   TimeOfDay _lunchStartTime = const TimeOfDay(hour: 12, minute: 0);
   TimeOfDay _lunchEndTime = const TimeOfDay(hour: 14, minute: 30);
   TimeOfDay _dinnerStartTime = const TimeOfDay(hour: 19, minute: 30);
@@ -537,7 +538,7 @@ class _CreateMessScreenState extends ConsumerState<CreateMessScreen> {
               style: TextStyle(fontWeight: FontWeight.w600)),
           Wrap(
             spacing: 8,
-            children: ['Both', 'Monthly Only', 'Daily Only'].map((st) {
+            children: ['Both', 'Monthly Only'].map((st) {
               return ChoiceChip(
                 label: Text(st),
                 selected: _serviceType == st,

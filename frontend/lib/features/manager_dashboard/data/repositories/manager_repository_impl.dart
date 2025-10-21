@@ -1,61 +1,56 @@
 // lib/features/manager_dashboard/data/repositories/manager_repository_impl.dart
+
 import 'package:mess_management_system/features/manager_dashboard/data/datasources/manager_remote_datasource.dart';
 import 'package:mess_management_system/features/manager_dashboard/domain/entities/dashboard_stats.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/entities/manager_member.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/entities/weekly_menu.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/entities/today_attendance_member.dart';
+import 'package:mess_management_system/features/manager_dashboard/domain/entities/member.dart';
+import 'package:mess_management_system/features/manager_dashboard/domain/entities/member_detail.dart';
+import 'package:mess_management_system/features/manager_dashboard/domain/entities/payment_approval.dart';
 import 'package:mess_management_system/features/manager_dashboard/domain/entities/mess_profile.dart';
 import 'package:mess_management_system/features/manager_dashboard/domain/repositories/manager_repository.dart';
-import 'package:mess_management_system/features/customer_dashboard/domain/entities/invoice.dart';
 
 class ManagerRepositoryImpl implements ManagerRepository {
-  final ManagerRemoteDataSource remote;
-  ManagerRepositoryImpl(this.remote);
+  final ManagerRemoteDataSource remoteDataSource;
+
+  ManagerRepositoryImpl({required this.remoteDataSource});
 
   @override
-  Future<DashboardStats> getDashboardStats() => remote.getDashboardStats();
+  Future<DashboardStats> getDashboardStats(String messId) =>
+      remoteDataSource.getDashboardStats(messId);
 
   @override
-  Future<List<ManagerMember>> getMessMembers() => remote.getMessMembers();
+  Future<List<Member>> getMembers(String messId) =>
+      remoteDataSource.getMembers(messId);
 
   @override
-  Future<WeeklyMenu> getWeeklyMenu() => remote.getWeeklyMenu();
+  Future<MemberDetail> getMemberDetail(String membershipId) =>
+      remoteDataSource.getMemberDetail(membershipId);
 
   @override
-  Future<List<Invoice>> getPaymentApprovals() => remote.getPaymentApprovals();
+  Future<List<PaymentApproval>> getPaymentApprovals(String messId) =>
+      remoteDataSource.getPaymentApprovals(messId);
 
   @override
-  Future<void> updateInvoiceStatus(String invoiceId, String status,
-          {String? reason}) =>
-      remote.updateInvoiceStatus(invoiceId, status, reason: reason);
+  Future<void> approvePayment(String invoiceId) =>
+      remoteDataSource.approvePayment(invoiceId);
 
   @override
-  Future<MessProfile> getMyMessProfile() => remote.getMyMessProfile();
+  Future<void> rejectPayment(String invoiceId) =>
+      remoteDataSource.rejectPayment(invoiceId);
 
   @override
-  Future<void> updateMyMess(
-          {String? name, String? managerContact, String? address}) =>
-      remote.updateMyMess(
-          name: name, managerContact: managerContact, address: address);
+  Future<MessProfile> getMessProfile(String messId) =>
+      remoteDataSource.getMessProfile(messId);
 
   @override
-  Future<List<TodayAttendanceMember>> getTodayAttendance() =>
-      remote.getTodayAttendance();
+  Future<void> uploadTodayMenu(String messId, Map<String, dynamic> menuData) =>
+      remoteDataSource.uploadTodayMenu(messId, menuData);
+
+  // lib/features/manager_dashboard/data/repositories/manager_repository_impl.dart
 
   @override
-  Future<void> logMonthlyMealWithPin(
-          String customerId, String managerPin, String mealType) =>
-      remote.logMonthlyMealWithPin(customerId, managerPin, mealType);
+  Future<MessProfile> getMyMess() => remoteDataSource.getMyMess();
 
   @override
-  Future<void> logDailyMeal(String mealType) => remote.logDailyMeal(mealType);
-
-  @override
-  Future<Map<DateTime, bool>> getMemberAttendance(
-          String memberId, int year, int month) =>
-      remote.getMemberAttendance(memberId, year, month);
-
-  @override
-  Future<List<Invoice>> getMemberInvoices(String memberId) =>
-      remote.getMemberInvoices(memberId);
+  Future<String> downloadInvoice(String invoiceId) =>
+      remoteDataSource.downloadInvoice(invoiceId);
 }

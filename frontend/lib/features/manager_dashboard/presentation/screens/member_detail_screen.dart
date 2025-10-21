@@ -1,163 +1,252 @@
 // lib/features/manager_dashboard/presentation/screens/member_detail_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import 'package:mess_management_system/features/manager_dashboard/domain/entities/member_detail.dart';
 import 'package:mess_management_system/features/manager_dashboard/presentation/providers/manager_dashboard_provider.dart';
+import 'package:intl/intl.dart';
 
 class MemberDetailScreen extends ConsumerStatefulWidget {
-  final String memberId;
-  final String name;
-  final String phone;
-  const MemberDetailScreen(
-      {super.key,
-      required this.memberId,
-      required this.name,
-      required this.phone});
+  final String membershipId;
+
+  const MemberDetailScreen({super.key, required this.membershipId});
+
   @override
   ConsumerState<MemberDetailScreen> createState() => _MemberDetailScreenState();
 }
 
 class _MemberDetailScreenState extends ConsumerState<MemberDetailScreen> {
-  DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
+  MemberDetail? _memberDetail;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(managerDashboardProvider.notifier)
-          .fetchMemberAttendance(widget.memberId, _month);
-      ref
-          .read(managerDashboardProvider.notifier)
-          .fetchMemberInvoices(widget.memberId);
+    _loadMemberDetail();
+  }
+
+  Future<void> _loadMemberDetail() async {
+    final detail = await ref
+        .read(managerDashboardProvider.notifier)
+        .getMemberDetail(widget.membershipId);
+    setState(() {
+      _memberDetail = detail;
+      _isLoading = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(managerDashboardProvider);
-    final days = _buildCalendarDays(_month);
-    final Map<DateTime, bool> eatenDays =
-        (state.memberAttendance[widget.memberId] ?? {}) as Map<DateTime, bool>;
-    final invoices = state.memberInvoices[widget.memberId] ?? const [];
-    final hasPending = invoices
-        .any((inv) => inv.status == 'due' || inv.status == 'pending_approval');
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Member Details')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Member Details')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: Text(widget.name),
-            subtitle: Text(widget.phone),
-            trailing: hasPending
-                ? const Chip(
-                    label: Text('Payment Pending'),
-                    backgroundColor: Color(0xFFFFE0E0))
-                : null,
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left),
-                onPressed: () {
-                  setState(
-                      () => _month = DateTime(_month.year, _month.month - 1));
-                  ref
-                      .read(managerDashboardProvider.notifier)
-                      .fetchMemberAttendance(widget.memberId, _month);
-                },
-              ),
-              Expanded(
-                  child:
-                      Center(child: Text(DateFormat.yMMMM().format(_month)))),
-              IconButton(
-                icon: const Icon(Icons.chevron_right),
-                onPressed: () {
-                  setState(
-                      () => _month = DateTime(_month.year, _month.month + 1));
-                  ref
-                      .read(managerDashboardProvider.notifier)
-                      .fetchMemberAttendance(widget.memberId, _month);
-                },
-              ),
+    if (_memberDetail == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Member Details')),
+        body: const Center(child: Text('Failed to load member details')),
+      );
+    }
+
+    final member = _memberDetail!;
+
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(member.customerName),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Info', icon: Icon(Icons.info_outline)),
+              Tab(text: 'Attendance', icon: Icon(Icons.check_circle_outline)),
+              Tab(text: 'Payments', icon: Icon(Icons.payment)),
             ],
           ),
-          const SizedBox(height: 8),
-          _CalendarGrid(days: days, eatenDays: eatenDays),
-          const SizedBox(height: 24),
-          Text('Payment History',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          ...List.generate(invoices.length, (i) {
-            final inv = invoices[i];
-            return ListTile(
-              leading: const Icon(Icons.receipt_long_outlined),
-              title: Text('Invoice ${inv.month}/${inv.year}'),
-              subtitle: Text('Status: ${inv.status}'),
-              trailing: Text('₹${inv.amount.toStringAsFixed(0)}'),
-            );
-          }),
+        ),
+        body: TabBarView(
+          children: [
+            _buildInfoTab(member),
+            _buildAttendanceTab(member),
+            _buildPaymentsTab(member),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoTab(MemberDetail member) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  if (member.customerPhoto != null)
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundImage: NetworkImage(member.customerPhoto!),
+                    )
+                  else
+                    const CircleAvatar(
+                        radius: 50, child: Icon(Icons.person, size: 50)),
+                  const SizedBox(height: 16),
+                  Text(
+                    member.customerName,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    member.customerPhone,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          ListTile(
+            leading: const Icon(Icons.restaurant_menu),
+            title: const Text('Meal Plan'),
+            subtitle: Text(member.planName),
+          ),
+          ListTile(
+            leading: const Icon(Icons.currency_rupee),
+            title: const Text('Monthly Fee'),
+            subtitle: Text('₹${member.planPrice.toStringAsFixed(0)}'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.calendar_today),
+            title: const Text('Member Since'),
+            subtitle: Text(DateFormat.yMMMd().format(member.startedAt)),
+          ),
+          ListTile(
+            leading: Icon(
+              member.status == 'active' ? Icons.check_circle : Icons.cancel,
+              color: member.status == 'active' ? Colors.green : Colors.red,
+            ),
+            title: const Text('Status'),
+            subtitle: Text(member.status.toUpperCase()),
+          ),
         ],
       ),
     );
   }
 
-  List<DateTime> _buildCalendarDays(DateTime month) {
-    final first = DateTime(month.year, month.month, 1);
-    final last = DateTime(month.year, month.month + 1, 0);
-    final days = <DateTime>[];
-
-    // Leading blanks to align the grid
-    for (int i = 0; i < first.weekday - 1; i++) {
-      days.add(first.subtract(Duration(days: first.weekday - 1 - i)));
+  Widget _buildAttendanceTab(MemberDetail member) {
+    if (member.attendance.isEmpty) {
+      return const Center(child: Text('No attendance records yet'));
     }
-    // Current month days
-    for (int d = 1; d <= last.day; d++) {
-      days.add(DateTime(month.year, month.month, d));
-    }
-    // Trailing fillers
-    while (days.length % 7 != 0) {
-      days.add(days.last.add(const Duration(days: 1)));
-    }
-    return days;
-  }
-}
 
-class _CalendarGrid extends StatelessWidget {
-  final List<DateTime> days;
-  final Map<DateTime, bool> eatenDays;
-  const _CalendarGrid({required this.days, required this.eatenDays});
-
-  @override
-  Widget build(BuildContext context) {
-    final currMonth = days.firstWhere((d) => true).month;
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 7, mainAxisSpacing: 6, crossAxisSpacing: 6),
-      itemCount: days.length,
-      itemBuilder: (_, i) {
-        final d = days[i];
-        final key = DateTime(d.year, d.month, d.day);
-        final eaten = eatenDays[key] ?? false;
-        final isCurrentMonth = d.month == currMonth;
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: eaten
-                ? Colors.green.withOpacity(0.15)
-                : Colors.red.withOpacity(0.12),
-            border: Border.all(color: eaten ? Colors.green : Colors.red),
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: member.attendance.length,
+      itemBuilder: (context, index) {
+        final record = member.attendance[index];
+        return Card(
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: record.mealType == 'lunch'
+                  ? Colors.orange.shade100
+                  : Colors.blue.shade100,
+              child: Icon(
+                record.mealType == 'lunch' ? Icons.wb_sunny : Icons.nights_stay,
+                color: record.mealType == 'lunch' ? Colors.orange : Colors.blue,
+              ),
+            ),
+            title: Text(DateFormat.yMMMd().format(record.date)),
+            subtitle: Text(record.mealType.toUpperCase()),
+            trailing: record.isOverride
+                ? const Chip(
+                    label: Text('Override', style: TextStyle(fontSize: 11)),
+                    avatar: Icon(Icons.admin_panel_settings, size: 16),
+                  )
+                : null,
           ),
-          child: Center(
-            child: Text('${d.day}',
-                style: TextStyle(
-                    color: isCurrentMonth ? Colors.black87 : Colors.black45)),
+        );
+      },
+    );
+  }
+
+  Widget _buildPaymentsTab(MemberDetail member) {
+    if (member.payments.isEmpty) {
+      return const Center(child: Text('No payment records yet'));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: member.payments.length,
+      itemBuilder: (context, index) {
+        final payment = member.payments[index];
+        final monthName =
+            DateFormat.MMMM().format(DateTime(payment.year, payment.month));
+
+        return Card(
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: payment.status == 'paid'
+                  ? Colors.green.shade100
+                  : payment.status == 'pending'
+                      ? Colors.orange.shade100
+                      : Colors.grey.shade100,
+              child: Icon(
+                payment.status == 'paid'
+                    ? Icons.check_circle
+                    : payment.status == 'pending'
+                        ? Icons.hourglass_empty
+                        : Icons.cancel,
+                color: payment.status == 'paid'
+                    ? Colors.green
+                    : payment.status == 'pending'
+                        ? Colors.orange
+                        : Colors.grey,
+              ),
+            ),
+            title: Text('$monthName ${payment.year}'),
+            subtitle: Text(payment.status.toUpperCase()),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '₹${payment.amount.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                if (payment.paidAt != null)
+                  Text(
+                    DateFormat.MMMd().format(payment.paidAt!),
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+              ],
+            ),
+            onTap: () async {
+              // Download invoice
+              try {
+                final message = await ref
+                    .read(managerDashboardProvider.notifier)
+                    .downloadInvoice(payment.invoiceId);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(message)),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                        content: Text(e.toString()),
+                        backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
           ),
         );
       },

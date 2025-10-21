@@ -1,29 +1,27 @@
-// This file defines the DashboardStatsModel, which can be created from JSON.
+// lib/features/manager_dashboard/data/models/dashboard_stats_model.dart
 
 import 'package:mess_management_system/features/manager_dashboard/domain/entities/dashboard_stats.dart';
 
-// The model extends the entity for easy conversion.
 class DashboardStatsModel extends DashboardStats {
   const DashboardStatsModel({
     required super.totalMembers,
     required super.membersOnLeave,
-    required super.mealsToPrepare,
+    required super.mealsToPrepareLunch,
+    required super.mealsToPrepareDinner,
     required super.totalMealsEaten,
     required super.monthlyMembersEaten,
     required super.dailyUsersEaten,
-    required super.membersRemaining,
   });
 
-  // The factory constructor creates a DashboardStatsModel instance from a JSON map.
   factory DashboardStatsModel.fromJson(Map<String, dynamic> json) {
     return DashboardStatsModel(
-      totalMembers: json['totalMembers'],
-      membersOnLeave: json['membersOnLeave'],
-      mealsToPrepare: json['mealsToPrepare'],
-      totalMealsEaten: json['totalMealsEaten'],
-      monthlyMembersEaten: json['monthlyMembersEaten'],
-      dailyUsersEaten: json['dailyUsersEaten'],
-      membersRemaining: json['membersRemaining'],
+      totalMembers: json['totalMembers'] ?? 0,
+      membersOnLeave: json['membersOnLeave'] ?? 0,
+      mealsToPrepareLunch: json['mealsToPrepareLunch'] ?? 0,
+      mealsToPrepareDinner: json['mealsToPrepareDinner'] ?? 0,
+      totalMealsEaten: json['totalMealsEaten'] ?? 0,
+      monthlyMembersEaten: json['monthlyMembersEaten'] ?? 0,
+      dailyUsersEaten: json['dailyUsersEaten'] ?? 0,
     );
   }
 }

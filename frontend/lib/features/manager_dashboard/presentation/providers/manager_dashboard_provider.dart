@@ -1,253 +1,199 @@
-// lib/features/manager_dashboard/presentation/providers/manager_dashboard_provider.dart
-import 'package:flutter/material.dart';
+// lib/features/manager_dashboard/presentation/providers/manager_dashboard_provider.dart (COMPLETE FIX)
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mess_management_system/features/manager_dashboard/data/datasources/manager_remote_datasource.dart';
 import 'package:mess_management_system/features/manager_dashboard/data/repositories/manager_repository_impl.dart';
 import 'package:mess_management_system/features/manager_dashboard/domain/entities/dashboard_stats.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/entities/manager_member.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/entities/weekly_menu.dart';
+import 'package:mess_management_system/features/manager_dashboard/domain/entities/member.dart';
+import 'package:mess_management_system/features/manager_dashboard/domain/entities/member_detail.dart';
+import 'package:mess_management_system/features/manager_dashboard/domain/entities/payment_approval.dart';
 import 'package:mess_management_system/features/manager_dashboard/domain/entities/mess_profile.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/entities/mess_rating.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/entities/today_attendance_member.dart';
 import 'package:mess_management_system/features/manager_dashboard/domain/repositories/manager_repository.dart';
-import 'package:mess_management_system/features/customer_dashboard/domain/entities/invoice.dart';
 
-class ManagerDashboardState {
+// --- State Classes ---
+class DashboardState {
   final bool isLoading;
   final String? error;
-
+  final String? messId;
   final DashboardStats? stats;
-  final WeeklyMenu? weeklyMenu;
-  final List<ManagerMember> members;
+  final List<Member> members;
+  final List<PaymentApproval> paymentApprovals;
+  final MessProfile? messProfile;
 
-  final List<Invoice> approvals;
-
-  final List<TodayAttendanceMember> todayAttendance;
-  final Map<String, Map<DateTime, bool>>
-      memberAttendance; // memberId -> day map
-  final Map<String, List<Invoice>> memberInvoices; // memberId -> invoices
-
-  final MessProfile? myMessProfile;
-
-  const ManagerDashboardState({
+  const DashboardState({
     this.isLoading = false,
     this.error,
+    this.messId,
     this.stats,
-    this.weeklyMenu,
     this.members = const [],
-    this.approvals = const [],
-    this.todayAttendance = const [],
-    this.memberAttendance = const {},
-    this.memberInvoices = const {},
-    this.myMessProfile,
+    this.paymentApprovals = const [],
+    this.messProfile,
   });
 
-  ManagerDashboardState copyWith({
+  DashboardState copyWith({
     bool? isLoading,
     String? error,
+    String? messId,
     DashboardStats? stats,
-    WeeklyMenu? weeklyMenu,
-    List<ManagerMember>? members,
-    List<Invoice>? approvals,
-    List<TodayAttendanceMember>? todayAttendance,
-    Map<String, Map<DateTime, bool>>? memberAttendance,
-    Map<String, List<Invoice>>? memberInvoices,
-    MessProfile? myMessProfile,
+    List<Member>? members,
+    List<PaymentApproval>? paymentApprovals,
+    MessProfile? messProfile,
   }) {
-    return ManagerDashboardState(
+    return DashboardState(
       isLoading: isLoading ?? this.isLoading,
       error: error,
+      messId: messId ?? this.messId,
       stats: stats ?? this.stats,
-      weeklyMenu: weeklyMenu ?? this.weeklyMenu,
       members: members ?? this.members,
-      approvals: approvals ?? this.approvals,
-      todayAttendance: todayAttendance ?? this.todayAttendance,
-      memberAttendance: memberAttendance ?? this.memberAttendance,
-      memberInvoices: memberInvoices ?? this.memberInvoices,
-      myMessProfile: myMessProfile ?? this.myMessProfile,
+      paymentApprovals: paymentApprovals ?? this.paymentApprovals,
+      messProfile: messProfile ?? this.messProfile,
     );
   }
 }
 
-class ManagerDashboardNotifier extends StateNotifier<ManagerDashboardState> {
-  final ManagerRepository repo;
-  ManagerDashboardNotifier(this.repo) : super(const ManagerDashboardState());
+// --- Notifier ---
+class ManagerDashboardNotifier extends StateNotifier<DashboardState> {
+  final ManagerRepository _repository;
+  String? _currentMessId;
 
-  // lib/features/manager_dashboard/presentation/providers/manager_dashboard_provider.dart
-  Future<void> fetchHomeData() async {
+  ManagerDashboardNotifier(this._repository) : super(const DashboardState());
+
+  // FIXED: Initialize dashboard by fetching mess first and extracting ID
+  Future<void> initializeDashboard() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final stats = await repo.getDashboardStats();
-      final members = await repo.getMessMembers();
-      WeeklyMenu? menu;
-      try {
-        menu = await repo.getWeeklyMenu(); // may 404 if menu not created yet
-      } catch (_) {
-        menu = null; // swallow; UI will show “Not set”
-      }
+      // First, get manager's mess
+      final messProfile = await _repository.getMyMess();
+
+      // CRITICAL FIX: Extract messId from the profile
+      _currentMessId = messProfile.messId;
+
+      print('DEBUG: Fetched mess with ID: $_currentMessId'); // Debug log
+
+      // Update state with messId and profile
+      state = state.copyWith(
+        messId: _currentMessId,
+        messProfile: messProfile,
+      );
+
+      // Then load all dashboard data using the actual messId
+      final stats = await _repository.getDashboardStats(_currentMessId!);
+      final members = await _repository.getMembers(_currentMessId!);
+      final paymentApprovals =
+          await _repository.getPaymentApprovals(_currentMessId!);
+
       state = state.copyWith(
         isLoading: false,
         stats: stats,
-        weeklyMenu: menu,
         members: members,
+        paymentApprovals: paymentApprovals,
       );
     } catch (e) {
+      print('DEBUG: Error initializing dashboard: $e'); // Debug log
+      state = state.copyWith(isLoading: false, error: e.toString());
+      rethrow;
+    }
+  }
+
+  void setMessId(String messId) {
+    _currentMessId = messId;
+    state = state.copyWith(messId: messId);
+    loadDashboard();
+  }
+
+  Future<void> loadDashboard() async {
+    if (_currentMessId == null) {
+      print('DEBUG: Cannot load dashboard - messId is null');
+      return;
+    }
+
+    print('DEBUG: Loading dashboard for messId: $_currentMessId');
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final stats = await _repository.getDashboardStats(_currentMessId!);
+      final members = await _repository.getMembers(_currentMessId!);
+      final paymentApprovals =
+          await _repository.getPaymentApprovals(_currentMessId!);
+
+      state = state.copyWith(
+        isLoading: false,
+        stats: stats,
+        members: members,
+        paymentApprovals: paymentApprovals,
+      );
+    } catch (e) {
+      print('DEBUG: Error loading dashboard: $e');
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
-  Future<void> fetchPaymentApprovals() async {
+  Future<MemberDetail?> getMemberDetail(String membershipId) async {
     try {
-      final data = await repo.getPaymentApprovals();
-      state = state.copyWith(approvals: data);
+      return await _repository.getMemberDetail(membershipId);
     } catch (e) {
       state = state.copyWith(error: e.toString());
+      return null;
     }
   }
 
-  Future<void> updateInvoiceStatus(String id, String status,
-      {String? reason}) async {
+  Future<void> approvePayment(String invoiceId) async {
     try {
-      await repo.updateInvoiceStatus(id, status, reason: reason);
-      await fetchPaymentApprovals();
+      await _repository.approvePayment(invoiceId);
+      if (_currentMessId != null) {
+        final updated = await _repository.getPaymentApprovals(_currentMessId!);
+        state = state.copyWith(paymentApprovals: updated);
+      }
     } catch (e) {
       state = state.copyWith(error: e.toString());
+      rethrow;
     }
   }
 
-  Future<void> fetchMessMembers() async {
+  Future<void> rejectPayment(String invoiceId) async {
     try {
-      final data = await repo.getMessMembers();
-      state = state.copyWith(members: data);
+      await _repository.rejectPayment(invoiceId);
+      if (_currentMessId != null) {
+        final updated = await _repository.getPaymentApprovals(_currentMessId!);
+        state = state.copyWith(paymentApprovals: updated);
+      }
     } catch (e) {
       state = state.copyWith(error: e.toString());
+      rethrow;
     }
   }
 
-  Future<void> fetchTodayAttendance() async {
+  Future<void> uploadTodayMenu(Map<String, dynamic> menuData) async {
+    if (_currentMessId == null) return;
     try {
-      final list = await repo.getTodayAttendance();
-      state = state.copyWith(todayAttendance: list);
+      await _repository.uploadTodayMenu(_currentMessId!, menuData);
     } catch (e) {
       state = state.copyWith(error: e.toString());
+      rethrow;
     }
   }
 
-  Future<void> logMonthlyMealWithPin(String userId, String pin) async {
+  Future<String> downloadInvoice(String invoiceId) async {
     try {
-      final mealType = _currentMealTypeFromProfile();
-      await repo.logMonthlyMealWithPin(userId, pin, mealType);
-      await fetchTodayAttendance();
+      return await _repository.downloadInvoice(invoiceId);
     } catch (e) {
       state = state.copyWith(error: e.toString());
+      rethrow;
     }
-  }
-
-  Future<void> logDailyMeal() async {
-    try {
-      final mealType = _currentMealTypeFromProfile();
-      await repo.logDailyMeal(mealType);
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-    }
-  }
-
-  String _currentMealTypeFromProfile() {
-    final p = state.myMessProfile;
-    if (p == null) return DateTime.now().hour < 16 ? 'Lunch' : 'Dinner';
-    // Prefer server timings where available
-    bool inRange(String? start, String? end) {
-      if (start == null || end == null) return false;
-      final t = TimeOfDay.now();
-      final s = _parseTime(start);
-      final e = _parseTime(end);
-      if (s == null || e == null) return false;
-      final cur = Duration(hours: t.hour, minutes: t.minute);
-      final ss = Duration(hours: s.hour, minutes: s.minute);
-      final ee = Duration(hours: e.hour, minutes: e.minute);
-      return cur >= ss && cur <= ee;
-    }
-
-    if (inRange(p.lunchStart, p.lunchEnd)) return 'Lunch';
-    if (inRange(p.dinnerStart, p.dinnerEnd)) return 'Dinner';
-    return DateTime.now().hour < 16 ? 'Lunch' : 'Dinner';
-  }
-
-  TimeOfDay? _parseTime(String s) {
-    final parts = s.split(':');
-    if (parts.length != 2) return null;
-    final h = int.tryParse(parts[0]);
-    final m = int.tryParse(parts[1]);
-    if (h == null || m == null) return null;
-    return TimeOfDay(hour: h, minute: m);
-  }
-
-  Future<MessProfile> fetchMyMessProfile() async {
-    final p = await repo.getMyMessProfile();
-    state = state.copyWith(myMessProfile: p);
-    return p;
-  }
-
-  Future<void> updateMyMess(
-      {String? name, String? managerContact, String? address}) async {
-    await repo.updateMyMess(
-        name: name, managerContact: managerContact, address: address);
-    await fetchMyMessProfile();
-  }
-
-  Future<void> fetchMemberAttendance(String memberId, DateTime month) async {
-    try {
-      final map =
-          await repo.getMemberAttendance(memberId, month.year, month.month);
-      final newMap =
-          Map<String, Map<DateTime, bool>>.from(state.memberAttendance);
-      newMap[memberId] = map;
-      state = state.copyWith(memberAttendance: newMap);
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-    }
-  }
-
-  Future<void> fetchMemberInvoices(String memberId) async {
-    try {
-      final list = await repo.getMemberInvoices(memberId);
-      final newMap = Map<String, List<Invoice>>.from(state.memberInvoices);
-      newMap[memberId] = list;
-      state = state.copyWith(memberInvoices: newMap);
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-    }
-  }
-
-  // UI helpers
-  List<String> namesForStat(String key) {
-    // key: 'eaten', 'remaining', 'onLeave', etc. For demo, use todayAttendance.
-    if (key == 'eaten') {
-      return state.todayAttendance
-          .where((m) => m.eaten)
-          .map((m) => m.name)
-          .toList();
-    } else if (key == 'remaining') {
-      return state.todayAttendance
-          .where((m) => !m.eaten)
-          .map((m) => m.name)
-          .toList();
-    }
-    return [];
-  }
-
-  void openReviews(BuildContext context) {
-    // Navigate to a reviews list if present in your app
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reviews screen coming soon')));
   }
 }
 
-// Providers
-final _remoteProvider =
-    Provider<ManagerRemoteDataSource>((ref) => ManagerRemoteDataSourceImpl());
-final _repoProvider = Provider<ManagerRepository>(
-    (ref) => ManagerRepositoryImpl(ref.read(_remoteProvider)));
+// --- Providers ---
+final managerRemoteDataSourceProvider = Provider<ManagerRemoteDataSource>(
+  (ref) => ManagerRemoteDataSource(),
+);
+
+final managerRepositoryProvider = Provider<ManagerRepository>(
+  (ref) => ManagerRepositoryImpl(
+    remoteDataSource: ref.watch(managerRemoteDataSourceProvider),
+  ),
+);
+
 final managerDashboardProvider =
-    StateNotifierProvider<ManagerDashboardNotifier, ManagerDashboardState>(
-        (ref) => ManagerDashboardNotifier(ref.read(_repoProvider)));
+    StateNotifierProvider<ManagerDashboardNotifier, DashboardState>(
+  (ref) => ManagerDashboardNotifier(ref.watch(managerRepositoryProvider)),
+);
