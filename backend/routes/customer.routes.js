@@ -6,14 +6,13 @@ const router = express.Router();
 // Import controller functions.
 const {
     joinMess,
-    getMyProfile,       // <-- New
-    updateMyProfile,    // <-- New
+    getMyProfile,
+    updateMyProfile,
     markLeave,
-    toggleMealSkip,     // <-- New
-    notifyPayment,      // <-- New
+    toggleMealSkip,
+    notifyPayment,
     getMyMemberships,
-    setMyKioskPin, 
-    getMyKioskPinStatus,
+    getMyInvoices,
 } = require('../controllers/customer.controller.js');
 
 // Import security middleware.
@@ -26,8 +25,8 @@ router.use(protect, isCustomer);
 
 // --- Profile Routes ---
 router.route('/me/profile')
-    .get(getMyProfile)       // Get my profile
-    .put(updateMyProfile);   // Update my profile
+    .get(getMyProfile)       // GET my profile
+    .put(updateMyProfile);   // PUT (update) my profile
 
 // --- Membership Routes ---
 router.post('/memberships', joinMess); // Join a new mess
@@ -36,11 +35,8 @@ router.post('/memberships/:membershipId/leaves', markLeave); // Mark a formal le
 router.post('/memberships/:membershipId/toggle-meal', toggleMealSkip); // Toggle "Not Eating"
 
 // --- Payment Routes ---
+router.get('/me/invoices', getMyInvoices); // Get all my invoices
 router.post('/invoices/:invoiceId/notify-payment', notifyPayment); // Notify manager of payment
-
-router.post('/me/kiosk-pin', protect, isCustomer, setMyKioskPin);
-router.get('/me/kiosk-pin', protect, isCustomer, getMyKioskPinStatus);
-
 
 
 module.exports = router;

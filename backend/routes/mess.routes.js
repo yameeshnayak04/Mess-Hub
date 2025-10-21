@@ -8,9 +8,9 @@ const {
     registerMess,
     getNearbyMesses,
     getMessProfile,
-    createReview,    // <-- New
-    getMessReviews,  // <-- New
-    getWeeklyMenu,   // <-- New
+    createReview,
+    getMessReviews,
+    getWeeklyMenu,
 } = require('../controllers/mess.controller.js');
 
 // Import our security middleware.

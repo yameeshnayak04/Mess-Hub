@@ -8,7 +8,7 @@ const {
     getActiveMembers,
     logMonthlyMeal,
     logDailyMeal,
-    managerOverride, // <-- New
+    managerOverride, // <-- The new override route
 } = require('../controllers/kiosk.controller.js');
 
 // --- KIOSK ROUTES (Public but should be IP-restricted in production) ---

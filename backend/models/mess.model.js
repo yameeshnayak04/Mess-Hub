@@ -2,55 +2,68 @@
 
 const mongoose = require('mongoose');
 
-// ... (PriceHistorySchema, MealPlanSchema, TimingsSchema, CutoffTimeSchema remain the same) ...
-const PriceHistorySchema = new mongoose.Schema({ price: { type: Number, required: true }, effectiveDate: { type: Date, default: Date.now }, });
-const MealPlanSchema = new mongoose.Schema({ name: { type: String, enum: ['Lunch', 'Dinner', 'Full Day'], required: true, }, priceHistory: [PriceHistorySchema], perDayRebateRate: { type: Number, required: true }, });
-const TimingsSchema = new mongoose.Schema({ lunch: { start: { type: String, default: '12:00' }, end: { type: String, default: '14:00' }, }, dinner: { start: { type: String, default: '20:00' }, end: { type: String, default: '22:00' }, } });
-const CutoffTimeSchema = new mongoose.Schema({ lunch: { type: String, default: '11:30' }, dinner: { type: String, default: '19:30' }, });
+// Sub-schema for tracking price changes over time.
+const PriceHistorySchema = new mongoose.Schema({
+  price: { type: Number, required: true },
+  effectiveDate: { type: Date, default: Date.now },
+});
 
+// Sub-schema for defining a specific monthly meal plan.
+const MealPlanSchema = new mongoose.Schema({
+  name: { type: String, enum: ['Lunch', 'Dinner', 'Full Day'], required: true },
+  priceHistory: [PriceHistorySchema],
+  // The per-thali rate used for calculating all rebates for this plan.
+  perThaliRebateRate: { type: Number, required: true },
+});
+
+// Sub-schema for mess operating hours.
+const TimingsSchema = new mongoose.Schema({
+    lunch: { start: String, end: String },
+    dinner: { start: String, end: String },
+});
 
 const MessSchema = new mongoose.Schema({
-  // --- Core Profile & Status ---
+  // --- Core Profile Information ---
   name: { type: String, required: true },
   owner: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' },
-  // **NEW**: A status field to allow managers to temporarily deactivate their listing.
-  status: { type: String, enum: ['active', 'inactive', 'under_review'], default: 'active' },
+  status: { type: String, enum: ['active', 'inactive'], default: 'active' },
 
   // --- Location & Contact ---
   address: { type: String, required: true },
+  city: { type: String, required: true },
   managerContact: { type: String, required: true },
   location: {
     type: { type: String, enum: ['Point'], required: true },
-    coordinates: { type: [Number], required: true },
+    coordinates: { type: [Number], required: true }, // [longitude, latitude]
   },
   
   // --- Services, Pricing & Plans ---
+  cuisine: { type: String, enum: ['Veg', 'Non-Veg', 'Both'], required: true },
   serviceType: { type: String, enum: ['Daily Only', 'Monthly Only', 'Both'], required: true },
+  
   dailyThaliRate: { type: Number, required: function() { return this.serviceType !== 'Monthly Only'; } },
+  specialThaliRate: { type: Number },
   mealPlans: [MealPlanSchema],
+  securityDeposit: { type: Number, default: 0 },
+  maxMembers: { type: Number, default: 100 },
 
   // --- Operational Rules & Policies ---
   timings: TimingsSchema,
+  // The daily deadline (e.g., 10:00 PM) for formal leave applications for the NEXT day.
   leaveApplicationDeadlineTime: { type: String, default: '22:00' },
-  leaveCutoffDay: { type: Number, default: 26 },
-  notEatingCutoff: CutoffTimeSchema,
-  rebateMinDays: { type: Number, default: 3 },
-  notEatingRebatePolicy: { type: String, enum: ['Full', 'Partial', 'None'], default: 'None' },
+  // Min. consecutive days for a formal leave to be rebate-eligible.
+  rebateMinDays: { type: Number, default: 4 },
   
-  // **NEW (CRITICAL FIX)**: Field to store the value of the partial rebate.
-  partialRebatePercentage: { 
-    type: Number, 
-    default: 50, // Defaults to 50%
-    min: 0, 
-    max: 100,
-    // Only required if the policy is 'Partial'.
-    required: function() { return this.notEatingRebatePolicy === 'Partial'; }
-  },
-
-  firstMonthPolicy: { type: String, enum: ['Pro-Rata', 'Pay-Per-Day'], default: 'Pro-Rata' },
-  minimumFirstMonthCharge: { type: Number },
-  maxMembers: { type: Number, default: 100 },
-
+  // The percentage rebate (0-100) for the "Not Eating" toggle.
+  toggleSkipRebatePercentage: { type: Number, min: 0, max: 100, default: 0 },
+  
+  // Enforces your "Post-Paid Only" logic for monthly members.
+  monthlyBillingType: { type: String, default: 'Post-Paid', enum: ['Post-Paid'] },
+  
+  // **CRITICAL REFINEMENT**: The single minimum charge for any month.
+  // This simplifies billing and covers all edge cases like long leaves.
+  minMonthlyCharge: { type: Number, default: 0 },
+  
   // --- Reviews & Metadata ---
   averageRating: { type: Number, default: 0 },
   reviewCount: { type: Number, default: 0 },

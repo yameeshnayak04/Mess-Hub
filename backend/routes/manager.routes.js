@@ -6,14 +6,13 @@ const router = express.Router();
 // Import controller functions.
 const {
     getMyMess,
-    updateMyMess,             // <-- New
+    updateMyMess,
     getDashboardStats,
-    getMessMembers,           // <-- New
-    updateWeeklyMenu,         // <-- New
-    getPaymentApprovals,      // <-- New
-    updateInvoiceStatus,      // <-- New
-    getAnalytics,             // <-- New
-    setManagerPin,            // <-- New
+    getMessMembers,
+    updateWeeklyMenu,
+    getPaymentApprovals,
+    updateInvoiceStatus,
+    getAnalytics,
 } = require('../controllers/manager.controller.js');
 
 // Import security middleware.
@@ -26,20 +25,19 @@ router.use(protect, isManager);
 
 // --- Mess Profile & Menu Routes ---
 router.route('/my-mess')
-    .get(getMyMess)          // Get my mess profile
-    .put(updateMyMess);      // Update my mess profile
+    .get(getMyMess)          // GET my mess profile
+    .put(updateMyMess);      // PUT (update) my mess profile
 
 router.put('/my-mess/menu', updateWeeklyMenu); // Create or update the weekly menu
 
 // --- Dashboard & Analytics Routes ---
 router.get('/my-mess/dashboard-stats', getDashboardStats); // Get live stats
-router.get('/my-mess/analytics', getAnalytics); // Get simple analytics
+router.get('/my-mess/analytics', getAnalytics); // Get simple analytics for a month
 
 // --- Member & Payment Management Routes ---
 router.get('/my-mess/members', getMessMembers); // Get a list of all members
 router.get('/my-mess/payment-approvals', getPaymentApprovals); // Get payments pending approval
 router.put('/my-mess/invoices/:invoiceId/status', updateInvoiceStatus); // Approve or reject a payment
-router.put('/my-mess/pin', setManagerPin);
 
 
 module.exports = router;

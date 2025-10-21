@@ -9,7 +9,7 @@ const {
     verifyRegistrationOtp,
     sendLoginOtp,
     verifyLoginOtp,
-    setPin, // <-- Import the new PIN function
+    updatePin, // <-- Import the new PIN function
 } = require('../controllers/auth.controller.js');
 
 // Import the security middleware.
@@ -25,9 +25,9 @@ router.post('/login/verify-otp', verifyLoginOtp);
 
 
 // --- PROTECTED ROUTE ---
-// This route is for a logged-in user to set or change their PIN.
+// This route is for a logged-in user to set or change their Kiosk PIN.
 // It is protected to ensure only the authenticated user can change their own PIN.
-router.put('/me/pin', protect, setPin);
+router.put('/me/pin', protect, updatePin);
 
 
 module.exports = router;
