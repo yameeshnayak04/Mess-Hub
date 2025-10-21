@@ -1,29 +1,30 @@
-// This file defines the API routes for the on-premise Kiosk.
-
+// routes/customer.routes.js
 const express = require('express');
 const router = express.Router();
 
-// Import controller functions.
 const {
-    getActiveMembers,
-    logMonthlyMeal,
-    logDailyMeal,
-    managerOverride, // <-- The new override route
-} = require('../controllers/kiosk.controller.js');
+  getMyProfile,
+  updateMyProfile,
+  getMyInvoices,
+  joinMess,
+  markLeave,
+  toggleMealSkip,
+  notifyPayment,
+  getMyMemberships,
+} = require('../controllers/customer.controller.js');
 
-// --- KIOSK ROUTES (Public but should be IP-restricted in production) ---
+const { protect, isCustomer } = require('../middlewares/auth.middleware.js');
 
-// Kiosk fetches the list of active members to display on the grid.
-router.get('/messes/:messId/active-members', getActiveMembers);
+router.use(protect, isCustomer);
 
-// Kiosk logs a meal for a monthly member after PIN verification.
-router.post('/messes/:messId/log-monthly', logMonthlyMeal);
+router.route('/me/profile').get(getMyProfile).put(updateMyProfile);
+router.get('/me/invoices', getMyInvoices);
 
-// Kiosk logs a meal for a pay-per-meal daily user.
-router.post('/messes/:messId/log-daily', logDailyMeal);
+router.post('/memberships', joinMess);
+router.get('/me/memberships', getMyMemberships);
+router.post('/memberships/:membershipId/leaves', markLeave);
+router.post('/memberships/:membershipId/toggle-meal', toggleMealSkip);
 
-// Manager uses their own PIN to override and log a meal for a user.
-router.post('/messes/:messId/manager-override', managerOverride);
-
+router.post('/invoices/:invoiceId/notify-payment', notifyPayment);
 
 module.exports = router;

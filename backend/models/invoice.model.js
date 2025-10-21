@@ -1,20 +1,20 @@
+// models/invoice.model.js
 const mongoose = require('mongoose');
 
-const InvoiceSchema = new mongoose.Schema({
-  membership: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'Membership' },
-  month: { type: Number, required: true }, // e.g., 10 for October
-  year: { type: Number, required: true }, // e.g., 2025
-  amount: { type: Number, required: true },
-  status: {
-    type: String,
-    enum: ['due', 'pending_approval', 'paid', 'rejected'],
-    default: 'due',
+const InvoiceSchema = new mongoose.Schema(
+  {
+    membership: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'Membership' },
+    month: { type: Number, required: true }, // 1-12
+    year: { type: Number, required: true },
+    amount: { type: Number, required: true },
+    status: { type: String, enum: ['due', 'pending_approval', 'paid', 'rejected'], default: 'due' },
+    proofUrl: { type: String },
+    rejectionReason: { type: String },
   },
-  // URL to the payment proof screenshot uploaded by the user.
-  proofUrl: { type: String },
-  // Optional reason provided by the manager for rejecting a payment.
-  rejectionReason: { type: String },
-}, { timestamps: true });
+  { timestamps: true }
+);
 
-const Invoice = mongoose.model('Invoice', InvoiceSchema);
-module.exports = Invoice;
+// Ensure one invoice per membership per month
+InvoiceSchema.index({ membership: 1, month: 1, year: 1 }, { unique: true });
+
+module.exports = mongoose.model('Invoice', InvoiceSchema);
