@@ -8,7 +8,7 @@ class GetDashboardStats {
 
   GetDashboardStats(this.repository);
 
-  Future<DashboardStats> call(String messId) {
-    return repository.getDashboardStats(messId);
+  Future<DashboardStats> call() {
+    return repository.getDashboardStats();
   }
 }

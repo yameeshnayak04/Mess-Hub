@@ -8,7 +8,7 @@ class GetMembers {
 
   GetMembers(this.repository);
 
-  Future<List<Member>> call(String messId) {
-    return repository.getMembers(messId);
+  Future<List<Member>> call() {
+    return repository.getMembers();
   }
 }

@@ -7,7 +7,7 @@ class UploadTodayMenu {
 
   UploadTodayMenu(this.repository);
 
-  Future<void> call(String messId, Map<String, dynamic> menuData) {
-    return repository.uploadTodayMenu(messId, menuData);
+  Future<void> call(Map<String, dynamic> menuData) {
+    return repository.uploadTodayMenu(menuData);
   }
 }

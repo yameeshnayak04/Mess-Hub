@@ -11,9 +11,10 @@ import 'package:mess_management_system/features/manager_dashboard/data/models/me
 class ManagerRemoteDataSource {
   final Dio _dio = DioClient.instance.dio;
 
-  Future<DashboardStatsModel> getDashboardStats(String messId) async {
+  // ✅ FIXED: Changed from /manager/messes/:id/dashboard to /manager/my-mess/dashboard-stats
+  Future<DashboardStatsModel> getDashboardStats() async {
     try {
-      final response = await _dio.get('/manager/messes/$messId/dashboard');
+      final response = await _dio.get('/manager/my-mess/dashboard-stats');
       return DashboardStatsModel.fromJson(response.data);
     } on DioException catch (e) {
       throw Exception(
@@ -27,11 +28,9 @@ class ManagerRemoteDataSource {
       final response = await _dio.get('/manager/my-mess');
       print('DEBUG: Response status: ${response.statusCode}');
       print('DEBUG: Response data: ${response.data}');
-
       final profile = MessProfileModel.fromJson(response.data);
       print('DEBUG: Parsed messId: ${profile.messId}');
       print('DEBUG: Parsed mess name: ${profile.name}');
-
       return profile;
     } on DioException catch (e) {
       print('DEBUG: DioException occurred');
@@ -45,9 +44,10 @@ class ManagerRemoteDataSource {
     }
   }
 
-  Future<List<MemberModel>> getMembers(String messId) async {
+  // ✅ FIXED: Changed from /manager/messes/:id/memberships to /manager/my-mess/members
+  Future<List<MemberModel>> getMembers() async {
     try {
-      final response = await _dio.get('/manager/messes/$messId/memberships');
+      final response = await _dio.get('/manager/my-mess/members');
       final List membershipsJson = response.data;
       return membershipsJson.map((json) => MemberModel.fromJson(json)).toList();
     } on DioException catch (e) {
@@ -66,12 +66,10 @@ class ManagerRemoteDataSource {
     }
   }
 
-  Future<List<PaymentApprovalModel>> getPaymentApprovals(String messId) async {
+  // ✅ FIXED: Changed from /manager/messes/:id/invoices to /manager/my-mess/payment-approvals
+  Future<List<PaymentApprovalModel>> getPaymentApprovals() async {
     try {
-      final response =
-          await _dio.get('/manager/messes/$messId/invoices', queryParameters: {
-        'status': 'pending',
-      });
+      final response = await _dio.get('/manager/my-mess/payment-approvals');
       final List invoicesJson = response.data;
       return invoicesJson
           .map((json) => PaymentApprovalModel.fromJson(json))
@@ -82,38 +80,39 @@ class ManagerRemoteDataSource {
     }
   }
 
+  // ✅ FIXED: Changed from PATCH to PUT and updated path
   Future<void> approvePayment(String invoiceId) async {
     try {
-      await _dio.patch('/manager/invoices/$invoiceId/approve');
+      await _dio.put('/manager/my-mess/invoices/$invoiceId/status', data: {
+        'status': 'approved',
+      });
     } on DioException catch (e) {
       throw Exception(
           e.response?.data['message'] ?? 'Failed to approve payment');
     }
   }
 
+  // ✅ FIXED: Changed from PATCH to PUT and updated path
   Future<void> rejectPayment(String invoiceId) async {
     try {
-      await _dio.patch('/manager/invoices/$invoiceId/reject');
+      await _dio.put('/manager/my-mess/invoices/$invoiceId/status', data: {
+        'status': 'rejected',
+      });
     } on DioException catch (e) {
       throw Exception(
           e.response?.data['message'] ?? 'Failed to reject payment');
     }
   }
 
-  Future<MessProfileModel> getMessProfile(String messId) async {
-    try {
-      final response = await _dio.get('/manager/messes/$messId');
-      return MessProfileModel.fromJson(response.data);
-    } on DioException catch (e) {
-      throw Exception(
-          e.response?.data['message'] ?? 'Failed to fetch mess profile');
-    }
+  // Note: getMessProfile is redundant with getMyMess - consider removing
+  Future<MessProfileModel> getMessProfile() async {
+    return getMyMess();
   }
 
-  Future<void> uploadTodayMenu(
-      String messId, Map<String, dynamic> menuData) async {
+  // ✅ FIXED: Changed path to match backend
+  Future<void> uploadTodayMenu(Map<String, dynamic> menuData) async {
     try {
-      await _dio.post('/manager/messes/$messId/menu/today', data: menuData);
+      await _dio.put('/manager/my-mess/menu', data: menuData);
     } on DioException catch (e) {
       throw Exception(e.response?.data['message'] ?? 'Failed to upload menu');
     }

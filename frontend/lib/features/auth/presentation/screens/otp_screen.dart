@@ -54,7 +54,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
           if (user.role == 'manager') {
             try {
               // After login, make a quick check to see if the manager already has a mess.
-              await DioClient.instance.dio.get('/managers/my-mess');
+              await DioClient.instance.dio.get('/manager/my-mess');
 
               // If the API call SUCCEEDS (status 200), a mess exists. Navigate to dashboard.
               if (mounted) {

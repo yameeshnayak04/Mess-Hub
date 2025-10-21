@@ -77,10 +77,9 @@ class ManagerDashboardNotifier extends StateNotifier<DashboardState> {
       );
 
       // Then load all dashboard data using the actual messId
-      final stats = await _repository.getDashboardStats(_currentMessId!);
-      final members = await _repository.getMembers(_currentMessId!);
-      final paymentApprovals =
-          await _repository.getPaymentApprovals(_currentMessId!);
+      final stats = await _repository.getDashboardStats();
+      final members = await _repository.getMembers();
+      final paymentApprovals = await _repository.getPaymentApprovals();
 
       state = state.copyWith(
         isLoading: false,
@@ -110,10 +109,9 @@ class ManagerDashboardNotifier extends StateNotifier<DashboardState> {
     print('DEBUG: Loading dashboard for messId: $_currentMessId');
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final stats = await _repository.getDashboardStats(_currentMessId!);
-      final members = await _repository.getMembers(_currentMessId!);
-      final paymentApprovals =
-          await _repository.getPaymentApprovals(_currentMessId!);
+      final stats = await _repository.getDashboardStats();
+      final members = await _repository.getMembers();
+      final paymentApprovals = await _repository.getPaymentApprovals();
 
       state = state.copyWith(
         isLoading: false,
@@ -140,7 +138,7 @@ class ManagerDashboardNotifier extends StateNotifier<DashboardState> {
     try {
       await _repository.approvePayment(invoiceId);
       if (_currentMessId != null) {
-        final updated = await _repository.getPaymentApprovals(_currentMessId!);
+        final updated = await _repository.getPaymentApprovals();
         state = state.copyWith(paymentApprovals: updated);
       }
     } catch (e) {
@@ -153,7 +151,7 @@ class ManagerDashboardNotifier extends StateNotifier<DashboardState> {
     try {
       await _repository.rejectPayment(invoiceId);
       if (_currentMessId != null) {
-        final updated = await _repository.getPaymentApprovals(_currentMessId!);
+        final updated = await _repository.getPaymentApprovals();
         state = state.copyWith(paymentApprovals: updated);
       }
     } catch (e) {
@@ -165,7 +163,7 @@ class ManagerDashboardNotifier extends StateNotifier<DashboardState> {
   Future<void> uploadTodayMenu(Map<String, dynamic> menuData) async {
     if (_currentMessId == null) return;
     try {
-      await _repository.uploadTodayMenu(_currentMessId!, menuData);
+      await _repository.uploadTodayMenu(menuData);
     } catch (e) {
       state = state.copyWith(error: e.toString());
       rethrow;

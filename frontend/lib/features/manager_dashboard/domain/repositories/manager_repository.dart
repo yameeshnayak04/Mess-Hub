@@ -7,14 +7,14 @@ import 'package:mess_management_system/features/manager_dashboard/domain/entitie
 import 'package:mess_management_system/features/manager_dashboard/domain/entities/mess_profile.dart';
 
 abstract class ManagerRepository {
-  Future<DashboardStats> getDashboardStats(String messId);
-  Future<List<Member>> getMembers(String messId);
+  Future<DashboardStats> getDashboardStats();
+  Future<List<Member>> getMembers();
   Future<MemberDetail> getMemberDetail(String membershipId);
-  Future<List<PaymentApproval>> getPaymentApprovals(String messId);
+  Future<List<PaymentApproval>> getPaymentApprovals();
   Future<void> approvePayment(String invoiceId);
   Future<void> rejectPayment(String invoiceId);
-  Future<MessProfile> getMessProfile(String messId);
+  Future<MessProfile> getMessProfile();
   Future<MessProfile> getMyMess();
-  Future<void> uploadTodayMenu(String messId, Map<String, dynamic> menuData);
+  Future<void> uploadTodayMenu(Map<String, dynamic> menuData);
   Future<String> downloadInvoice(String invoiceId);
 }

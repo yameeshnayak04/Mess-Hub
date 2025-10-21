@@ -22,7 +22,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/messes', messRoutes);
 app.use('/api/customers', customerRoutes);
-app.use('/api/managers', managerRoutes);
+app.use('/api/manager', managerRoutes);
 app.use('/api/kiosk', kioskRoutes);
 
 app.use(notFound);
