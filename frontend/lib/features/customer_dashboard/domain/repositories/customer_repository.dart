@@ -1,23 +1,20 @@
 // lib/features/customer_dashboard/domain/repositories/customer_repository.dart
 
-import 'package:mess_management_system/features/customer_dashboard/domain/entities/invoice.dart';
 import 'package:mess_management_system/features/customer_dashboard/domain/entities/membership.dart';
+import 'package:mess_management_system/features/customer_dashboard/domain/entities/invoice.dart';
+import 'package:mess_management_system/features/customer_dashboard/domain/entities/attendance_day.dart';
 
 abstract class CustomerRepository {
-  // Contract for fetching all active memberships for the logged-in user.
   Future<List<Membership>> getMyMemberships();
-
-  // Contract for marking a formal leave for a specific membership.
+  Future<Map<String, dynamic>> getTodayMenu(String membershipId);
+  Future<void> toggleMealSkip(String membershipId, String mealType);
+  Future<List<AttendanceDay>> getAttendance(
+      String membershipId, int year, int month);
   Future<void> markLeave(
-      String membershipId, DateTime startDate, DateTime endDate);
-
-  // Contract for toggling the "Not Eating" status for a single meal.
-  Future<void> toggleMealSkip(
-      String membershipId, DateTime date, String mealType);
-
-  // Contract for fetching all invoices for the logged-in user.
-  Future<List<Invoice>> getMyInvoices();
-
-  // Contract for notifying the manager that a payment has been made.
-  Future<void> notifyPayment(String invoiceId, String? proofUrl);
+      String membershipId, DateTime startDate, DateTime endDate, String reason);
+  Future<List<Invoice>> getMyInvoices(String membershipId);
+  Future<void> notifyPayment(String invoiceId, String screenshotPath);
+  Future<void> rateMess(String messId, double rating, String? review);
+  Future<void> leaveMembership(String membershipId);
+  Future<Map<String, dynamic>> getMealTimings(String messId);
 }

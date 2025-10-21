@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mess_management_system/core/api/dio_client.dart';
 import 'package:mess_management_system/features/auth/presentation/providers/auth_provider.dart';
-import 'package:mess_management_system/features/customer_dashboard/presentation/screens/my_memberships_screen.dart';
+import 'package:mess_management_system/features/customer_dashboard/presentation/screens/customer_dashboard_shell.dart';
 import 'package:mess_management_system/features/manager_dashboard/presentation/screens/manager_dashboard_shell.dart';
 import 'package:mess_management_system/features/mess_onboarding/presentation/screens/create_mess_screen.dart';
 import 'package:pinput/pinput.dart';
@@ -83,8 +83,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
           } else {
             // It's a 'customer'
             Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(
-                  builder: (context) => const MyMembershipsScreen()),
+              MaterialPageRoute(builder: (context) => CustomerDashboardShell()),
               (route) => false,
             );
           }

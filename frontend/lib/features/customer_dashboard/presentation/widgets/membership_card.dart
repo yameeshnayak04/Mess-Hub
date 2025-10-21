@@ -1,114 +1,198 @@
 // lib/features/customer_dashboard/presentation/widgets/membership_card.dart
 
 import 'package:flutter/material.dart';
-import 'package:mess_management_system/core/routing/app_router.dart';
 import 'package:mess_management_system/features/customer_dashboard/domain/entities/membership.dart';
 
 class MembershipCard extends StatelessWidget {
   final Membership membership;
+  final VoidCallback? onTap;
+  final bool isCompact;
 
-  const MembershipCard({super.key, required this.membership});
+  const MembershipCard({
+    super.key,
+    required this.membership,
+    this.onTap,
+    this.isCompact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Card(
-      elevation: 4,
-      shadowColor: Colors.black.withOpacity(0.1),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      elevation: isCompact ? 1 : 2,
       child: InkWell(
-        onTap: () {
-          // Navigate to the detailed management screen for this membership.
-          Navigator.pushNamed(
-            context,
-            AppRouter.membershipDetailRoute, // We will create this route
-            arguments: {'membership': membership},
-          );
-        },
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Mess Name and Status Chip
+              // Header row
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: Text(membership.messName,
-                        style: textTheme.titleLarge
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis),
+                  // Mess icon
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _getStatusColor(context).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.restaurant,
+                      color: _getStatusColor(context),
+                      size: isCompact ? 24 : 32,
+                    ),
                   ),
-                  Chip(
-                    label: Text(membership.status.toUpperCase(),
-                        style: textTheme.labelSmall?.copyWith(
-                            fontWeight: FontWeight.bold, color: Colors.white)),
-                    backgroundColor: membership.status == 'active'
-                        ? Colors.green.shade600
-                        : Colors.grey,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
+                  const SizedBox(width: 16),
 
-              // Mess Address
-              Row(
-                children: [
-                  Icon(Icons.location_on_outlined,
-                      size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 8),
+                  // Mess name and plan
                   Expanded(
-                      child: Text(membership.messAddress,
-                          style: textTheme.bodyMedium
-                              ?.copyWith(color: Colors.grey.shade700),
-                          overflow: TextOverflow.ellipsis)),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Divider(color: Colors.grey.shade200),
-              const SizedBox(height: 16),
-
-              // Plan Details
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('YOUR PLAN',
-                          style: textTheme.labelSmall
-                              ?.copyWith(color: Colors.grey.shade500)),
-                      const SizedBox(height: 4),
-                      Text(membership.mealPlanName,
-                          style: textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold)),
-                    ],
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          membership.messName,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: isCompact ? 14 : 18,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          membership.mealPlan,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: isCompact ? 12 : 14,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  Text('₹${membership.mealPlanPrice.toStringAsFixed(0)} / mo',
-                      style: textTheme.titleLarge?.copyWith(
-                          color: colorScheme.primary,
-                          fontWeight: FontWeight.bold)),
+
+                  // Status chip
+                  _buildStatusChip(context),
                 ],
               ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  'Tap to manage',
-                  style: textTheme.bodySmall?.copyWith(color: Colors.grey),
+
+              if (!isCompact) ...[
+                const Divider(height: 24),
+
+                // Details row
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildInfoColumn(
+                        context,
+                        Icons.paid,
+                        'Monthly Fee',
+                        '₹${membership.monthlyFee.toStringAsFixed(0)}',
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildInfoColumn(
+                        context,
+                        Icons.calendar_today,
+                        'Joined',
+                        _formatDate(membership.joinDate),
+                      ),
+                    ),
+                    if (membership.messRating != null)
+                      Expanded(
+                        child: _buildInfoColumn(
+                          context,
+                          Icons.star,
+                          'Rating',
+                          membership.messRating!.toStringAsFixed(1),
+                        ),
+                      ),
+                  ],
                 ),
-              )
+              ],
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildStatusChip(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: _getStatusColor(context).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        membership.status.toUpperCase(),
+        style: TextStyle(
+          color: _getStatusColor(context),
+          fontWeight: FontWeight.bold,
+          fontSize: 10,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoColumn(
+      BuildContext context, IconData icon, String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 16, color: Colors.grey.shade600),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Color _getStatusColor(BuildContext context) {
+    switch (membership.status) {
+      case 'active':
+        return Colors.green;
+      case 'pending':
+        return Colors.orange;
+      case 'inactive':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 }

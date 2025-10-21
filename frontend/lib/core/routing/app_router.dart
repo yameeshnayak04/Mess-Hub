@@ -5,36 +5,48 @@ import 'package:mess_management_system/features/auth/presentation/screens/login_
 import 'package:mess_management_system/features/auth/presentation/screens/otp_screen.dart';
 import 'package:mess_management_system/features/auth/presentation/screens/register_screen.dart';
 import 'package:mess_management_system/features/customer_dashboard/domain/entities/membership.dart';
+import 'package:mess_management_system/features/customer_dashboard/presentation/screens/customer_dashboard_shell.dart';
+import 'package:mess_management_system/features/customer_dashboard/presentation/screens/attendance_calendar_screen.dart';
+import 'package:mess_management_system/features/customer_dashboard/presentation/screens/leave_application_screen.dart';
 import 'package:mess_management_system/features/customer_dashboard/presentation/screens/billing_screen.dart';
-import 'package:mess_management_system/features/customer_dashboard/presentation/screens/leave_screen.dart';
-import 'package:mess_management_system/features/customer_dashboard/presentation/screens/membership_detail_screen.dart';
-import 'package:mess_management_system/features/customer_dashboard/presentation/screens/membership_detail_screen.dart';
-import 'package:mess_management_system/features/customer_dashboard/presentation/screens/my_memberships_screen.dart';
+import 'package:mess_management_system/features/customer_dashboard/presentation/screens/mess_rating_screen.dart';
 import 'package:mess_management_system/features/mess_discovery/presentation/screens/mess_detail_screen.dart';
 import 'package:mess_management_system/features/mess_discovery/presentation/screens/mess_list_screen.dart';
+import 'package:mess_management_system/features/manager_dashboard/presentation/screens/manager_dashboard_shell.dart';
+import 'package:mess_management_system/features/mess_onboarding/presentation/screens/create_mess_screen.dart';
 
 class AppRouter {
   AppRouter._(); // Private constructor
 
   // --- ROUTE NAMES ---
-  // A centralized place for all route names to prevent typos.
+  // Authentication Routes
+  static const String splashRoute = '/';
   static const String registerRoute = '/register';
   static const String loginRoute = '/login';
   static const String otpRoute = '/otp';
 
-  static const String customerHomeRoute = '/customer-home';
-  static const String membershipDetailRoute = '/membership-detail';
-  static const String leaveRoute = '/leave';
+  // Customer Dashboard Routes
+  static const String customerDashboardRoute = '/customer-dashboard';
+  static const String attendanceRoute = '/attendance';
+  static const String leaveApplicationRoute = '/leave-application';
   static const String billingRoute = '/billing';
+  static const String messRatingRoute = '/mess-rating';
 
+  // Manager Dashboard Routes
+  static const String managerDashboardRoute = '/manager-dashboard';
+  static const String createMessRoute = '/create-mess';
+
+  // Kiosk Routes
+  static const String kioskSetupRoute = '/kiosk-setup';
+
+  // Mess Discovery Routes
   static const String messListRoute = '/mess-list';
   static const String messDetailRoute = '/mess-detail';
 
   // --- ROUTE GENERATOR ---
-  // This function is the single source of truth for all navigation in the app.
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
-      // Auth Routes
+      // ==================== AUTH ROUTES ====================
       case registerRoute:
         return MaterialPageRoute(builder: (_) => const RegisterScreen());
 
@@ -46,42 +58,67 @@ class AppRouter {
           final args = settings.arguments as Map<String, dynamic>;
           return MaterialPageRoute(
             builder: (_) => OtpScreen(
-                phone: args['phone'], isRegistration: args['isRegistration']),
+              phone: args['phone'],
+              isRegistration: args['isRegistration'],
+            ),
           );
         }
         return _errorRoute(settings.name);
 
-      // Customer Dashboard Routes
-      case customerHomeRoute:
-        return MaterialPageRoute(builder: (_) => const MyMembershipsScreen());
+      // ==================== CUSTOMER DASHBOARD ROUTES ====================
 
-      case membershipDetailRoute:
-        if (settings.arguments is Map<String, dynamic>) {
-          final args = settings.arguments as Map<String, dynamic>;
+      case customerDashboardRoute:
+        return MaterialPageRoute(builder: (_) => CustomerDashboardShell());
+
+      case attendanceRoute:
+        if (settings.arguments is Membership) {
+          final membership = settings.arguments as Membership;
           return MaterialPageRoute(
-              builder: (_) =>
-                  MembershipDetailScreen(membership: args['membership']));
+            builder: (_) => AttendanceCalendarScreen(membership: membership),
+          );
         }
         return _errorRoute(settings.name);
 
-      case leaveRoute:
-        if (settings.arguments is Map<String, dynamic>) {
-          final args = settings.arguments as Map<String, dynamic>;
+      case leaveApplicationRoute:
+        if (settings.arguments is Membership) {
+          final membership = settings.arguments as Membership;
           return MaterialPageRoute(
-              builder: (_) => LeaveScreen(membershipId: args['membershipId']));
+            builder: (_) => LeaveApplicationScreen(membership: membership),
+          );
         }
         return _errorRoute(settings.name);
 
       case billingRoute:
-        if (settings.arguments is Map<String, dynamic>) {
-          final args = settings.arguments as Map<String, dynamic>;
+        if (settings.arguments is Membership) {
+          final membership = settings.arguments as Membership;
           return MaterialPageRoute(
-              builder: (_) =>
-                  BillingScreen(membershipId: args['membershipId']));
+            builder: (_) => BillingScreen(membership: membership),
+          );
         }
         return _errorRoute(settings.name);
 
-      // Mess Discovery Routes
+      case messRatingRoute:
+        if (settings.arguments is Membership) {
+          final membership = settings.arguments as Membership;
+          return MaterialPageRoute(
+            builder: (_) => MessRatingScreen(membership: membership),
+          );
+        }
+        return _errorRoute(settings.name);
+
+      // ==================== MANAGER DASHBOARD ROUTES ====================
+      case managerDashboardRoute:
+        return MaterialPageRoute(
+          builder: (_) => const ManagerDashboardShell(),
+        );
+
+      case createMessRoute:
+        return MaterialPageRoute(
+          builder: (_) => const CreateMessScreen(),
+        );
+
+      // ==================== KIOSK ROUTES ====================
+      // ==================== MESS DISCOVERY ROUTES ====================
       case messListRoute:
         return MaterialPageRoute(builder: (_) => const MessListScreen());
 
@@ -89,23 +126,58 @@ class AppRouter {
         if (settings.arguments is Map<String, dynamic>) {
           final args = settings.arguments as Map<String, dynamic>;
           return MaterialPageRoute(
-              builder: (_) => MessDetailScreen(messId: args['messId']));
+            builder: (_) => MessDetailScreen(messId: args['messId']),
+          );
         }
         return _errorRoute(settings.name);
 
+      // ==================== DEFAULT ROUTE ====================
       default:
         return _errorRoute(settings.name);
     }
   }
 
-  // A private helper for showing a generic error screen if a route is not found.
+  // Error route for undefined routes
   static Route<dynamic> _errorRoute([String? routeName]) {
     return MaterialPageRoute(
       builder: (_) => Scaffold(
-        appBar: AppBar(title: const Text('Error')),
+        appBar: AppBar(
+          title: const Text('Error'),
+          backgroundColor: Colors.red,
+        ),
         body: Center(
-          child: Text(
-              'Error: No route defined for ${routeName ?? 'the given route'}'),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Colors.red,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Route Not Found',
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'No route defined for ${routeName ?? 'the given route'}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  // Navigate back or to home
+                },
+                icon: const Icon(Icons.home),
+                label: const Text('Go Home'),
+              ),
+            ],
+          ),
         ),
       ),
     );
