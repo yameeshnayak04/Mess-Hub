@@ -16,26 +16,36 @@ const registerMess = asyncHandler(async (req, res) => {
   res.status(201).json(mess);
 });
 
-const getNearbyMesses = asyncHandler(async (req, res) => {
-  const { lat, lng, radius = 50, filter } = req.query;
-  if (!lat || !lng) {
-    res.status(400);
-    throw new Error('Latitude and longitude are required.');
-  }
-  const radiusInMeters = parseFloat(radius) * 1000;
-  const query = {
-    location: {
-      $nearSphere: {
-        $geometry: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
-        $maxDistance: radiusInMeters,
-      },
+// Nearby and weekly menu should reflect real data and current weekday
+const getNearbyMesses = async (req, res) => {
+  const { lat, lng, radius = 10, filter } = req.query;
+  if (!lat || !lng) return res.status(400).json({ message: 'lat and lng are required' });
+  const pipeline = [
+    {
+      $geoNear: {
+        near: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
+        distanceField: 'distance',
+        spherical: true,
+        maxDistance: parseFloat(radius) * 1000
+      }
     },
-    status: 'active',
-  };
-  if (filter) query.cuisine = filter;
-  const messes = await Mess.find(query).select('name address serviceType dailyThaliRate averageRating location cuisine');
-  res.status(200).json(messes);
-});
+    ...(filter ? [{ $match: { $or: [{ name: new RegExp(filter, 'i') }, { address: new RegExp(filter, 'i') }] } }] : []),
+    { $limit: 200 }
+  ];
+  const results = await require('../models/mess.model').aggregate(pipeline);
+  res.json(results);
+};
+
+const getWeeklyMenu = async (req, res) => {
+  const Mess = require('../models/mess.model');
+  const { messId } = req.params;
+  const { day } = req.query;
+  const mess = await Mess.findById(messId);
+  if (!mess) return res.status(404).json({ message: 'Mess not found' });
+  const weekday = day || ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date().getDay()];
+  res.json(mess.weeklyMenu?.[weekday] || {});
+};
+
 
 const getMessProfile = asyncHandler(async (req, res) => {
   const mess = await Mess.findById(req.params.messId).populate('owner', 'name photoUrl');
@@ -72,16 +82,6 @@ const createReview = asyncHandler(async (req, res) => {
 const getMessReviews = asyncHandler(async (req, res) => {
   const reviews = await Review.find({ mess: req.params.messId }).populate('customer', 'name photoUrl').sort({ createdAt: -1 });
   res.status(200).json(reviews);
-});
-
-const getWeeklyMenu = asyncHandler(async (req, res) => {
-  const currentWeekIdentifier = getISOWeekIdentifier(new Date());
-  const menu = await WeeklyMenu.findOne({ mess: req.params.messId, weekIdentifier: currentWeekIdentifier });
-  if (!menu) {
-    res.status(404);
-    throw new Error('Menu has not been set for this week.');
-  }
-  res.status(200).json(menu);
 });
 
 module.exports = { registerMess, getNearbyMesses, getMessProfile, createReview, getMessReviews, getWeeklyMenu };

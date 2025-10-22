@@ -12,16 +12,6 @@ const getMyProfile = asyncHandler(async (req, res) => {
   res.status(200).json(req.user);
 });
 
-const updateMyProfile = asyncHandler(async (req, res) => {
-  const allowed = ['name', 'photoUrl'];
-  const updates = {};
-  for (const key of allowed) {
-    if (req.body[key] !== undefined) updates[key] = req.body[key];
-  }
-  const user = await User.findByIdAndUpdate(req.user._id, updates, { new: true });
-  res.status(200).json(user);
-});
-
 const getMyInvoices = asyncHandler(async (req, res) => {
   const myMemberships = await Membership.find({ customer: req.user._id }).select('_id');
   const invoices = await Invoice.find({ membership: { $in: myMemberships.map(m => m._id) } }).sort({ year: -1, month: -1 });
@@ -120,37 +110,81 @@ const markLeave = asyncHandler(async (req, res) => {
 const toggleMealSkip = asyncHandler(async (req, res) => {
   const { date, mealType } = req.body;
   const { membershipId } = req.params;
-
   const membership = await Membership.findOne({ _id: membershipId, customer: req.user._id }).populate('mess');
-  if (!membership) {
-    res.status(404);
-    throw new Error('Membership not found.');
-  }
+  if (!membership) { res.status(404); throw new Error('Membership not found.'); }
 
-  const planName = membership.mealPlan.name;
-  if ((planName === 'Lunch' && mealType !== 'Lunch') || (planName === 'Dinner' && mealType !== 'Dinner')) {
-    res.status(400);
-    throw new Error(`Your meal plan (${planName}) does not include ${mealType}.`);
-  }
+  // Enforce current-or-next meal rule
+  const now = new Date();
+  const targetDate = new Date(date);
+  const parse = (t) => { const [h, s] = t.split(':'); const d = new Date(targetDate); d.setHours(parseInt(h), parseInt(s), 0, 0); return d; };
+  const lunchStart = parse(membership.mess.timings.lunch.start);
+  const lunchEnd   = parse(membership.mess.timings.lunch.end);
+  const dinnerStart= parse(membership.mess.timings.dinner.start);
+  const dinnerEnd  = parse(membership.mess.timings.dinner.end);
 
-  const targetDate = normalizeToStartOfDay(date);
-  const cutoff = getMealEndDateTime(membership.mess, mealType, targetDate);
-  if (cutoff && new Date() > cutoff) {
-    res.status(400);
-    throw new Error(`The cutoff time for toggling ${mealType} has passed.`);
-  }
+  const isLunchNow = now >= lunchStart && now <= lunchEnd;
+  const isDinnerNow= now >= dinnerStart && now <= dinnerEnd;
+  if (isLunchNow && mealType !== 'Lunch') { res.status(400); throw new Error('Cannot toggle next meal while current meal is ongoing.'); }
+  if (isDinnerNow && mealType !== 'Dinner') { res.status(400); throw new Error('Cannot toggle next meal while current meal is ongoing.'); }
 
-  const isRebateEligible = (membership.mess.toggleSkipRebatePercentage || 0) > 0;
+  // Plan constraint
+  const plan = membership.mealPlan.name;
+  if ((plan === 'Lunch' && mealType !== 'Lunch') || (plan === 'Dinner' && mealType !== 'Dinner')) {
+    res.status(400); throw new Error(`Your meal plan (${plan}) does not include ${mealType}.`);
+  }
+  // Deadline at meal end
+  const endTime = mealType === 'Lunch' ? lunchEnd : dinnerEnd;
+  if (now > endTime) { res.status(400); throw new Error(`The cutoff time for toggling ${mealType} has passed.`); }
+
   const mealSkip = await MealSkip.create({
     membership: membershipId,
     date: targetDate,
     mealType,
-    isRebateEligible,
-    rebatePercentage: membership.mess.toggleSkipRebatePercentage || 0,
+    isRebateEligible: membership.mess.toggleSkipRebatePercentage > 0,
+    rebatePercentage: membership.mess.toggleSkipRebatePercentage
   });
-
-  res.status(201).json({ message: `You have been marked as 'Not Eating' for ${mealType}.`, mealSkip });
+  res.status(201).json({ message: `Marked not eating for ${mealType}.`, mealSkip });
 });
+
+const updateMyProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user) { res.status(404); throw new Error('User not found'); }
+  const { name, kioskPin } = req.body;
+  if (typeof name === 'string' && name.trim()) user.name = name.trim();
+  if (kioskPin !== undefined) {
+    const pinStr = String(kioskPin);
+    if (!/^[0-9]{4,6}$/.test(pinStr)) { res.status(400); throw new Error('Kiosk PIN must be 4-6 digits.'); }
+    user.kioskPin = pinStr;
+  }
+  await user.save();
+  res.json({ name: user.name, phone: user.phone, kioskPin: user.kioskPin });
+});
+
+const leaveMembership = asyncHandler(async (req, res) => {
+  const { membershipId } = req.params;
+  const membership = await Membership.findOne({ _id: membershipId, customer: req.user._id });
+  if (!membership) { res.status(404); throw new Error('Membership not found'); }
+  const due = await Invoice.countDocuments({ membership: membershipId, status: 'due' });
+  if (due > 0) { res.status(400); throw new Error('Clear dues before leaving.'); }
+  membership.status = 'inactive';
+  await membership.save();
+  res.json({ message: 'Membership left successfully' });
+});
+
+const getAttendance = async (req, res) => {
+  const { membershipId } = req.params;
+  const { year, month } = req.query;
+  const y = parseInt(year, 10);
+  const m = parseInt(month, 10);
+  const start = new Date(Date.UTC(y, m - 1, 1));
+  const end = new Date(Date.UTC(y, m, 1));
+  const MealRecord = require('../models/mealRecord.model');
+  const rows = await MealRecord.find({ membership: membershipId, date: { $gte: start, $lt: end } })
+    .select('date lunchStatus dinnerStatus')
+    .lean();
+  res.json(rows.map(r => ({ date: r.date, lunchStatus: r.lunchStatus || 'NA', dinnerStatus: r.dinnerStatus || 'NA' })));
+};
+
 
 const notifyPayment = asyncHandler(async (req, res) => {
   const { invoiceId } = req.params;
@@ -176,6 +210,8 @@ const getMyMemberships = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  getAttendance,
+  leaveMembership,
   getMyProfile,
   updateMyProfile,
   getMyInvoices,
