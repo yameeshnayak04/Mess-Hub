@@ -107,7 +107,7 @@ class _KioskMainScreenState extends ConsumerState<KioskMainScreen> {
                           );
                         },
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
                       _buildMealCard(
                         context,
                         title: 'Dinner',
