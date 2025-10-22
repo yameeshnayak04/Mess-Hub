@@ -1,106 +1,82 @@
 // lib/features/kiosk/presentation/providers/kiosk_provider.dart
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mess_management_system/features/kiosk/data/datasources/kiosk_remote_datasource.dart';
-import 'package:mess_management_system/features/kiosk/domain/entities/kiosk_member.dart';
+import 'package:mess_management_system/features/kiosk/data/models/kiosk_member_model.dart';
 
-// --- State ---
 class KioskState {
+  final String? messId;
+  final String currentMealType; // Lunch | Dinner
+  final List<KioskMemberModel> members;
   final bool isLoading;
   final String? error;
-  final String? messId;
-  final String currentMealType;
-  final List<KioskMember> members;
 
   const KioskState({
+    this.messId,
+    this.currentMealType = 'Lunch',
+    this.members = const [],
     this.isLoading = false,
     this.error,
-    this.messId,
-    this.currentMealType = 'lunch',
-    this.members = const [],
   });
 
   KioskState copyWith({
-    bool? isLoading,
-    String? error,
     String? messId,
     String? currentMealType,
-    List<KioskMember>? members,
+    List<KioskMemberModel>? members,
+    bool? isLoading,
+    String? error,
   }) {
     return KioskState(
-      isLoading: isLoading ?? this.isLoading,
-      error: error,
       messId: messId ?? this.messId,
       currentMealType: currentMealType ?? this.currentMealType,
       members: members ?? this.members,
+      isLoading: isLoading ?? this.isLoading,
+      error: error,
     );
   }
 }
 
-// --- Notifier ---
 class KioskNotifier extends StateNotifier<KioskState> {
-  final KioskRemoteDataSource _dataSource;
-
-  KioskNotifier(this._dataSource) : super(const KioskState());
+  final KioskRemoteDataSource remote;
+  KioskNotifier(this.remote) : super(const KioskState());
 
   void setMessId(String messId) {
     state = state.copyWith(messId: messId);
-    loadMembers();
   }
 
-  void setMealType(String mealType) {
-    state = state.copyWith(currentMealType: mealType);
-    loadMembers();
+  void setMealType(String mealTypeLabel) {
+    // Normalize labels from UI to backend format
+    final mt = (mealTypeLabel.toLowerCase() == 'dinner') ? 'Dinner' : 'Lunch';
+    state = state.copyWith(currentMealType: mt);
+    // Do not auto-load here; caller can navigate then load
   }
 
   Future<void> loadMembers() async {
     if (state.messId == null) return;
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final members = await _dataSource.getActiveMembers(
-        state.messId!,
-        state.currentMealType,
-      );
-      state = state.copyWith(isLoading: false, members: members);
+      final rows =
+          await remote.getActiveMembers(state.messId!, state.currentMealType);
+      state = state.copyWith(members: rows, isLoading: false);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
   Future<void> logMonthlyMeal(String membershipId, String pin) async {
-    if (state.messId == null) return;
-    try {
-      await _dataSource.logMonthlyMeal(
-        state.messId!,
-        membershipId,
-        pin,
-        state.currentMealType,
-      );
-      // Reload members after successful logging
-      await loadMembers();
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-      rethrow;
-    }
+    if (state.messId == null) throw Exception('Mess not selected');
+    await remote.logMonthlyMeal(
+        state.messId!, membershipId, pin, state.currentMealType);
+    // Refresh grid after marking
+    await loadMembers();
   }
 
   Future<void> logDailyMeal() async {
-    if (state.messId == null) return;
-    try {
-      await _dataSource.logDailyMeal(state.messId!, state.currentMealType);
-      // No need to reload members for daily users
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-      rethrow;
-    }
+    if (state.messId == null) throw Exception('Mess not selected');
+    await remote.logDailyMeal(state.messId!, state.currentMealType);
   }
 }
 
-// --- Providers ---
-final kioskRemoteDataSourceProvider = Provider<KioskRemoteDataSource>(
-  (ref) => KioskRemoteDataSource(),
-);
-
-final kioskProvider = StateNotifierProvider<KioskNotifier, KioskState>(
-  (ref) => KioskNotifier(ref.watch(kioskRemoteDataSourceProvider)),
-);
+final kioskProvider = StateNotifierProvider<KioskNotifier, KioskState>((ref) {
+  return KioskNotifier(KioskRemoteDataSource());
+});

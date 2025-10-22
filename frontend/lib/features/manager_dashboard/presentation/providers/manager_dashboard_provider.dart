@@ -1,197 +1,100 @@
-// lib/features/manager_dashboard/presentation/providers/manager_dashboard_provider.dart (COMPLETE FIX)
-
+// lib/features/manager_dashboard/presentation/providers/manager_dashboard_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mess_management_system/features/manager_dashboard/data/datasources/manager_remote_datasource.dart';
-import 'package:mess_management_system/features/manager_dashboard/data/repositories/manager_repository_impl.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/entities/dashboard_stats.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/entities/member.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/entities/member_detail.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/entities/payment_approval.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/entities/mess_profile.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/repositories/manager_repository.dart';
+import '../../data/datasources/manager_remote_datasource.dart';
+import '../../data/repositories/manager_repository_impl.dart';
+import '../../domain/repositories/manager_repository.dart';
 
-// --- State Classes ---
-class DashboardState {
-  final bool isLoading;
-  final String? error;
-  final String? messId;
-  final DashboardStats? stats;
-  final List<Member> members;
-  final List<PaymentApproval> paymentApprovals;
-  final MessProfile? messProfile;
+// Repository provider
+final managerRepositoryProvider = Provider<ManagerRepository>((ref) {
+  return ManagerRepositoryImpl(ManagerRemoteDataSourceImpl());
+});
 
-  const DashboardState({
-    this.isLoading = false,
-    this.error,
-    this.messId,
-    this.stats,
-    this.members = const [],
-    this.paymentApprovals = const [],
-    this.messProfile,
-  });
+// Dashboard stats
+final dashboardStatsProvider =
+    FutureProvider<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(managerRepositoryProvider);
+  return await repo.getDashboardStats();
+});
 
-  DashboardState copyWith({
-    bool? isLoading,
-    String? error,
-    String? messId,
-    DashboardStats? stats,
-    List<Member>? members,
-    List<PaymentApproval>? paymentApprovals,
-    MessProfile? messProfile,
-  }) {
-    return DashboardState(
-      isLoading: isLoading ?? this.isLoading,
-      error: error,
-      messId: messId ?? this.messId,
-      stats: stats ?? this.stats,
-      members: members ?? this.members,
-      paymentApprovals: paymentApprovals ?? this.paymentApprovals,
-      messProfile: messProfile ?? this.messProfile,
-    );
+// Contributors on card taps
+final dashboardContributorsProvider =
+    FutureProvider.family<List<dynamic>, String>((ref, type) async {
+  final repo = ref.read(managerRepositoryProvider);
+  switch (type) {
+    case 'onLeave':
+      return await repo.getTodayOnLeave();
+    case 'attendance:Lunch':
+      return await repo.getTodayAttendance(mealType: 'Lunch');
+    case 'attendance:Dinner':
+      return await repo.getTodayAttendance(mealType: 'Dinner');
+    case 'approvals':
+      return await repo.getPaymentApprovals();
+    default:
+      return [];
   }
-}
+});
 
-// --- Notifier ---
-class ManagerDashboardNotifier extends StateNotifier<DashboardState> {
-  final ManagerRepository _repository;
-  String? _currentMessId;
+// Members list
+final membersProvider = FutureProvider<List<dynamic>>((ref) async {
+  final repo = ref.read(managerRepositoryProvider);
+  return await repo.getMembers();
+});
 
-  ManagerDashboardNotifier(this._repository) : super(const DashboardState());
+// Member detail for selected month/year
+final memberDetailProvider =
+    FutureProvider.family<Map<String, dynamic>, Map<String, dynamic>>(
+        (ref, args) async {
+  final repo = ref.read(managerRepositoryProvider);
+  final membershipId = args['membershipId'] as String;
+  final year = args['year'] as int;
+  final month = args['month'] as int;
+  return await repo.getMemberDetail(membershipId, year: year, month: month);
+});
 
-  // FIXED: Initialize dashboard by fetching mess first and extracting ID
-  Future<void> initializeDashboard() async {
-    state = state.copyWith(isLoading: true, error: null);
-    try {
-      // First, get manager's mess
-      final messProfile = await _repository.getMyMess();
+// Billing run
+final runBillingProvider =
+    FutureProvider.family<void, Map<String, int>>((ref, ym) async {
+  final repo = ref.read(managerRepositoryProvider);
+  await repo.runBilling(year: ym['year']!, month: ym['month']!);
+});
 
-      // CRITICAL FIX: Extract messId from the profile
-      _currentMessId = messProfile.messId;
+// Invoice status update (approve/reject)
+final updateInvoiceStatusProvider =
+    FutureProvider.family<void, Map<String, String?>>((ref, args) async {
+  final repo = ref.read(managerRepositoryProvider);
+  await repo.updateInvoiceStatus(args['invoiceId']!, args['status']!,
+      rejectionReason: args['rejectionReason']);
+});
 
-      print('DEBUG: Fetched mess with ID: $_currentMessId'); // Debug log
+// Mess profile
+final messProfileProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(managerRepositoryProvider);
+  return await repo.getMessProfile();
+});
 
-      // Update state with messId and profile
-      state = state.copyWith(
-        messId: _currentMessId,
-        messProfile: messProfile,
-      );
+final updateMessProfileProvider =
+    FutureProvider.family<Map<String, dynamic>, Map<String, dynamic>>(
+        (ref, body) async {
+  final repo = ref.read(managerRepositoryProvider);
+  return await repo.updateMessProfile(body);
+});
 
-      // Then load all dashboard data using the actual messId
-      final stats = await _repository.getDashboardStats();
-      final members = await _repository.getMembers();
-      final paymentApprovals = await _repository.getPaymentApprovals();
+// Daily menu (per date)
+final dailyMenuProvider =
+    FutureProvider.family<Map<String, dynamic>?, DateTime>((ref, date) async {
+  final repo = ref.read(managerRepositoryProvider);
+  return await repo.getDailyMenu(date);
+});
 
-      state = state.copyWith(
-        isLoading: false,
-        stats: stats,
-        members: members,
-        paymentApprovals: paymentApprovals,
-      );
-    } catch (e) {
-      print('DEBUG: Error initializing dashboard: $e'); // Debug log
-      state = state.copyWith(isLoading: false, error: e.toString());
-      rethrow;
-    }
-  }
-
-  void setMessId(String messId) {
-    _currentMessId = messId;
-    state = state.copyWith(messId: messId);
-    loadDashboard();
-  }
-
-  Future<void> loadDashboard() async {
-    if (_currentMessId == null) {
-      print('DEBUG: Cannot load dashboard - messId is null');
-      return;
-    }
-
-    print('DEBUG: Loading dashboard for messId: $_currentMessId');
-    state = state.copyWith(isLoading: true, error: null);
-    try {
-      final stats = await _repository.getDashboardStats();
-      final members = await _repository.getMembers();
-      final paymentApprovals = await _repository.getPaymentApprovals();
-
-      state = state.copyWith(
-        isLoading: false,
-        stats: stats,
-        members: members,
-        paymentApprovals: paymentApprovals,
-      );
-    } catch (e) {
-      print('DEBUG: Error loading dashboard: $e');
-      state = state.copyWith(isLoading: false, error: e.toString());
-    }
-  }
-
-  Future<MemberDetail?> getMemberDetail(String membershipId) async {
-    try {
-      return await _repository.getMemberDetail(membershipId);
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-      return null;
-    }
-  }
-
-  Future<void> approvePayment(String invoiceId) async {
-    try {
-      await _repository.approvePayment(invoiceId);
-      if (_currentMessId != null) {
-        final updated = await _repository.getPaymentApprovals();
-        state = state.copyWith(paymentApprovals: updated);
-      }
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-      rethrow;
-    }
-  }
-
-  Future<void> rejectPayment(String invoiceId) async {
-    try {
-      await _repository.rejectPayment(invoiceId);
-      if (_currentMessId != null) {
-        final updated = await _repository.getPaymentApprovals();
-        state = state.copyWith(paymentApprovals: updated);
-      }
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-      rethrow;
-    }
-  }
-
-  Future<void> uploadTodayMenu(Map<String, dynamic> menuData) async {
-    if (_currentMessId == null) return;
-    try {
-      await _repository.uploadTodayMenu(menuData);
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-      rethrow;
-    }
-  }
-
-  Future<String> downloadInvoice(String invoiceId) async {
-    try {
-      return await _repository.downloadInvoice(invoiceId);
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
-      rethrow;
-    }
-  }
-}
-
-// --- Providers ---
-final managerRemoteDataSourceProvider = Provider<ManagerRemoteDataSource>(
-  (ref) => ManagerRemoteDataSource(),
-);
-
-final managerRepositoryProvider = Provider<ManagerRepository>(
-  (ref) => ManagerRepositoryImpl(
-    remoteDataSource: ref.watch(managerRemoteDataSourceProvider),
-  ),
-);
-
-final managerDashboardProvider =
-    StateNotifierProvider<ManagerDashboardNotifier, DashboardState>(
-  (ref) => ManagerDashboardNotifier(ref.watch(managerRepositoryProvider)),
-);
+final updateDailyMenuProvider =
+    FutureProvider.family<Map<String, dynamic>, Map<String, dynamic>>(
+        (ref, args) async {
+  final repo = ref.read(managerRepositoryProvider);
+  return await repo.updateDailyMenu(
+    args['date'] as DateTime,
+    lunch: args['lunch'] as String?,
+    dinner: args['dinner'] as String?,
+    lunchImage: args['lunchImage'] as String?,
+    dinnerImage: args['dinnerImage'] as String?,
+  );
+});

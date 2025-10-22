@@ -7,8 +7,8 @@ const MealSkipSchema = new mongoose.Schema(
     date: { type: Date, required: true }, // normalized to start of day
     mealType: { type: String, enum: ['Lunch', 'Dinner'], required: true },
     isRebateEligible: { type: Boolean, required: true },
-    // percentage: 0-100 applied to perThaliRebateRate
-    rebatePercentage: { type: Number, required: true },
+    // percentage: 0-100 applied to perThaliRebateRate (snapshotted at time of skip)
+    rebatePercentage: { type: Number, required: true, min: 0, max: 100 },
   },
   { timestamps: true }
 );

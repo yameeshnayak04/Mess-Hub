@@ -3,28 +3,51 @@ const express = require('express');
 const router = express.Router();
 
 const {
-  getMyProfile,
-  updateMyProfile,
-  getMyInvoices,
+  getProfile,
+  setKioskPin,
+  updateKioskPin,
+  updateProfile,
   joinMess,
-  markLeave,
-  toggleMealSkip,
-  notifyPayment,
   getMyMemberships,
+  getMembershipDetails,
+  toggleMealSkip,
+  markLeave,
+  getAttendance,
+  requestPaymentApproval,
+  getCurrentDues,
+  leaveMembership,
+  upsertReview,
+  getInvoice,
 } = require('../controllers/customer.controller.js');
 
 const { protect, isCustomer } = require('../middlewares/auth.middleware.js');
 
 router.use(protect, isCustomer);
 
-router.route('/me/profile').get(getMyProfile).put(updateMyProfile);
-router.get('/me/invoices', getMyInvoices);
+// Profile and PIN
+router.get('/me/profile', getProfile);
+router.put('/me/profile', updateProfile);
+router.put('/me/pin', setKioskPin);               // set or update kiosk PIN
 
+// Memberships
 router.post('/memberships', joinMess);
 router.get('/me/memberships', getMyMemberships);
-router.post('/memberships/:membershipId/leaves', markLeave);
-router.post('/memberships/:membershipId/toggle-meal', toggleMealSkip);
+router.get('/memberships/:membershipId', getMembershipDetails);
+router.post('/memberships/:membershipId/leave', leaveMembership);
 
-router.post('/invoices/:invoiceId/notify-payment', notifyPayment);
+// Attendance and toggles
+router.get('/memberships/:membershipId/attendance', getAttendance);
+router.post('/memberships/:membershipId/toggle-skip', toggleMealSkip);
+
+// Leave
+router.post('/memberships/:membershipId/leaves', markLeave);
+
+// Invoices and dues
+router.post('/invoices/:invoiceId/request-approval', requestPaymentApproval);
+router.get('/invoices/:invoiceId', getInvoice);
+router.get('/me/dues/current', getCurrentDues);
+
+// Reviews
+router.post('/messes/:messId/reviews', upsertReview);
 
 module.exports = router;

@@ -1,6 +1,6 @@
 // models/user.model.js
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs'); // For hashing the PIN
+const bcrypt = require('bcryptjs');
 
 const UserSchema = new mongoose.Schema(
   {
@@ -19,7 +19,6 @@ const UserSchema = new mongoose.Schema(
     // Single source of truth for Kiosk PIN (hashed)
     pin: { type: String, select: false },
     photoUrl: { type: String, default: '' },
-
     // OTP fields for registration/login
     otp: { type: String, select: false },
     otpExpires: { type: Date, select: false },
@@ -27,11 +26,9 @@ const UserSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Hash the PIN whenever it changes (fix: ensure early return closes correctly)
+// Hash the PIN whenever it changes
 UserSchema.pre('save', async function (next) {
-  if (!this.isModified('pin') || !this.pin) {
-    return next();
-  }
+  if (!this.isModified('pin') || !this.pin) return next();
   const salt = await bcrypt.genSalt(10);
   this.pin = await bcrypt.hash(this.pin, salt);
   next();

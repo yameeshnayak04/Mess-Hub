@@ -1,14 +1,10 @@
 // lib/features/manager_dashboard/presentation/screens/member_detail_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mess_management_system/features/manager_dashboard/domain/entities/member_detail.dart';
-import 'package:mess_management_system/features/manager_dashboard/presentation/providers/manager_dashboard_provider.dart';
-import 'package:intl/intl.dart';
+import '../providers/manager_dashboard_provider.dart';
 
 class MemberDetailScreen extends ConsumerStatefulWidget {
   final String membershipId;
-
   const MemberDetailScreen({super.key, required this.membershipId});
 
   @override
@@ -16,240 +12,240 @@ class MemberDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _MemberDetailScreenState extends ConsumerState<MemberDetailScreen> {
-  MemberDetail? _memberDetail;
-  bool _isLoading = true;
+  late int _year;
+  late int _month;
 
   @override
   void initState() {
     super.initState();
-    _loadMemberDetail();
+    final now = DateTime.now();
+    _year = now.year;
+    _month = now.month;
   }
 
-  Future<void> _loadMemberDetail() async {
-    final detail = await ref
-        .read(managerDashboardProvider.notifier)
-        .getMemberDetail(widget.membershipId);
-    setState(() {
-      _memberDetail = detail;
-      _isLoading = false;
-    });
+  void _pickMonth() async {
+    final now = DateTime.now();
+    final first = DateTime(now.year - 1, 1);
+    final last = DateTime(now.year + 1, 12);
+    // Simple month picker: use showDatePicker and only take month/year of the picked date
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: first,
+      lastDate: last,
+      initialDate: DateTime(_year, _month),
+      helpText: 'Select Month',
+    );
+    if (picked != null) {
+      setState(() {
+        _year = picked.year;
+        _month = picked.month;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Member Details')),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_memberDetail == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Member Details')),
-        body: const Center(child: Text('Failed to load member details')),
-      );
-    }
-
-    final member = _memberDetail!;
-
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(member.customerName),
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Info', icon: Icon(Icons.info_outline)),
-              Tab(text: 'Attendance', icon: Icon(Icons.check_circle_outline)),
-              Tab(text: 'Payments', icon: Icon(Icons.payment)),
-            ],
-          ),
-        ),
-        body: TabBarView(
-          children: [
-            _buildInfoTab(member),
-            _buildAttendanceTab(member),
-            _buildPaymentsTab(member),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoTab(MemberDetail member) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  if (member.customerPhoto != null)
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundImage: NetworkImage(member.customerPhoto!),
-                    )
-                  else
-                    const CircleAvatar(
-                        radius: 50, child: Icon(Icons.person, size: 50)),
-                  const SizedBox(height: 16),
-                  Text(
-                    member.customerName,
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    member.customerPhone,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          ListTile(
-            leading: const Icon(Icons.restaurant_menu),
-            title: const Text('Meal Plan'),
-            subtitle: Text(member.planName),
-          ),
-          ListTile(
-            leading: const Icon(Icons.currency_rupee),
-            title: const Text('Monthly Fee'),
-            subtitle: Text('₹${member.planPrice.toStringAsFixed(0)}'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.calendar_today),
-            title: const Text('Member Since'),
-            subtitle: Text(DateFormat.yMMMd().format(member.startedAt)),
-          ),
-          ListTile(
-            leading: Icon(
-              member.status == 'active' ? Icons.check_circle : Icons.cancel,
-              color: member.status == 'active' ? Colors.green : Colors.red,
-            ),
-            title: const Text('Status'),
-            subtitle: Text(member.status.toUpperCase()),
+    final args = {
+      'membershipId': widget.membershipId,
+      'year': _year,
+      'month': _month
+    };
+    final detail = ref.watch(memberDetailProvider(args));
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Member Details'),
+        actions: [
+          IconButton(
+              onPressed: _pickMonth, icon: const Icon(Icons.calendar_month)),
+          IconButton(
+            onPressed: () async {
+              await ref.read(
+                  runBillingProvider({'year': _year, 'month': _month}).future);
+              ref.invalidate(memberDetailProvider);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Billing run completed')));
+              }
+            },
+            icon: const Icon(Icons.payments),
+            tooltip: 'Run Billing for Month',
           ),
         ],
       ),
+      body: detail.when(
+        data: (data) => _body(context, data),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text(e.toString())),
+      ),
     );
   }
 
-  Widget _buildAttendanceTab(MemberDetail member) {
-    if (member.attendance.isEmpty) {
-      return const Center(child: Text('No attendance records yet'));
-    }
+  Widget _body(BuildContext context, Map<String, dynamic> data) {
+    final membership = data['membership'] as Map<String, dynamic>;
+    final customer = membership['customer'] as Map<String, dynamic>?;
+    final plan = membership['mealPlan'] as Map<String, dynamic>?;
+    final List<dynamic> attendance = data['attendance'] as List<dynamic>;
+    final List<dynamic> leaves = data['leaves'] as List<dynamic>;
+    final List<dynamic> invoices = data['invoices'] as List<dynamic>;
 
-    return ListView.builder(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      itemCount: member.attendance.length,
-      itemBuilder: (context, index) {
-        final record = member.attendance[index];
-        return Card(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Card(
           child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: record.mealType == 'lunch'
-                  ? Colors.orange.shade100
-                  : Colors.blue.shade100,
-              child: Icon(
-                record.mealType == 'lunch' ? Icons.wb_sunny : Icons.nights_stay,
-                color: record.mealType == 'lunch' ? Colors.orange : Colors.blue,
-              ),
-            ),
-            title: Text(DateFormat.yMMMd().format(record.date)),
-            subtitle: Text(record.mealType.toUpperCase()),
-            trailing: record.isOverride
-                ? const Chip(
-                    label: Text('Override', style: TextStyle(fontSize: 11)),
-                    avatar: Icon(Icons.admin_panel_settings, size: 16),
-                  )
-                : null,
+            leading: const CircleAvatar(child: Icon(Icons.person)),
+            title: Text(customer?['name'] ?? 'Member'),
+            subtitle: Text('Phone: ${customer?['phone'] ?? ''}'),
           ),
-        );
-      },
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.restaurant_menu),
+            title: Text('Plan: ${plan?['name'] ?? '-'}'),
+            subtitle: Text(
+                'Monthly Price: ₹${plan?['price'] ?? '-'} • Rebate/Thali: ₹${plan?['perThaliRebateRate'] ?? '-'}'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text('Attendance (${data['month']}/${data['year']})',
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        _attendanceGrid(attendance),
+        const SizedBox(height: 12),
+        Text('Leaves', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        if (leaves.isEmpty)
+          const Text('No leaves in this period.')
+        else
+          ...leaves.map((l) => ListTile(
+                leading: const Icon(Icons.event_busy),
+                title: Text('${l['startDate'] ?? ''} → ${l['endDate'] ?? ''}'),
+                subtitle: Text(
+                    'Duration: ${l['duration'] ?? 0} days • Rebate: ₹${l['rebateAmount'] ?? 0}'),
+              )),
+        const SizedBox(height: 12),
+        Text('Invoices', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        ...invoices.map((inv) => Card(
+              child: ListTile(
+                leading: const Icon(Icons.receipt_long),
+                title:
+                    Text('₹${inv['amount']} • ${inv['month']}/${inv['year']}'),
+                subtitle: Text('Status: ${inv['status']}'),
+                trailing: _invoiceActions(inv),
+                onTap: () {
+                  if (inv['proofUrl'] != null &&
+                      (inv['proofUrl'] as String).isNotEmpty) {
+                    showModalBottomSheet(
+                      context: context,
+                      builder: (_) => _ProofModal(
+                          url: inv['proofUrl'] as String,
+                          ts: inv['createdAt']?.toString() ?? ''),
+                    );
+                  }
+                },
+              ),
+            )),
+      ]),
     );
   }
 
-  Widget _buildPaymentsTab(MemberDetail member) {
-    if (member.payments.isEmpty) {
-      return const Center(child: Text('No payment records yet'));
+  Widget _invoiceActions(Map<String, dynamic> inv) {
+    final status = inv['status'] as String;
+    if (status == 'pending_approval') {
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        IconButton(
+          icon: const Icon(Icons.close, color: Colors.red),
+          tooltip: 'Reject',
+          onPressed: () async {
+            await ref.read(updateInvoiceStatusProvider({
+              'invoiceId': inv['_id'] as String,
+              'status': 'rejected',
+              'rejectionReason': 'Insufficient proof',
+            }).future);
+            ref.invalidate(memberDetailProvider);
+          },
+        ),
+        IconButton(
+          icon: const Icon(Icons.check_circle, color: Colors.green),
+          tooltip: 'Approve',
+          onPressed: () async {
+            await ref.read(updateInvoiceStatusProvider({
+              'invoiceId': inv['_id'] as String,
+              'status': 'paid',
+            }).future);
+            ref.invalidate(memberDetailProvider);
+          },
+        ),
+      ]);
     }
+    return const SizedBox.shrink();
+  }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: member.payments.length,
-      itemBuilder: (context, index) {
-        final payment = member.payments[index];
-        final monthName =
-            DateFormat.MMMM().format(DateTime(payment.year, payment.month));
+  Widget _attendanceGrid(List<dynamic> records) {
+    // records items: {date, mealType}
+    // Present: record exists for meal; skips/leaves not shown in this view
+    final grouped = <String, Set<String>>{};
+    for (final r in records) {
+      final d = (r['date'] ?? '').toString().substring(0, 10);
+      (grouped[d] ??= <String>{}).add(r['mealType']?.toString() ?? '');
+    }
+    final days = grouped.keys.toList()..sort();
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: days.map((d) {
+        final meals = grouped[d]!;
+        final tag = meals.contains('Lunch') && meals.contains('Dinner')
+            ? 'Full'
+            : meals.contains('Lunch')
+                ? 'Lunch'
+                : meals.contains('Dinner')
+                    ? 'Dinner'
+                    : '-';
+        return Chip(label: Text('$d • $tag'));
+      }).toList(),
+    );
+  }
+}
 
-        return Card(
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: payment.status == 'paid'
-                  ? Colors.green.shade100
-                  : payment.status == 'pending'
-                      ? Colors.orange.shade100
-                      : Colors.grey.shade100,
-              child: Icon(
-                payment.status == 'paid'
-                    ? Icons.check_circle
-                    : payment.status == 'pending'
-                        ? Icons.hourglass_empty
-                        : Icons.cancel,
-                color: payment.status == 'paid'
-                    ? Colors.green
-                    : payment.status == 'pending'
-                        ? Colors.orange
-                        : Colors.grey,
-              ),
-            ),
-            title: Text('$monthName ${payment.year}'),
-            subtitle: Text(payment.status.toUpperCase()),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '₹${payment.amount.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold),
+class _ProofModal extends StatelessWidget {
+  final String url;
+  final String ts;
+  const _ProofModal({required this.url, required this.ts});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Icon(Icons.verified, color: Colors.green),
+                const SizedBox(width: 8),
+                const Text('Payment Proof',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Text(ts, style: const TextStyle(color: Colors.grey)),
+              ]),
+              const SizedBox(height: 12),
+              AspectRatio(
+                aspectRatio: 3 / 4,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(url,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          const Center(child: Text('Unable to load proof'))),
                 ),
-                if (payment.paidAt != null)
-                  Text(
-                    DateFormat.MMMd().format(payment.paidAt!),
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
-              ],
-            ),
-            onTap: () async {
-              // Download invoice
-              try {
-                final message = await ref
-                    .read(managerDashboardProvider.notifier)
-                    .downloadInvoice(payment.invoiceId);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(message)),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                        content: Text(e.toString()),
-                        backgroundColor: Colors.red),
-                  );
-                }
-              }
-            },
-          ),
-        );
-      },
+              ),
+              const SizedBox(height: 12),
+            ]),
+      ),
     );
   }
 }

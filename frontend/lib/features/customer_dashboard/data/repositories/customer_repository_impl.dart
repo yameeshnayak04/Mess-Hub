@@ -1,5 +1,4 @@
 // lib/features/customer_dashboard/data/repositories/customer_repository_impl.dart
-
 import 'package:mess_management_system/features/customer_dashboard/data/datasources/customer_remote_datasource.dart';
 import 'package:mess_management_system/features/customer_dashboard/domain/entities/membership.dart';
 import 'package:mess_management_system/features/customer_dashboard/domain/entities/invoice.dart';
@@ -7,49 +6,59 @@ import 'package:mess_management_system/features/customer_dashboard/domain/entiti
 import 'package:mess_management_system/features/customer_dashboard/domain/repositories/customer_repository.dart';
 
 class CustomerRepositoryImpl implements CustomerRepository {
-  final CustomerRemoteDataSource remoteDataSource;
+  final CustomerRemoteDataSource remote;
+  CustomerRepositoryImpl({required this.remote});
 
-  CustomerRepositoryImpl({required this.remoteDataSource});
-
+  // Profile
   @override
-  Future<List<Membership>> getMyMemberships() =>
-      remoteDataSource.getMyMemberships();
+  Future<Map<String, dynamic>> getMyProfile() => remote.getMyProfile();
+  @override
+  Future<void> updateMyProfile(Map<String, dynamic> body) =>
+      remote.updateMyProfile(body);
+  @override
+  Future<void> updatePin(String pin) => remote.updatePin(pin);
 
+  // Memberships
+  @override
+  Future<List<Membership>> getMyMemberships() => remote.getMyMemberships();
+  @override
+  Future<void> leaveMembership(String membershipId) =>
+      remote.leaveMembership(membershipId);
+
+  // Menu/Skip/Timings
   @override
   Future<Map<String, dynamic>> getTodayMenu(String membershipId) =>
-      remoteDataSource.getTodayMenu(membershipId);
-
+      remote.getTodayMenu(membershipId);
   @override
   Future<void> toggleMealSkip(String membershipId, String mealType) =>
-      remoteDataSource.toggleMealSkip(membershipId, mealType);
+      remote.toggleMealSkip(membershipId, mealType);
+  @override
+  Future<Map<String, dynamic>> getMealTimings(String messId) =>
+      remote.getMealTimings(messId);
 
+  // Attendance/Leaves
   @override
   Future<List<AttendanceDay>> getAttendance(
           String membershipId, int year, int month) =>
-      remoteDataSource.getAttendance(membershipId, year, month);
-
+      remote.getAttendance(membershipId, year, month);
   @override
   Future<void> markLeave(String membershipId, DateTime startDate,
           DateTime endDate, String reason) =>
-      remoteDataSource.markLeave(membershipId, startDate, endDate, reason);
+      remote.markLeave(membershipId, startDate, endDate, reason);
 
+  // Invoices/Payments
   @override
-  Future<List<Invoice>> getMyInvoices(String membershipId) =>
-      remoteDataSource.getMyInvoices(membershipId);
+  Future<List<Invoice>> getMyInvoices(String membershipId) async {
+    final all = await remote.getAllMyInvoices();
+    return all.where((i) => i.membershipId == membershipId).toList();
+  }
 
   @override
   Future<void> notifyPayment(String invoiceId, String screenshotPath) =>
-      remoteDataSource.notifyPayment(invoiceId, screenshotPath);
+      remote.notifyPayment(invoiceId, screenshotPath);
 
+  // Rating
   @override
   Future<void> rateMess(String messId, double rating, String? review) =>
-      remoteDataSource.rateMesss(messId, rating, review);
-
-  @override
-  Future<void> leaveMembership(String membershipId) =>
-      remoteDataSource.leaveMembership(membershipId);
-
-  @override
-  Future<Map<String, dynamic>> getMealTimings(String messId) =>
-      remoteDataSource.getMealTimings(messId);
+      remote.rateMess(messId, rating, review);
 }

@@ -7,28 +7,43 @@ const {
   updateMyMess,
   getDashboardStats,
   getMessMembers,
-  updateWeeklyMenu,
   getPaymentApprovals,
   updateInvoiceStatus,
-  getAnalytics,
   runBillingForMonth,
+  getTodayOnLeave,
+  getMemberDetail,
+  getTodayAttendanceList
 } = require('../controllers/manager.controller.js');
 
+const { getMenu, updateMenu } = require('../controllers/mess.controller.js');
 const { protect, isManager } = require('../middlewares/auth.middleware.js');
+const Mess = require('../models/mess.model.js');
+
+// Helper: inject :messId of the authenticated manager
+const injectMyMessId = async (req, res, next) => {
+  const mess = await Mess.findOne({ owner: req.user._id }).select('_id');
+  if (!mess) return res.status(404).json({ message: 'Mess not found' });
+  req.params.messId = mess._id;
+  return next();
+};
 
 router.use(protect, isManager);
 
 router.route('/my-mess').get(getMyMess).put(updateMyMess);
-router.put('/my-mess/menu', updateWeeklyMenu);
-
 router.get('/my-mess/dashboard-stats', getDashboardStats);
-router.get('/my-mess/analytics', getAnalytics);
-
 router.get('/my-mess/members', getMessMembers);
+
+// Daily menu via manager context (no need to expose messId)
+router.get('/my-mess/menu', injectMyMessId, getMenu);
+router.put('/my-mess/menu', injectMyMessId, updateMenu);
+
+// Payments and billing
 router.get('/my-mess/payment-approvals', getPaymentApprovals);
 router.put('/my-mess/invoices/:invoiceId/status', updateInvoiceStatus);
-
-// Month-end billing run
 router.post('/my-mess/billing/run', runBillingForMonth);
+
+router.get('/my-mess/leaves/today', getTodayOnLeave);
+router.get('/my-mess/attendance/today', getTodayAttendanceList); // ?mealType=Lunch|Dinner|All
+router.get('/my-mess/members/:membershipId/detail', getMemberDetail);
 
 module.exports = router;
