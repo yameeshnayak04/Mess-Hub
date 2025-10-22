@@ -8,6 +8,8 @@ const Invoice = require('../models/invoice.model.js');
 const Review = require('../models/review.model.js');
 const DailyMenu = require('../models/dailyMenu.model.js');
 const asyncHandler = require('../utils/asynchandler.js');
+const { normalizeToStartOfDay } = require('../utils/timeUtils');
+const User = require('../models/user.model.js');
 
 const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
 
@@ -109,6 +111,50 @@ const runBillingForMonth = asyncHandler(async (req, res) => {
   res.status(200).json({ message: 'Billing complete', invoices: results });
 });
 
+const getTodayOnLeave = asyncHandler(async (req, res) => {
+  const mess = await Mess.findOne({ owner: req.user._id });
+  if (!mess) { res.status(404); throw new Error('Mess not found'); }
+  const today = normalizeToStartOfDay(new Date());
+  const memberIds = (await Membership.find({ mess: mess._id, status: 'active' }).select('_id')).map(x => x._id);
+  const leaves = await Leave.find({ membership: { $in: memberIds }, startDate: { $lte: today }, endDate: { $gte: today } })
+    .populate({ path: 'membership', populate: { path: 'customer', select: 'name phone photoUrl' } });
+  res.status(200).json(leaves);
+});
+
+const getTodayAttendanceList = asyncHandler(async (req, res) => {
+  const mess = await Mess.findOne({ owner: req.user._id });
+  if (!mess) { res.status(404); throw new Error('Mess not found'); }
+  const mealType = req.query.mealType && ['Lunch','Dinner'].includes(req.query.mealType) ? req.query.mealType : undefined;
+  const today = normalizeToStartOfDay(new Date());
+  const query = { mess: mess._id, date: today };
+  if (mealType) query.mealType = mealType;
+  const records = await MealRecord.find(query)
+    .populate({ path: 'membership', populate: { path: 'customer', select: 'name phone photoUrl' } });
+  res.status(200).json(records);
+});
+
+const getMemberDetail = asyncHandler(async (req, res) => {
+  const mess = await Mess.findOne({ owner: req.user._id }).select('_id');
+  if (!mess) { res.status(404); throw new Error('Mess not found'); }
+  const { membershipId } = req.params;
+  const { year, month } = req.query; // month 1-12
+  const membership = await Membership.findOne({ _id: membershipId, mess: mess._id })
+    .populate('customer', 'name phone photoUrl')
+    .lean();
+  if (!membership) { res.status(404); throw new Error('Membership not found'); }
+  const y = parseInt(year || new Date().getFullYear(), 10);
+  const m = parseInt(month || new Date().getMonth()+1, 10);
+  const from = new Date(Date.UTC(y, m - 1, 1));
+  const to = new Date(Date.UTC(y, m, 1));
+  const [records, leaves, invoices] = await Promise.all([
+    MealRecord.find({ membership: membershipId, date: { $gte: from, $lt: to } }).lean(),
+    Leave.find({ membership: membershipId, startDate: { $lt: to }, endDate: { $gte: from } }).lean(),
+    Invoice.find({ membership: membershipId }).sort({ year: -1, month: -1 }).lean(),
+  ]);
+  res.status(200).json({ membership, month: m, year: y, attendance: records, leaves, invoices });
+});
+
+
 module.exports = {
   getMyMess,
   updateMyMess,
@@ -117,4 +163,7 @@ module.exports = {
   getPaymentApprovals,
   updateInvoiceStatus,
   runBillingForMonth,
+  getTodayOnLeave,
+  getTodayAttendanceList,
+  getMemberDetail,
 };

@@ -1,154 +1,151 @@
-// lib/features/manager_dashboard/presentation/widgets/home_tab.dart
-
+// lib/features/manager_dashboard/presentation/tabs/home_tab.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mess_management_system/features/manager_dashboard/presentation/providers/manager_dashboard_provider.dart';
-import 'package:mess_management_system/features/manager_dashboard/presentation/widgets/stats_card.dart';
-import 'package:mess_management_system/features/manager_dashboard/presentation/widgets/menu_upload_dialog.dart';
+import '../providers/manager_dashboard_provider.dart';
+import '../widgets/stats_card.dart';
 
 class HomeTab extends ConsumerWidget {
   const HomeTab({super.key});
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stats = ref.watch(dashboardStatsProvider);
+    return stats.when(
+      data: (data) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _card(context, ref, 'On Leave', Icons.event_busy,
+                    data['onLeave']?.toString() ?? '0', 'onLeave'),
+                _card(
+                    context,
+                    ref,
+                    'Lunch Present',
+                    Icons.lunch_dining,
+                    data['lunchPresent']?.toString() ?? '0',
+                    'attendance:Lunch'),
+                _card(
+                    context,
+                    ref,
+                    'Dinner Present',
+                    Icons.dinner_dining,
+                    data['dinnerPresent']?.toString() ?? '0',
+                    'attendance:Dinner'),
+                _card(context, ref, 'Payment Approvals', Icons.receipt_long,
+                    data['pendingApprovals']?.toString() ?? '0', 'approvals'),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Text('Today', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.payments),
+                title:
+                    Text('Revenue this month: ₹${data['monthlyRevenue'] ?? 0}'),
+                subtitle: const Text('Includes paid invoices this month'),
+              ),
+            ),
+          ]),
+        );
+      },
+      error: (e, _) => Center(child: Text(e.toString())),
+      loading: () => const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _card(BuildContext context, WidgetRef ref, String title, IconData icon,
+      String value, String type) {
+    return GestureDetector(
+      onTap: () => showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => ContributorsSheet(type: type),
+      ),
+      child: StatsCard(title: title, value: value, icon: icon),
+    );
+  }
+}
+
+class ContributorsSheet extends ConsumerWidget {
+  final String type;
+  const ContributorsSheet({super.key, required this.type});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dashboardState = ref.watch(managerDashboardProvider);
-
-    if (dashboardState.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (dashboardState.error != null) {
-      return Center(
+    final async = ref.watch(dashboardContributorsProvider(type));
+    final title = switch (type) {
+      'onLeave' => 'Members on Leave (Today)',
+      'attendance:Lunch' => 'Lunch Attendance (Today)',
+      'attendance:Dinner' => 'Dinner Attendance (Today)',
+      'approvals' => 'Pending Payment Approvals',
+      _ => 'Details',
+    };
+    return DraggableScrollableSheet(
+      expand: false,
+      builder: (_, scroll) => Material(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            Text(dashboardState.error!),
-            ElevatedButton(
-              onPressed: () =>
-                  ref.read(managerDashboardProvider.notifier).loadDashboard(),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final stats = dashboardState.stats;
-    if (stats == null) {
-      return const Center(child: Text('No stats available'));
-    }
-
-    return RefreshIndicator(
-      onRefresh: () =>
-          ref.read(managerDashboardProvider.notifier).loadDashboard(),
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Upload Menu Button
-            Card(
-              color: Colors.deepOrange.shade50,
-              child: InkWell(
-                onTap: () => showDialog(
-                  context: context,
-                  builder: (_) => const MenuUploadDialog(),
+            const SizedBox(height: 8),
+            Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(2))),
+            Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(title,
+                    style: Theme.of(context).textTheme.titleMedium)),
+            Expanded(
+              child: async.when(
+                data: (rows) => ListView.builder(
+                  controller: scroll,
+                  itemCount: rows.length,
+                  itemBuilder: (_, i) {
+                    final r = rows[i] as Map<String, dynamic>;
+                    // Approvals: invoice with membership->customer
+                    if (type == 'approvals') {
+                      final membership =
+                          r['membership'] as Map<String, dynamic>?;
+                      final customer =
+                          membership?['customer'] as Map<String, dynamic>?;
+                      return ListTile(
+                        leading: const CircleAvatar(child: Icon(Icons.person)),
+                        title: Text(customer?['name'] ?? 'Member'),
+                        subtitle: Text('Requested: ${r['createdAt'] ?? ''}'),
+                        trailing: const Icon(Icons.chevron_right),
+                      );
+                    }
+                    // Leaves or Attendance
+                    final membership = r['membership'] as Map<String, dynamic>?;
+                    final customer =
+                        membership?['customer'] as Map<String, dynamic>?;
+                    final subtitle = type == 'onLeave'
+                        ? '${r['startDate'] ?? ''} → ${r['endDate'] ?? ''}'
+                        : (r['mealType'] ?? '');
+                    return ListTile(
+                      leading: const CircleAvatar(child: Icon(Icons.person)),
+                      title: Text(customer?['name'] ?? 'Member'),
+                      subtitle: Text(subtitle),
+                      trailing: Text(customer?['phone'] ?? ''),
+                    );
+                  },
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.deepOrange,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.restaurant_menu,
-                            color: Colors.white, size: 28),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Upload Today\'s Menu',
-                              style: TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            Text(
-                              'Let your members know what\'s cooking!',
-                              style: TextStyle(color: Colors.grey.shade700),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.arrow_forward_ios),
-                    ],
-                  ),
-                ),
+                loading: () => const Center(
+                    child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator())),
+                error: (e, _) => Center(
+                    child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(e.toString()))),
               ),
-            ),
-            const SizedBox(height: 24),
-
-            // Stats Grid
-            Text(
-              'Today\'s Overview',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.5,
-              children: [
-                StatsCard(
-                  title: 'Total Members',
-                  value: '${stats.totalMembers}',
-                  icon: Icons.people,
-                  color: Colors.blue,
-                ),
-                StatsCard(
-                  title: 'On Leave',
-                  value: '${stats.membersOnLeave}',
-                  icon: Icons.event_busy,
-                  color: Colors.orange,
-                ),
-                StatsCard(
-                  title: 'Lunch To Prepare',
-                  value: '${stats.mealsToPrepareLunch}',
-                  icon: Icons.wb_sunny,
-                  color: Colors.amber,
-                ),
-                StatsCard(
-                  title: 'Dinner To Prepare',
-                  value: '${stats.mealsToPrepareDinner}',
-                  icon: Icons.nights_stay,
-                  color: Colors.indigo,
-                ),
-                StatsCard(
-                  title: 'Meals Eaten',
-                  value: '${stats.totalMealsEaten}',
-                  icon: Icons.check_circle,
-                  color: Colors.green,
-                ),
-                StatsCard(
-                  title: 'Daily Walk-ins',
-                  value: '${stats.dailyUsersEaten}',
-                  icon: Icons.directions_walk,
-                  color: Colors.purple,
-                ),
-              ],
             ),
           ],
         ),

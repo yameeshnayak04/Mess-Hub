@@ -10,6 +10,9 @@ const {
   getPaymentApprovals,
   updateInvoiceStatus,
   runBillingForMonth,
+  getTodayOnLeave,
+  getMemberDetail,
+  getTodayAttendanceList
 } = require('../controllers/manager.controller.js');
 
 const { getMenu, updateMenu } = require('../controllers/mess.controller.js');
@@ -38,5 +41,9 @@ router.put('/my-mess/menu', injectMyMessId, updateMenu);
 router.get('/my-mess/payment-approvals', getPaymentApprovals);
 router.put('/my-mess/invoices/:invoiceId/status', updateInvoiceStatus);
 router.post('/my-mess/billing/run', runBillingForMonth);
+
+router.get('/my-mess/leaves/today', getTodayOnLeave);
+router.get('/my-mess/attendance/today', getTodayAttendanceList); // ?mealType=Lunch|Dinner|All
+router.get('/my-mess/members/:membershipId/detail', getMemberDetail);
 
 module.exports = router;

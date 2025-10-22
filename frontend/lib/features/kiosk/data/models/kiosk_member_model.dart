@@ -1,5 +1,4 @@
 // lib/features/kiosk/data/models/kiosk_member_model.dart
-
 import 'package:mess_management_system/features/kiosk/domain/entities/kiosk_member.dart';
 
 class KioskMemberModel extends KioskMember {
@@ -12,14 +11,16 @@ class KioskMemberModel extends KioskMember {
     required super.status,
   });
 
-  factory KioskMemberModel.fromJson(Map<String, dynamic> json) {
+  factory KioskMemberModel.fromJson(Map json) {
     return KioskMemberModel(
-      membershipId: json['membershipId'] ?? '',
-      customerId: json['_id'],
-      name: json['name'],
-      phone: json['phone'],
-      photoUrl: json['photoUrl'],
-      status: json['status'] ?? 'available',
+      membershipId: (json['membershipId'] ?? '').toString(),
+      customerId: (json['_id'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      phone: (json['phone'] ?? '').toString(),
+      photoUrl: (json['photoUrl'] ?? '').toString().isEmpty
+          ? null
+          : (json['photoUrl'] as String),
+      status: (json['status'] ?? 'available').toString(),
     );
   }
 }
