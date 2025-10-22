@@ -5,7 +5,7 @@ const router = express.Router();
 const {
   registerMess,
   searchMess,
-  getNearbyMess,
+  getNearbyMesses,
   getMessProfile,
   getMenu,          // daily menu get
   updateMenu,       // daily menu update
@@ -20,7 +20,7 @@ router.put('/:messId', protect, isManager, requireMessOwner, updateMessProfile);
 
 // Search and map
 router.get('/search', searchMess);
-router.get('/nearby', getNearbyMess);
+router.get('/nearby', getNearbyMesses);
 
 // Public mess profile
 router.get('/:messId', getMessProfile);

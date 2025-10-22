@@ -24,17 +24,31 @@ const searchMess = asyncHandler(async (req, res) => {
 });
 
 // Nearby Messes
-const getNearbyMess = asyncHandler(async (req, res) => {
-  const { lat, lng, radius = 10, q } = req.query;
-  if (!lat || !lng) { res.status(400); throw new Error('lat and lng are required'); }
+// controllers/mess.controller.js
+const getNearbyMesses = async (req, res) => {
+  const { lat, lng, radius = 10, filter } = req.query; // km
+  if (!lat || !lng) return res.status(400).json({ message: 'lat and lng are required' });
+
   const pipeline = [
-    { $geoNear: { near: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] }, distanceField: 'distance', spherical: true, maxDistance: parseFloat(radius) * 1000 } },
-    ...(q ? [{ $match: { $or: [{ name: new RegExp(q, 'i') }, { address: new RegExp(q, 'i') }, { city: new RegExp(q, 'i') }] } }] : []),
+    {
+      $geoNear: {
+        near: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
+        distanceField: 'distance',
+        spherical: true,
+        maxDistance: parseFloat(radius) * 1000,
+        key: 'location', // ensure the correct 2dsphere index is used
+      },
+    },
+    ...(filter
+      ? [{ $match: { $or: [{ name: new RegExp(filter, 'i') }, { address: new RegExp(filter, 'i') }, { city: new RegExp(filter, 'i') }] } }]
+      : []),
     { $limit: 200 },
   ];
-  const results = await Mess.aggregate(pipeline);
-  res.status(200).json(results);
-});
+
+  const results = await require('../models/mess.model').aggregate(pipeline);
+  res.json(results);
+};
+
 
 // Get Mess Profile
 const getMessProfile = asyncHandler(async (req, res) => {
@@ -79,4 +93,4 @@ const updateMessProfile = asyncHandler(async (req, res) => {
   res.status(200).json(mess);
 });
 
-module.exports = { registerMess, searchMess, getNearbyMess, getMessProfile, getMenu, updateMenu, updateMessProfile };
+module.exports = { registerMess, searchMess, getNearbyMesses , getMessProfile, getMenu, updateMenu, updateMessProfile };

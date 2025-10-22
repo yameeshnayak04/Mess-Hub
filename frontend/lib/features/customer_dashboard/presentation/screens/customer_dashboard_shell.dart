@@ -43,8 +43,14 @@ class _CustomerDashboardShellState
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() => _currentIndex = index);
+        // In CustomerDashboardShell's onDestinationSelected:
+        onDestinationSelected: (i) async {
+          setState(() => _currentIndex = i);
+          if (i == 0) {
+            await ref
+                .read(customerDashboardProvider.notifier)
+                .loadMemberships();
+          }
         },
         destinations: const [
           NavigationDestination(
