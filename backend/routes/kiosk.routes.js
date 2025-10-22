@@ -2,15 +2,17 @@
 const express = require('express');
 const router = express.Router();
 
-const { getActiveMembers, logMonthlyMeal, logDailyMeal, managerOverride } = require('../controllers/kiosk.controller.js');
-const { protect, isManager } = require('../middlewares/auth.middleware.js');
+const {
+  getActiveMembers,
+  logMonthlyMeal,
+  markAttendance,   // alias to monthly
+  logDailyMeal
+} = require('../controllers/kiosk.controller.js');
 
-// Public kiosk routes (IP-restricted in production)
+// Public kiosk endpoints (IP/Key restricted at infra level)
 router.get('/messes/:messId/active-members', getActiveMembers);
 router.post('/messes/:messId/log-monthly', logMonthlyMeal);
+router.post('/messes/:messId/attendance', markAttendance);
 router.post('/messes/:messId/log-daily', logDailyMeal);
-
-// Protected manager override route (requires JWT auth + manager role)
-router.post('/messes/:messId/manager-override', protect, isManager, managerOverride);
 
 module.exports = router;

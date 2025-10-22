@@ -6,155 +6,68 @@ const MealRecord = require('../models/mealRecord.model.js');
 const Leave = require('../models/leave.model.js');
 const MealSkip = require('../models/mealSkip.model.js');
 const asyncHandler = require('../utils/asynchandler.js');
-const { normalizeToStartOfDay, getCurrentMealType } = require('../utils/timeUtils');
 
-// @desc Get active members who have NOT eaten for the target meal today
-// @route GET /api/kiosk/messes/:messId/active-members
-// @access Public (Kiosk)
+const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+const getMealTypeByNow = (mess) => {
+  const now = new Date();
+  const today = startOfDay(now);
+  const lunchEnd = mess.timings?.lunch?.end && new Date(today.setHours(...mess.timings.lunch.end.split(':').map(Number)));
+  const dinnerEnd = mess.timings?.dinner?.end && new Date(startOfDay(new Date()).setHours(...mess.timings.dinner.end.split(':').map(Number)));
+  if (lunchEnd && now <= lunchEnd) return 'Lunch';
+  return 'Dinner';
+};
+
+// Get Active Members
 const getActiveMembers = asyncHandler(async (req, res) => {
   const { messId } = req.params;
   const mess = await Mess.findById(messId);
-  if (!mess) {
-    res.status(404);
-    throw new Error('Mess not found.');
-  }
-
-  const mealType = req.query.mealType || getCurrentMealType(mess);
-  const today = normalizeToStartOfDay(new Date());
-
+  if (!mess) { res.status(404); throw new Error('Mess not found'); }
+  const mealType = req.query.mealType || getMealTypeByNow(mess);
+  const today = startOfDay(new Date());
   const memberships = await Membership.find({ mess: messId, status: 'active' }).select('_id customer');
-  const membershipIds = memberships.map((m) => m._id);
-
+  const ids = memberships.map(m => m._id);
   const [eaten, onLeave, toggled] = await Promise.all([
-    MealRecord.find({ mess: messId, membership: { $in: membershipIds }, date: today, mealType }).select(
-      'membership'
-    ),
-    Leave.find({
-      membership: { $in: membershipIds },
-      startDate: { $lte: today },
-      endDate: { $gte: today },
-    }).select('membership'),
-    MealSkip.find({ membership: { $in: membershipIds }, date: today, mealType }).select('membership'),
+    MealRecord.find({ mess: messId, membership: { $in: ids }, date: today, mealType }).select('membership'),
+    Leave.find({ membership: { $in: ids }, startDate: { $lte: today }, endDate: { $gte: today } }).select('membership'),
+    MealSkip.find({ membership: { $in: ids }, date: today, mealType }).select('membership'),
   ]);
-
-  const exclude = new Set([
-    ...eaten.map((x) => x.membership.toString()),
-    ...onLeave.map((x) => x.membership.toString()),
-    ...toggled.map((x) => x.membership.toString()),
-  ]);
-
-  const remainingMemberships = memberships.filter((m) => !exclude.has(m._id.toString()));
-  const userIds = remainingMemberships.map((m) => m.customer);
-  const users = await User.find({ _id: { $in: userIds } }).select('name photoUrl phone');
-
+  const exclude = new Set([...eaten, ...onLeave, ...toggled].map(x => String(x.membership)));
+  const remainingMemberships = memberships.filter(m => !exclude.has(String(m._id)));
+  const users = await User.find({ _id: { $in: remainingMemberships.map(m => m.customer) } }).select('name photoUrl phone');
   res.status(200).json({ mealType, members: users });
 });
 
-// @desc Log meal for monthly member after customer's PIN verification
-// @route POST /api/kiosk/messes/:messId/log-monthly
-// @access Public (Kiosk)
+// Log Monthly Meal (PIN)
 const logMonthlyMeal = asyncHandler(async (req, res) => {
   const { messId } = req.params;
   const { membershipId, pin, mealType } = req.body;
-
-  if (!membershipId || !pin || !mealType) {
-    res.status(400);
-    throw new Error('Membership ID, PIN, and meal type are required.');
-  }
-
-  // Find membership and populate customer with PIN
-  const membership = await Membership.findById(membershipId).populate('mess').populate({
-    path: 'customer',
-    select: '+pin',
-  });
-
-  if (!membership || String(membership.mess._id) !== String(messId)) {
-    res.status(404);
-    throw new Error('Membership not found for this mess.');
-  }
-
+  if (!membershipId || !pin || !mealType) { res.status(400); throw new Error('membershipId, pin, mealType are required'); }
+  const membership = await Membership.findById(membershipId).populate('mess').populate({ path: 'customer', select: '+pin' });
+  if (!membership || String(membership.mess._id) !== String(messId)) { res.status(404); throw new Error('Membership not found for this mess'); }
   const customer = membership.customer;
-  if (!customer) {
-    res.status(404);
-    throw new Error('Customer not found.');
-  }
-
-  // Verify customer's PIN
-  if (!customer.pin) {
-    res.status(401);
-    throw new Error('Customer has not set a PIN. Please ask them to set one first.');
-  }
-
-  const isPinValid = await customer.comparePin(pin);
-  if (!isPinValid) {
-    res.status(401);
-    throw new Error('Incorrect PIN. Please try again.');
-  }
-
-  // Check if already logged today
-  const today = normalizeToStartOfDay(new Date());
-  const existing = await MealRecord.findOne({ mess: messId, membership: membershipId, date: today, mealType });
-  if (existing) {
-    res.status(400);
-    throw new Error('Meal already logged for this member today.');
-  }
-
-  // Log the meal
+  if (!customer?.pin) { res.status(401); throw new Error('Customer has not set a PIN'); }
+  const ok = await customer.comparePin(pin);
+  if (!ok) { res.status(401); throw new Error('Incorrect PIN'); }
+  const today = startOfDay(new Date());
+  const exists = await MealRecord.findOne({ mess: messId, membership: membershipId, date: today, mealType });
+  if (exists) { res.status(400); throw new Error('Meal already logged for this member today'); }
   await MealRecord.create({ mess: messId, membership: membershipId, date: today, mealType });
-  res.status(201).json({ message: `Meal logged successfully for ${customer.name}.` });
+  res.status(201).json({ message: `Meal logged for ${customer.name}` });
 });
 
-// @desc Log meal for daily walk-in user (no PIN required)
-// @route POST /api/kiosk/messes/:messId/log-daily
-// @access Public (Kiosk)
+// Mark Attendance (alias to logMonthlyMeal)
+const markAttendance = logMonthlyMeal;
+
+// Log Daily Meal (walk-in, only when serviceType === 'Both')
 const logDailyMeal = asyncHandler(async (req, res) => {
   const { messId } = req.params;
   const { mealType } = req.body;
-
-  if (!mealType) {
-    res.status(400);
-    throw new Error('Meal type is required.');
-  }
-
-  const today = normalizeToStartOfDay(new Date());
-  await MealRecord.create({ mess: messId, membership: null, date: today, mealType });
-  res.status(201).json({ message: 'Daily meal logged successfully.' });
-});
-
-// @desc Manager override to log meal without PIN (authenticated manager only)
-// @route POST /api/kiosk/messes/:messId/manager-override
-// @access Protected (Manager must be authenticated via token)
-const managerOverride = asyncHandler(async (req, res) => {
-  const { messId } = req.params;
-  const { membershipId, mealType } = req.body;
-
-  // Manager must be authenticated (this route should be protected by middleware)
-  if (!req.user || req.user.role !== 'manager') {
-    res.status(403);
-    throw new Error('Only authenticated managers can override meal logging.');
-  }
-
+  if (!['Lunch', 'Dinner'].includes(mealType)) { res.status(400); throw new Error('Invalid mealType'); }
   const mess = await Mess.findById(messId);
-  if (!mess) {
-    res.status(404);
-    throw new Error('Mess not found.');
-  }
-
-  // Verify the manager owns this mess
-  if (String(mess.owner) !== String(req.user._id)) {
-    res.status(403);
-    throw new Error('You are not the owner of this mess.');
-  }
-
-  const today = normalizeToStartOfDay(new Date());
-  const existing = await MealRecord.findOne({ mess: messId, membership: membershipId, date: today, mealType });
-  if (existing) {
-    res.status(400);
-    throw new Error('Meal already logged for this member today.');
-  }
-
-  await MealRecord.create({ mess: messId, membership: membershipId, date: today, mealType, isManagerOverride: true });
-  res.status(201).json({ message: 'Manager override successful. Meal logged.' });
+  if (!mess) { res.status(404); throw new Error('Mess not found'); }
+  if (mess.serviceType !== 'Both') { res.status(400); throw new Error('Daily walk-ins are not allowed for this mess'); }
+  await MealRecord.create({ mess: messId, membership: null, date: startOfDay(new Date()), mealType });
+  res.status(201).json({ message: 'Daily meal logged' });
 });
 
-module.exports = { getActiveMembers, logMonthlyMeal, logDailyMeal, managerOverride };
+module.exports = { getActiveMembers, logMonthlyMeal, markAttendance, logDailyMeal };

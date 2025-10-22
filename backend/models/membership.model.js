@@ -9,8 +9,8 @@ const MembershipSchema = new mongoose.Schema(
     // Freeze plan details at join time (normalized to a single perThaliRebateRate)
     mealPlan: {
       name: { type: String, enum: ['Lunch', 'Dinner', 'Full Day'], required: true },
-      price: { type: Number, required: true },
-      perThaliRebateRate: { type: Number, required: true },
+      price: { type: Number, required: true, min: 0 },
+      perThaliRebateRate: { type: Number, required: true, min: 0 },
     },
 
     status: { type: String, enum: ['active', 'cancelled'], default: 'active' },

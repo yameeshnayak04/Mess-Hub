@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const MealRecordSchema = new mongoose.Schema(
   {
     mess: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'Mess' },
-    // For monthly users; null for daily walk-ins
+    // For monthly users; null for daily walk-ins at “Both” service messes
     membership: { type: mongoose.Schema.Types.ObjectId, ref: 'Membership', required: false },
     date: { type: Date, required: true }, // normalized to start of day
     mealType: { type: String, enum: ['Lunch', 'Dinner'], required: true },

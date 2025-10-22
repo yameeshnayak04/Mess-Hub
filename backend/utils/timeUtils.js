@@ -1,6 +1,6 @@
 // utils/timeUtils.js
 
-// Normalize any date to start of its local day
+// Normalize any date to start of local day
 const normalizeToStartOfDay = (date = new Date()) => {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -14,35 +14,21 @@ const getTodayDateRange = () => {
   return { startOfDay, endOfDay };
 };
 
-// Backward-compatible
-const getDateWithSpecificTime = (timeString) => {
-  const [hours, minutes] = timeString.split(':').map(Number);
-  const date = new Date();
-  date.setHours(hours, minutes, 0, 0);
-  return date;
+const parseHHmmOn = (date, hhmm) => {
+  if (!hhmm) return null;
+  const [h, m] = hhmm.split(':').map(Number);
+  const d = new Date(date);
+  d.setHours(h || 0, m || 0, 0, 0);
+  return d;
 };
 
-// Minimal stub to avoid timezone bugs in controllers
 const getTodayInMessTimezone = () => normalizeToStartOfDay(new Date());
-
-// Compute ISO week identifier "YYYY-Www"
-const getISOWeekIdentifier = (date = new Date()) => {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
-};
 
 // Build a Date for the meal's end time on a target day
 const getMealEndDateTime = (mess, mealType, targetDate) => {
-  const time = mealType === 'Lunch' ? mess.timings?.lunch?.end : mess.timings?.dinner?.end;
+  const time = mealType === 'Lunch' ? mess?.timings?.lunch?.end : mess?.timings?.dinner?.end;
   if (!time) return null;
-  const [h, m] = time.split(':').map(Number);
-  const d = new Date(targetDate);
-  d.setHours(h, m, 0, 0);
-  return d;
+  return parseHHmmOn(targetDate, time);
 };
 
 // Decide current meal by comparing now to timings; default Lunch before dinner end
@@ -51,20 +37,25 @@ const getCurrentMealType = (mess, now = new Date()) => {
   const dinnerEnd = mess?.timings?.dinner?.end;
   if (!lunchEnd && !dinnerEnd) return 'Lunch';
   if (lunchEnd) {
-    const [lh, lm] = lunchEnd.split(':').map(Number);
-    const lunchEndDate = new Date(now);
-    lunchEndDate.setHours(lh, lm, 0, 0);
+    const lunchEndDate = parseHHmmOn(now, lunchEnd);
     if (now <= lunchEndDate) return 'Lunch';
   }
   return 'Dinner';
 };
 
+// Month range helper
+const getMonthRange = (year, month1to12) => {
+  const from = new Date(Date.UTC(year, month1to12 - 1, 1));
+  const to = new Date(Date.UTC(year, month1to12, 1));
+  return { from, to };
+};
+
 module.exports = {
   normalizeToStartOfDay,
-  getDateWithSpecificTime,
   getTodayDateRange,
+  parseHHmmOn,
   getTodayInMessTimezone,
-  getISOWeekIdentifier,
   getMealEndDateTime,
   getCurrentMealType,
+  getMonthRange,
 };
