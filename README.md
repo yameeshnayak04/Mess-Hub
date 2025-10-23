@@ -74,3 +74,5 @@ Detailed setup and installation instructions can be found in the `/docs` folder.
 ---
 
 > _Mess Hub combines smart architecture with seamless UX — designed to simplify daily mess operations for both owners and customers._
+
+version - 1 : 23/10/2025
