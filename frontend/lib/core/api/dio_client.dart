@@ -1,53 +1,95 @@
-// This file sets up a centralized and powerful HTTP client using the Dio package.
-
 import 'package:dio/dio.dart';
-import 'package:mess_management_system/core/constants/api_constants.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Import for token storage
+import '../utils/constants.dart';
 
 class DioClient {
-  DioClient._(); // Private constructor for Singleton pattern
+  final Dio _dio;
 
-  static final DioClient instance = DioClient._();
+  DioClient(this._dio) {
+    _dio
+      ..options.baseUrl = ApiConstants.baseUrl + ApiConstants.apiPrefix
+      ..options.connectTimeout = ApiConstants.connectionTimeout
+      ..options.receiveTimeout = ApiConstants.receiveTimeout
+      ..options.headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+  }
 
-  final Dio _dio = Dio(
-    BaseOptions(
-      baseUrl: ApiConstants.baseUrl,
-      connectTimeout: const Duration(seconds: 15), // Slightly increased timeout
-      receiveTimeout: const Duration(seconds: 15),
-      headers: {'Content-Type': 'application/json'},
-    ),
-  );
+  // GET request
+  Future<Response> get(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+  }) async {
+    try {
+      final response = await _dio.get(
+        path,
+        queryParameters: queryParameters,
+        options: options,
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
 
-  Dio get dio => _dio;
+  // POST request
+  Future<Response> post(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+  }) async {
+    try {
+      final response = await _dio.post(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
 
-  // This function sets up the interceptor to automatically add the JWT token.
-  void setupInterceptors() {
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        // This function is called before every single request is sent.
-        onRequest: (options, handler) async {
-          // Get the saved JWT token from the device's local storage.
-          final prefs = await SharedPreferences.getInstance();
-          final token = prefs.getString('jwt_token');
+  // PUT request
+  Future<Response> put(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+  }) async {
+    try {
+      final response = await _dio.put(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
 
-          // If a token exists, add it to the 'Authorization' header.
-          if (token != null) {
-            options.headers['Authorization'] = 'Bearer $token';
-          }
-
-          print('REQUEST[${options.method}] => PATH: ${options.uri}');
-          return handler.next(options); // Continue with the request.
-        },
-        onResponse: (response, handler) {
-          print('RESPONSE[${response.statusCode}]');
-          return handler.next(response);
-        },
-        onError: (DioException e, handler) {
-          print(
-              'ERROR[${e.response?.statusCode}] => PATH: ${e.requestOptions.path}');
-          return handler.next(e);
-        },
-      ),
-    );
+  // DELETE request
+  Future<Response> delete(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+  }) async {
+    try {
+      final response = await _dio.delete(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
   }
 }

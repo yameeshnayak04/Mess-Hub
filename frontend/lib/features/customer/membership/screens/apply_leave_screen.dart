@@ -1,0 +1,402 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:table_calendar/table_calendar.dart';
+import 'package:intl/intl.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/primary_button.dart';
+
+class ApplyLeaveScreen extends ConsumerStatefulWidget {
+  final String membershipId;
+
+  const ApplyLeaveScreen({
+    super.key,
+    required this.membershipId,
+  });
+
+  @override
+  ConsumerState<ApplyLeaveScreen> createState() => _ApplyLeaveScreenState();
+}
+
+class _ApplyLeaveScreenState extends ConsumerState<ApplyLeaveScreen> {
+  CalendarFormat _calendarFormat = CalendarFormat.month;
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _rangeStart;
+  DateTime? _rangeEnd;
+  RangeSelectionMode _rangeSelectionMode = RangeSelectionMode.toggledOn;
+  final int _minLeaveDaysForRebate = 3; // This should come from mess rules
+  bool _isSubmitting = false;
+
+  int get _selectedDays {
+    if (_rangeStart == null || _rangeEnd == null) return 0;
+    return _rangeEnd!.difference(_rangeStart!).inDays + 1;
+  }
+
+  bool get _isRebateEligible => _selectedDays >= _minLeaveDaysForRebate;
+
+  bool _isSelectable(DateTime day) {
+    // Can't select today or past dates
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return day.isAfter(today);
+  }
+
+  bool _isInSameMonth(DateTime start, DateTime end) {
+    return start.year == end.year && start.month == end.month;
+  }
+
+  Future<void> _submitLeave() async {
+    if (_rangeStart == null || _rangeEnd == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select leave dates')),
+      );
+      return;
+    }
+
+    if (!_isInSameMonth(_rangeStart!, _rangeEnd!)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Leave dates must be in the same month'),
+          backgroundColor: AppTheme.errorRed,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      // API call would go here
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Leave application submitted successfully')),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to submit leave: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Apply for Leave'),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Instructions Card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.lightOrange,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: AppTheme.primaryOrange.withOpacity(0.2),
+                        ),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              color: AppTheme.primaryOrange,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Leave Application Guidelines',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    color: AppTheme.darkOrange,
+                                  ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '• Leave must start from tomorrow onwards\n'
+                          '• Both dates must be in the same month\n'
+                          '• Minimum $_minLeaveDaysForRebate days required for rebate eligibility\n'
+                          '• Manager approval required',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.darkOrange,
+                                  ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Calendar
+                  TableCalendar(
+                    firstDay: DateTime.now(),
+                    lastDay: DateTime.now().add(const Duration(days: 90)),
+                    focusedDay: _focusedDay,
+                    calendarFormat: _calendarFormat,
+                    rangeSelectionMode: _rangeSelectionMode,
+                    rangeStartDay: _rangeStart,
+                    rangeEndDay: _rangeEnd,
+                    onDaySelected: (selectedDay, focusedDay) {
+                      if (!_isSelectable(selectedDay)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Cannot select past dates or today'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                        return;
+                      }
+
+                      setState(() {
+                        _focusedDay = focusedDay;
+                        if (_rangeStart == null || _rangeEnd != null) {
+                          _rangeStart = selectedDay;
+                          _rangeEnd = null;
+                        } else {
+                          if (selectedDay.isBefore(_rangeStart!)) {
+                            _rangeEnd = _rangeStart;
+                            _rangeStart = selectedDay;
+                          } else {
+                            _rangeEnd = selectedDay;
+                          }
+                        }
+                      });
+                    },
+                    onFormatChanged: (format) {
+                      setState(() {
+                        _calendarFormat = format;
+                      });
+                    },
+                    onPageChanged: (focusedDay) {
+                      _focusedDay = focusedDay;
+                    },
+                    enabledDayPredicate: _isSelectable,
+                    calendarStyle: CalendarStyle(
+                      rangeStartDecoration: const BoxDecoration(
+                        color: AppTheme.primaryOrange,
+                        shape: BoxShape.circle,
+                      ),
+                      rangeEndDecoration: const BoxDecoration(
+                        color: AppTheme.primaryOrange,
+                        shape: BoxShape.circle,
+                      ),
+                      rangeHighlightColor:
+                          AppTheme.primaryOrange.withOpacity(0.3),
+                      todayDecoration: BoxDecoration(
+                        color: AppTheme.textSecondary.withOpacity(0.3),
+                        shape: BoxShape.circle,
+                      ),
+                      disabledDecoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    headerStyle: const HeaderStyle(
+                      formatButtonVisible: true,
+                      titleCentered: true,
+                      formatButtonShowsNext: false,
+                    ),
+                  ),
+
+                  // Selection Summary
+                  if (_rangeStart != null) ...[
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Card(
+                        color: _isRebateEligible
+                            ? AppTheme.successGreen.withOpacity(0.1)
+                            : AppTheme.warningYellow.withOpacity(0.1),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Selected Leave Period',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Start Date',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: AppTheme.textSecondary,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        DateFormat('MMM d, y')
+                                            .format(_rangeStart!),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium,
+                                      ),
+                                    ],
+                                  ),
+                                  const Icon(Icons.arrow_forward),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        'End Date',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: AppTheme.textSecondary,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _rangeEnd != null
+                                            ? DateFormat('MMM d, y')
+                                                .format(_rangeEnd!)
+                                            : 'Select end date',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              if (_rangeEnd != null) ...[
+                                const Divider(height: 24),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Total Days',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium,
+                                    ),
+                                    Text(
+                                      '$_selectedDays days',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge
+                                          ?.copyWith(
+                                            color: AppTheme.primaryOrange,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: _isRebateEligible
+                                        ? AppTheme.successGreen.withOpacity(0.1)
+                                        : AppTheme.warningYellow
+                                            .withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: _isRebateEligible
+                                          ? AppTheme.successGreen
+                                          : AppTheme.warningYellow,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        _isRebateEligible
+                                            ? Icons.check_circle
+                                            : Icons.info_outline,
+                                        color: _isRebateEligible
+                                            ? AppTheme.successGreen
+                                            : AppTheme.warningYellow,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _isRebateEligible
+                                              ? 'Eligible for rebate'
+                                              : 'Not eligible for rebate (minimum $_minLeaveDaysForRebate days required)',
+                                          style: TextStyle(
+                                            color: _isRebateEligible
+                                                ? AppTheme.successGreen
+                                                : AppTheme.warningYellow,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+
+          // Submit Button
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceColor,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              child: PrimaryButton(
+                text: 'Submit Leave Application',
+                onPressed: _rangeStart != null && _rangeEnd != null
+                    ? _submitLeave
+                    : null,
+                isLoading: _isSubmitting,
+                icon: Icons.send,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
