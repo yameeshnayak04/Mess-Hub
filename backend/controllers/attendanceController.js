@@ -66,13 +66,14 @@ exports.skipMeal = async (req, res, next) => {
       });
     }
 
-    // Create skipped attendance
+    // Create skipped attendance (for monthly members)
     const attendance = await Attendance.create({
       user: req.user.id,
       mess: membership.mess._id,
       date: attendanceDate,
       mealType,
-      status: 'Skipped'
+      status: 'Skipped',
+      memberType: 'Monthly'
     });
 
     res.status(201).json({
@@ -200,14 +201,14 @@ exports.kioskMarkAttendance = async (req, res, next) => {
       }
     }
 
-    // 6. Create Present attendance
+    // 6. Create Present attendance for MONTHLY member
     const attendance = await Attendance.create({
       user: userId,
       mess: mess._id,
       date: new Date(),
       mealType,
       status: 'Present',
-      isDaily: false
+      memberType: 'Monthly'
     });
 
     const populatedAttendance = await Attendance.findById(attendance._id)
@@ -258,14 +259,14 @@ exports.kioskMarkDaily = async (req, res, next) => {
       });
     }
 
-    // Create daily attendance (no user associated)
+    // Create daily attendance (no user associated, memberType: 'Daily')
     const attendance = await Attendance.create({
-      user: null, // No specific user for daily walk-ins
+      user: null,
       mess: mess._id,
       date: new Date(),
       mealType,
       status: 'Present',
-      isDaily: true
+      memberType: 'Daily'
     });
 
     res.status(201).json({
@@ -310,11 +311,12 @@ exports.getMyAttendance = async (req, res, next) => {
 
     const { startOfMonth, endOfMonth } = getStartAndEndOfMonth(targetMonth, targetYear);
 
-    // Get attendance records
+    // Get attendance records (only monthly member records)
     const attendance = await Attendance.find({
       user: req.user.id,
       mess: membership.mess,
-      date: { $gte: startOfMonth, $lte: endOfMonth }
+      date: { $gte: startOfMonth, $lte: endOfMonth },
+      memberType: 'Monthly'
     }).sort({ date: 1, mealType: 1 });
 
     res.status(200).json({
