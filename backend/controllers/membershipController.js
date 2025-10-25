@@ -1,0 +1,272 @@
+const Membership = require('../models/Membership');
+const Mess = require('../models/Mess');
+const Bill = require('../models/Bill');
+
+// @desc    Join a mess
+// @route   POST /api/membership/join/:messId
+// @access  Private (Customer only)
+exports.joinMess = async (req, res, next) => {
+  try {
+    const { messId } = req.params;
+    const { planName } = req.body;
+
+    // Check if mess exists
+    const mess = await Mess.findById(messId);
+
+    if (!mess) {
+      return res.status(404).json({
+        success: false,
+        message: 'Mess not found'
+      });
+    }
+
+    // Find the selected plan
+    const selectedPlan = mess.plans.find(plan => plan.name === planName);
+
+    if (!selectedPlan) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid plan selected'
+      });
+    }
+
+    // Check if user already has a membership for this mess
+    const existingMembership = await Membership.findOne({
+      user: req.user.id,
+      mess: messId,
+      status: { $in: ['Pending', 'Active'] }
+    });
+
+    if (existingMembership) {
+      return res.status(400).json({
+        success: false,
+        message: 'You already have an active or pending membership for this mess'
+      });
+    }
+
+    // Create membership
+    const membership = await Membership.create({
+      user: req.user.id,
+      mess: messId,
+      planName: selectedPlan.name,
+      billingRate: selectedPlan.rate,
+      status: 'Pending'
+    });
+
+    const populatedMembership = await Membership.findById(membership._id)
+      .populate('mess', 'messName address city contactPhone')
+      .populate('user', 'name phone');
+
+    res.status(201).json({
+      success: true,
+      data: populatedMembership
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all members of manager's mess
+// @route   GET /api/membership/mess
+// @access  Private (Manager only)
+exports.getMessMembers = async (req, res, next) => {
+  try {
+    const { status } = req.query;
+
+    // Find manager's mess
+    const mess = await Mess.findOne({ owner: req.user.id });
+
+    if (!mess) {
+      return res.status(404).json({
+        success: false,
+        message: 'No mess found for this manager'
+      });
+    }
+
+    // Build query
+    const query = { mess: mess._id };
+    if (status) {
+      query.status = status;
+    }
+
+    // Get members
+    const members = await Membership.find(query)
+      .populate('user', 'name phone location')
+      .sort({ createdAt: -1 });
+
+    // For active members, attach payment status
+    const membersWithPaymentStatus = await Promise.all(
+      members.map(async (member) => {
+        const memberObj = member.toObject();
+        
+        if (member.status === 'Active') {
+          // Find most recent bill
+          const recentBill = await Bill.findOne({
+            user: member.user._id,
+            mess: mess._id
+          }).sort({ year: -1, month: -1 });
+
+          memberObj.paymentStatus = recentBill ? recentBill.status : 'No Bills';
+        }
+
+        return memberObj;
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      count: membersWithPaymentStatus.length,
+      data: membersWithPaymentStatus
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Approve membership
+// @route   PUT /api/membership/approve/:membershipId
+// @access  Private (Manager only)
+exports.approveMembership = async (req, res, next) => {
+  try {
+    const membership = await Membership.findById(req.params.membershipId);
+
+    if (!membership) {
+      return res.status(404).json({
+        success: false,
+        message: 'Membership not found'
+      });
+    }
+
+    // Verify manager owns the mess
+    const mess = await Mess.findOne({ _id: membership.mess, owner: req.user.id });
+
+    if (!mess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to approve this membership'
+      });
+    }
+
+    membership.status = 'Active';
+    membership.joinedDate = new Date();
+    await membership.save();
+
+    const populatedMembership = await Membership.findById(membership._id)
+      .populate('user', 'name phone')
+      .populate('mess', 'messName');
+
+    res.status(200).json({
+      success: true,
+      data: populatedMembership
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Reject membership
+// @route   PUT /api/membership/reject/:membershipId
+// @access  Private (Manager only)
+exports.rejectMembership = async (req, res, next) => {
+  try {
+    const membership = await Membership.findById(req.params.membershipId);
+
+    if (!membership) {
+      return res.status(404).json({
+        success: false,
+        message: 'Membership not found'
+      });
+    }
+
+    // Verify manager owns the mess
+    const mess = await Mess.findOne({ _id: membership.mess, owner: req.user.id });
+
+    if (!mess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to reject this membership'
+      });
+    }
+
+    // Delete the membership
+    await Membership.findByIdAndDelete(req.params.membershipId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Membership rejected and removed'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get customer's memberships
+// @route   GET /api/membership/my-memberships
+// @access  Private (Customer only)
+exports.getMyMemberships = async (req, res, next) => {
+  try {
+    const memberships = await Membership.find({
+      user: req.user.id,
+      status: { $in: ['Pending', 'Active'] }
+    })
+      .populate('mess', 'messName messImage address city contactPhone serviceType cuisine timings')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: memberships.length,
+      data: memberships
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Leave a mess
+// @route   PUT /api/membership/leave/:membershipId
+// @access  Private (Customer only)
+exports.leaveMess = async (req, res, next) => {
+  try {
+    const membership = await Membership.findById(req.params.membershipId);
+
+    if (!membership) {
+      return res.status(404).json({
+        success: false,
+        message: 'Membership not found'
+      });
+    }
+
+    // Verify membership belongs to user
+    if (membership.user.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to modify this membership'
+      });
+    }
+
+    // Check for outstanding bills
+    const outstandingBill = await Bill.findOne({
+      user: req.user.id,
+      mess: membership.mess,
+      status: { $in: ['Due', 'Pending Approval'] }
+    });
+
+    if (outstandingBill) {
+      return res.status(403).json({
+        success: false,
+        message: 'Please clear your outstanding dues before leaving.'
+      });
+    }
+
+    // Set membership to inactive
+    membership.status = 'Inactive';
+    await membership.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'You have successfully left the mess'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
