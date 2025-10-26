@@ -1,74 +1,84 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-
-const userSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, 'Name is required'],
-    trim: true
-  },
-  phone: {
-    type: String,
-    required: [true, 'Phone number is required'],
-    unique: true,
-    trim: true,
-    match: [/^[0-9]{10}$/, 'Please provide a valid 10-digit phone number']
-  },
-  kioskPin: {
-    type: String,
-    required: function() {
-      return this.role === 'Customer';
-    },
-    match: [/^[0-9]{4}$/, 'Kiosk PIN must be 4 digits']
-  },
-  role: {
-    type: String,
-    enum: ['Customer', 'Manager'],
-    required: [true, 'Role is required']
-  },
-  location: {
-    type: {
+const userSchema = new mongoose.Schema(
+  {
+    name: {
       type: String,
-      enum: ['Point'],
-      required: function() {
-        return this.role === 'Customer';
-      }
+      required: [true, 'Name is required'],
+      trim: true,
     },
-    coordinates: {
-      type: [Number],
-      required: function() {
-        return this.role === 'Customer';
-      }
-    }
+    phone: {
+      type: String,
+      required: [true, 'Phone number is required'],
+      unique: true,
+      match: [/^\d{10}$/, 'Please provide a valid 10-digit phone number'],
+    },
+    password: {
+      type: String,
+      required: [true, 'Password is required'],
+      minlength: [8, 'Password must be at least 8 characters'],
+      select: false,
+    },
+    role: {
+      type: String,
+      enum: ['Customer', 'Manager'],
+      required: [true, 'Role is required'],
+    },
+    pin: {
+      type: String,
+      validate: {
+        validator: function (v) {
+          if (this.role === 'Customer') {
+            return v && /^\d{4}$/.test(v);
+          }
+          return true;
+        },
+        message: 'PIN must be 4 digits for customers',
+      },
+      select: false,
+    },
+    // Only required/validated for Customers
+    location: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        required: function () {
+          return this.role === 'Customer';
+        },
+      },
+      coordinates: {
+        type: [Number], // [lng, lat]
+        required: function () {
+          return this.role === 'Customer';
+        },
+        validate: {
+          validator: function (v) {
+            if (this.role !== 'Customer') return true;
+            // Expect [lng, lat], with valid ranges
+            return (
+              Array.isArray(v) &&
+              v.length === 2 &&
+              v.every((n) => typeof n === 'number' && Number.isFinite(n)) &&
+              v[0] >= -180 &&
+              v[0] <= 180 &&
+              v[1] >= -90 &&
+              v[1] <= 90
+            );
+          },
+          message:
+            'Coordinates must be [lng, lat] with lng in [-180,180] and lat in [-90,90]',
+        },
+      },
+    },
+  },
+  { timestamps: true }
+);
+
+// Optional: remove the manual location check since 'required' handles it for customers
+userSchema.pre('validate', function (next) {
+  if (this.role === 'Customer' && !this.pin) {
+    this.invalidate('pin', 'PIN is required for customers');
   }
-}, {
-  timestamps: true
+  next();
 });
 
-// Create 2dsphere index for location
+// 2dsphere index for geospatial queries
 userSchema.index({ location: '2dsphere' });
-
-// REMOVE THIS LINE - it's causing the duplicate index warning:
-// userSchema.index({ phone: 1 });
-
-// Hash kiosk PIN before saving
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('kioskPin') || !this.kioskPin) {
-    return next();
-  }
-
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.kioskPin = await bcrypt.hash(this.kioskPin, salt);
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Method to compare kiosk PIN
-userSchema.methods.compareKioskPin = async function(enteredPin) {
-  return await bcrypt.compare(enteredPin, this.kioskPin);
-};
-
-module.exports = mongoose.model('User', userSchema);
