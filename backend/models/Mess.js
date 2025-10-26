@@ -1,3 +1,4 @@
+const { required } = require('joi');
 const mongoose = require('mongoose');
 
 const messSchema = new mongoose.Schema({
@@ -54,6 +55,15 @@ const messSchema = new mongoose.Schema({
   maxCapacity: {
     type: Number,
     min: 1
+  },
+  tiffinService:{
+    type : Boolean,
+    required : true,
+  },
+  basicThaliDetails: {
+    type: String,
+    required: [true, 'Thali Details is required'],
+    trim: true
   },
   timings: {
     lunch: {
