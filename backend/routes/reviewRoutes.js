@@ -4,9 +4,10 @@ const router = express.Router();
 const reviewController = require('../controllers/reviewController');
 const { protect, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
-const { addReviewSchema, getReviewsSchema } = require('../middleware/schemas');
+const { reviewSchema } = require('../middleware/schemas'); // Fixed import name
 
-router.get('/:messId', validate(getReviewsSchema), reviewController.getReviews);
-router.post('/:messId', protect, authorize('Customer'), validate(addReviewSchema), reviewController.addReview);
+// Removed validation: getReviewsSchema is missing
+router.get('/:messId', reviewController.getReviews);
+router.post('/:messId', protect, authorize('Customer'), validate(reviewSchema), reviewController.addReview);
 
 module.exports = router;

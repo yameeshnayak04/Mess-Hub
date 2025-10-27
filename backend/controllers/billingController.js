@@ -339,3 +339,65 @@ exports.getMyBills = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Get all bills for a specific member
+// @route   GET /api/billing/member/:membershipId
+// @access  Private (Manager only)
+exports.getMemberBills = async (req, res, next) => {
+  try {
+    const membership = await Membership.findById(req.params.membershipId);
+    if (!membership) {
+      return res.status(404).json({ success: false, message: 'Membership not found' });
+    }
+
+    // Verify manager owns the mess
+    const mess = await Mess.findOne({ _id: membership.mess, owner: req.user.id });
+    if (!mess) {
+      return res.status(403).json({ success: false, message: 'Not authorized' });
+    }
+
+    const bills = await Bill.find({
+      user: membership.user,
+      mess: membership.mess
+    }).sort({ year: -1, month: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: bills.length,
+      data: bills
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all bills for the manager's mess (filterable)
+// @route   GET /api/billing/all-bills
+// @access  Private (Manager only)
+exports.getAllMessBills = async (req, res, next) => {
+  try {
+    const { status, month, year } = req.query;
+
+    const mess = await Mess.findOne({ owner: req.user.id });
+    if (!mess) {
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
+    }
+
+    const query = { mess: mess._id };
+    if (status) query.status = status;
+    if (month) query.month = parseInt(month);
+    if (year) query.year = parseInt(year);
+
+    const bills = await Bill.find(query)
+      .populate('user', 'name phone')
+      .sort({ year: -1, month: -1, updatedAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: bills.length,
+      data: bills
+    });
+  } catch (error) {
+    next(error);
+  }
+};

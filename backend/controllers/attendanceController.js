@@ -295,3 +295,44 @@ exports.getMyAttendance = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Get a specific member's attendance calendar
+// @route   GET /api/attendance/member/:membershipId
+// @access  Private (Manager only)
+exports.getMemberAttendance = async (req, res, next) => {
+  try {
+    const { membershipId } = req.params;
+    const { month, year } = req.query;
+
+    const membership = await Membership.findById(membershipId);
+    if (!membership) {
+      return res.status(404).json({ success: false, message: 'Membership not found' });
+    }
+
+    // Verify manager owns the mess
+    const mess = await Mess.findOne({ _id: membership.mess, owner: req.user.id });
+    if (!mess) {
+      return res.status(403).json({ success: false, message: 'Not authorized' });
+    }
+
+    // Get date range
+    const targetMonth = month ? parseInt(month) : new Date().getMonth() + 1;
+    const targetYear = year ? parseInt(year) : new Date().getFullYear();
+    const { startOfMonth, endOfMonth } = getStartAndEndOfMonth(targetMonth, targetYear);
+
+    const attendance = await Attendance.find({
+      user: membership.user,
+      mess: membership.mess,
+      date: { $gte: startOfMonth, $lte: endOfMonth },
+      memberType: 'Monthly'
+    }).sort({ date: 1, mealType: 1 });
+
+    res.status(200).json({
+      success: true,
+      count: attendance.length,
+      data: attendance
+    });
+  } catch (error) {
+    next(error);
+  }
+};

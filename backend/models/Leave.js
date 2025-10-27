@@ -5,7 +5,7 @@ const leaveSchema = new mongoose.Schema(
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     mess: { type: mongoose.Schema.Types.ObjectId, ref: 'Mess', required: true },
 
-    // Date range of leave; eligibility for rebate is computed at billing time
+    // Date range of leave
     startDate: { type: Date, required: true },
     endDate: {
       type: Date,
@@ -24,7 +24,7 @@ const leaveSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Indexes for efficient lookups by user/mess and date windows
+// Indexes for efficient lookups
 leaveSchema.index({ user: 1, mess: 1, startDate: 1, endDate: 1 });
 
 module.exports = mongoose.model('Leave', leaveSchema);

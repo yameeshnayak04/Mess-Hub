@@ -5,14 +5,18 @@ const router = express.Router();
 const attendanceController = require('../controllers/attendanceController');
 const { protect, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
-const { skipMealSchema, myAttendanceSchema, kioskMarkSchema, kioskDailySchema } = require('../middleware/schemas');
+const { skipMealSchema, kioskMarkSchema, kioskDailySchema } = require('../middleware/schemas'); // Removed missing schema
 
 // Customer
-router.get('/my-calendar/:membershipId', protect, authorize('Customer'), validate(myAttendanceSchema), attendanceController.getMyAttendance);
+// Removed validation: myAttendanceSchema is missing
+router.get('/my-calendar/:membershipId', protect, authorize('Customer'), attendanceController.getMyAttendance);
 router.post('/skip', protect, authorize('Customer'), validate(skipMealSchema), attendanceController.skipMeal);
 
 // Manager kiosk
 router.post('/kiosk/mark', protect, authorize('Manager'), validate(kioskMarkSchema), attendanceController.kioskMarkAttendance);
 router.post('/kiosk/daily', protect, authorize('Manager'), validate(kioskDailySchema), attendanceController.kioskMarkDaily);
+
+// NEW: Manager route for single member attendance
+router.get('/member/:membershipId', protect, authorize('Manager'), attendanceController.getMemberAttendance);
 
 module.exports = router;

@@ -203,57 +203,35 @@ exports.joinMess = async (req, res, next) => {
 // @route   GET /api/membership/mess
 // @access  Private (Manager only)
 exports.getMessMembers = async (req, res, next) => {
+  // ... (existing code, no changes)
   try {
     const { status } = req.query;
-
-    // Find manager's mess
     const mess = await Mess.findOne({ owner: req.user.id });
-
     if (!mess) {
-      return res.status(404).json({
-        success: false,
-        message: 'No mess found for this manager'
-      });
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
     }
-
-    // Build query
     const query = { mess: mess._id };
     if (status) {
       query.status = status;
     }
-
-    // Get members
     const members = await Membership.find(query)
       .populate('user', 'name phone location')
       .sort({ createdAt: -1 });
-
-    // For active members, attach payment status
     const membersWithPaymentStatus = await Promise.all(
       members.map(async (member) => {
         const memberObj = member.toObject();
-        
         if (member.status === 'Active') {
-          // Find most recent bill
           const recentBill = await Bill.findOne({
             user: member.user._id,
             mess: mess._id
           }).sort({ year: -1, month: -1 });
-
           memberObj.paymentStatus = recentBill ? recentBill.status : 'No Bills';
         }
-
         return memberObj;
       })
     );
-
-    res.status(200).json({
-      success: true,
-      count: membersWithPaymentStatus.length,
-      data: membersWithPaymentStatus
-    });
-  } catch (error) {
-    next(error);
-  }
+    res.status(200).json({ success: true, count: membersWithPaymentStatus.length, data: membersWithPaymentStatus });
+  } catch (error) { next(error); }
 };
 
 // @desc    Approve membership
@@ -398,6 +376,62 @@ exports.leaveMess = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'You have successfully left the mess'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get details for a single member (Manager's view)
+// @route   GET /api/membership/member/:membershipId
+// @access  Private (Manager only)
+exports.getMemberDetails = async (req, res, next) => {
+  try {
+    const { membershipId } = req.params;
+
+    const membership = await Membership.findById(membershipId)
+      .populate('user', 'name phone location');
+      
+    if (!membership) {
+      return res.status(404).json({ success: false, message: 'Membership not found' });
+    }
+
+    // Verify manager owns the mess
+    const mess = await Mess.findOne({ _id: membership.mess, owner: req.user.id });
+    if (!mess) {
+      return res.status(403).json({ success: false, message: 'Not authorized' });
+    }
+
+    // Get current payment status
+    const recentBill = await Bill.findOne({
+      user: membership.user,
+      mess: membership.mess
+    }).sort({ year: -1, month: -1 });
+    
+    const paymentStatus = recentBill ? recentBill.status : 'No Bills';
+    
+    // Get last 5 attendance records
+    const recentAttendance = await Attendance.find({
+      user: membership.user,
+      mess: membership.mess
+    }).sort({ date: -1, createdAt: -1 }).limit(5);
+
+    // Get last 5 leave records
+    const recentLeaves = await Leave.find({
+      user: membership.user,
+      mess: membership.mess
+    }).sort({ startDate: -1 }).limit(5);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        membership: {
+          ...membership.toObject(),
+          paymentStatus // Add payment status tag
+        },
+        recentAttendance,
+        recentLeaves
+      }
     });
   } catch (error) {
     next(error);

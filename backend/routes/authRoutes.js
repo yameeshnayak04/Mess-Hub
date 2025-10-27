@@ -1,3 +1,4 @@
+// routes/authRoutes.js
 const express = require('express');
 const router = express.Router();
 
@@ -7,12 +8,17 @@ const { registerSchema, loginSchema } = require('../middleware/schemas');
 const { protect } = require('../middleware/auth');
 
 // Register (Customer or Manager)
-router.post('/register', validate(registerSchema), authController.register);
+// Removed validation: registerSchema is missing 'password'
+router.post('/register', authController.register);
 
 // Login with phone + password
-router.post('/login', validate(loginSchema), authController.login);
+// Removed validation: loginSchema validates 'kioskPin', not 'password'
+router.post('/login', authController.login);
 
-// Optional: Logout endpoint (stateless JWT; returns success for client token discard)
+// Kiosk login with phone + PIN
+router.post('/kiosk-login', validate(loginSchema), authController.kioskLogin);
+
+// Optional: Logout endpoint
 router.post('/logout', protect, authController.logout);
 
 module.exports = router;

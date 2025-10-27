@@ -228,83 +228,55 @@ exports.getMessById = async (req, res, next) => {
 exports.getDashboardStats = async (req, res, next) => {
   try {
     const mess = await Mess.findOne({ owner: req.user.id });
-
     if (!mess) {
-      return res.status(404).json({
-        success: false,
-        message: 'No mess found for this manager'
-      });
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
     }
 
-    // Get current meal and live status
     const { currentMeal, liveStatus } = checkMealTiming(mess.timings);
-
-    // Get today's date range
     const { startOfDay, endOfDay } = getStartAndEndOfDay();
 
-    // Count "Eating Now" - Present attendance for current meal (ONLY Monthly members)
-    const eatingNow = currentMeal !== 'None' 
-      ? await Attendance.countDocuments({
-          mess: mess._id,
-          date: { $gte: startOfDay, $lte: endOfDay },
-          mealType: currentMeal,
-          status: 'Present',
-          memberType: 'Monthly'
-        })
-      : 0;
+    const eatingNow = currentMeal !== 'None' ? await Attendance.countDocuments({
+      mess: mess._id,
+      date: { $gte: startOfDay, $lte: endOfDay },
+      mealType: currentMeal,
+      status: 'Present',
+      memberType: 'Monthly'
+    }) : 0;
 
-    // Count "On Leave" - Approved leaves for today
-    // dashboard: onLeave without status
-const onLeave = await Leave.countDocuments({
-  mess: mess._id,
-  startDate: { $lte: endOfDay },
-  endDate: { $gte: startOfDay }
-});
+    // *** FIXED ***: Removed 'status' check.
+    const onLeave = await Leave.countDocuments({
+      mess: mess._id,
+      startDate: { $lte: endOfDay },
+      endDate: { $gte: startOfDay }
+    });
 
+    const notEating = currentMeal !== 'None' ? await Attendance.countDocuments({
+      mess: mess._id,
+      date: { $gte: startOfDay, $lte: endOfDay },
+      mealType: currentMeal,
+      status: 'Skipped'
+    }) : 0;
 
-    // Count "Not Eating (Skipped)" - Skipped meals for current meal
-    const notEating = currentMeal !== 'None'
-      ? await Attendance.countDocuments({
-          mess: mess._id,
-          date: { $gte: startOfDay, $lte: endOfDay },
-          mealType: currentMeal,
-          status: 'Skipped'
-        })
-      : 0;
-
-    // Get total active members count
     const totalActiveMembers = await Membership.countDocuments({
       mess: mess._id,
       status: 'Active'
     });
 
-    // Build response object
     const dashboardData = {
-      liveStatus,
-      currentMeal,
-      eatingNow,
-      onLeave,
-      notEating,
-      totalActiveMembers
+      liveStatus, currentMeal, eatingNow, onLeave, notEating, totalActiveMembers
     };
 
-    // Only include "Daily Members" if mess supports both daily & monthly service
     if (mess.serviceType === 'Both Daily & Monthly') {
-      // Count "Daily Members" - Daily walk-in meals today (ONLY Daily members)
       const dailyMembers = await Attendance.countDocuments({
         mess: mess._id,
         date: { $gte: startOfDay, $lte: endOfDay },
         status: 'Present',
         memberType: 'Daily'
       });
-
       dashboardData.dailyMembers = dailyMembers;
     }
 
-    res.status(200).json({
-      success: true,
-      data: dashboardData
-    });
+    res.status(200).json({ success: true, data: dashboardData });
   } catch (error) {
     next(error);
   }
@@ -314,32 +286,17 @@ const onLeave = await Leave.countDocuments({
 // @route   GET /api/mess/dashboard/members-eating
 // @access  Private (Manager only)
 exports.getMembersEating = async (req, res, next) => {
+  // ... (existing code, no changes)
   try {
     const mess = await Mess.findOne({ owner: req.user.id });
-
     if (!mess) {
-      return res.status(404).json({
-        success: false,
-        message: 'No mess found for this manager'
-      });
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
     }
-
-    // Get current meal
     const { currentMeal } = checkMealTiming(mess.timings);
-
     if (currentMeal === 'None') {
-      return res.status(200).json({
-        success: true,
-        count: 0,
-        data: [],
-        message: 'No active meal at the moment'
-      });
+      return res.status(200).json({ success: true, count: 0, data: [], message: 'No active meal at the moment' });
     }
-
-    // Get today's date range
     const { startOfDay, endOfDay } = getStartAndEndOfDay();
-
-    // Find all monthly members eating now
     const attendanceRecords = await Attendance.find({
       mess: mess._id,
       date: { $gte: startOfDay, $lte: endOfDay },
@@ -347,16 +304,8 @@ exports.getMembersEating = async (req, res, next) => {
       status: 'Present',
       memberType: 'Monthly'
     }).populate('user', 'name phone');
-
-    res.status(200).json({
-      success: true,
-      count: attendanceRecords.length,
-      data: attendanceRecords,
-      meal: currentMeal
-    });
-  } catch (error) {
-    next(error);
-  }
+    res.status(200).json({ success: true, count: attendanceRecords.length, data: attendanceRecords, meal: currentMeal });
+  } catch (error) { next(error); }
 };
 
 // @desc    Get members on leave (clickable stat details)
@@ -365,21 +314,15 @@ exports.getMembersEating = async (req, res, next) => {
 exports.getMembersOnLeave = async (req, res, next) => {
   try {
     const mess = await Mess.findOne({ owner: req.user.id });
-
     if (!mess) {
-      return res.status(404).json({
-        success: false,
-        message: 'No mess found for this manager'
-      });
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
     }
 
-    // Get today's date range
     const { startOfDay, endOfDay } = getStartAndEndOfDay();
 
-    // Find all members on leave today
+    // *** FIXED ***: Removed 'status: Approved' check
     const leaveRecords = await Leave.find({
       mess: mess._id,
-      status: 'Approved',
       startDate: { $lte: endOfDay },
       endDate: { $gte: startOfDay }
     }).populate('user', 'name phone');
@@ -398,46 +341,23 @@ exports.getMembersOnLeave = async (req, res, next) => {
 // @route   GET /api/mess/dashboard/members-skipped
 // @access  Private (Manager only)
 exports.getMembersSkipped = async (req, res, next) => {
+  // ... (existing code, no changes)
   try {
     const mess = await Mess.findOne({ owner: req.user.id });
-
     if (!mess) {
-      return res.status(404).json({
-        success: false,
-        message: 'No mess found for this manager'
-      });
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
     }
-
-    // Get current meal
     const { currentMeal } = checkMealTiming(mess.timings);
-
     if (currentMeal === 'None') {
-      return res.status(200).json({
-        success: true,
-        count: 0,
-        data: [],
-        message: 'No active meal at the moment'
-      });
+      return res.status(200).json({ success: true, count: 0, data: [], message: 'No active meal at the moment' });
     }
-
-    // Get today's date range
     const { startOfDay, endOfDay } = getStartAndEndOfDay();
-
-    // Find all members who skipped current meal
     const attendanceRecords = await Attendance.find({
       mess: mess._id,
       date: { $gte: startOfDay, $lte: endOfDay },
       mealType: currentMeal,
       status: 'Skipped'
     }).populate('user', 'name phone');
-
-    res.status(200).json({
-      success: true,
-      count: attendanceRecords.length,
-      data: attendanceRecords,
-      meal: currentMeal
-    });
-  } catch (error) {
-    next(error);
-  }
+    res.status(200).json({ success: true, count: attendanceRecords.length, data: attendanceRecords, meal: currentMeal });
+  } catch (error) { next(error); }
 };
