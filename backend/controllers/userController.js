@@ -5,7 +5,7 @@ const User = require('../models/User');
 // @access  Private
 exports.getMyProfile = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id).select('-kioskPin');
+    const user = await User.findById(req.user.id).select('-pin');
 
     res.status(200).json({
       success: true,
@@ -21,11 +21,11 @@ exports.getMyProfile = async (req, res, next) => {
 // @access  Private
 exports.updateMyProfile = async (req, res, next) => {
   try {
-    const { name, kioskPin } = req.body;
+    const { name, pin } = req.body;
 
     const updateFields = {};
     if (name) updateFields.name = name;
-    if (kioskPin) updateFields.kioskPin = kioskPin;
+    if (pin) updateFields.pin = pin;
 
     const user = await User.findById(req.user.id);
 
@@ -38,12 +38,12 @@ exports.updateMyProfile = async (req, res, next) => {
 
     // Update fields
     if (name) user.name = name;
-    if (kioskPin) user.kioskPin = kioskPin;
+    if (pin) user.pin = pin;
 
     await user.save();
 
-    // Return user without kioskPin
-    const userResponse = await User.findById(user._id).select('-kioskPin');
+    // Return user without pin
+    const userResponse = await User.findById(user._id).select('-pin');
 
     res.status(200).json({
       success: true,

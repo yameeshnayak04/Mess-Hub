@@ -1,22 +1,11 @@
 const express = require('express');
-const {
-  applyForLeave,
-  getLeaveRequests,
-  approveLeave,
-  rejectLeave
-} = require('../controllers/leaveController');
+const router = express.Router();
+const leaveController = require('../controllers/leaveController');
 const { protect, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
-const { leaveSchema } = require('../middleware/schemas');
+const { applyLeaveSchema, getMyLeavesSchema } = require('../middleware/schemas');
 
-const router = express.Router();
-
-router.post('/apply/:membershipId', protect, authorize('Customer'), validate(leaveSchema), applyForLeave);
-
-router.get('/requests/my-mess', protect, authorize('Manager'), getLeaveRequests);
-
-router.put('/approve/:leaveId', protect, authorize('Manager'), approveLeave);
-
-router.put('/reject/:leaveId', protect, authorize('Manager'), rejectLeave);
+router.post('/apply/:membershipId', protect, authorize('Customer'), validate(applyLeaveSchema), leaveController.applyForLeave);
+router.get('/my/:membershipId', protect, authorize('Customer'), validate(getMyLeavesSchema), leaveController.getMyLeaves);
 
 module.exports = router;

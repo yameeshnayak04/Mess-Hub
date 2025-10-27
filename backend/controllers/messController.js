@@ -174,6 +174,20 @@ exports.discoverMesses = async (req, res, next) => {
   }
 };
 
+// new: GET /api/mess/dashboard/members-skipped
+exports.getMembersSkipped = async (req,res,next) => {
+  const mess = await Mess.findOne({ owner: req.user.id });
+  if (!mess) return res.status(404).json({ success:false, message:'No mess found for this manager' });
+  const { currentMeal } = checkMealTiming(mess.timings);
+  if (currentMeal === 'None') return res.status(200).json({ success:true, count:0, data:[] });
+  const { startOfDay, endOfDay } = getStartAndEndOfDay();
+  const skipped = await Attendance.find({
+    mess: mess._id, date: { $gte: startOfDay, $lte: endOfDay }, mealType: currentMeal, status: 'Skipped'
+  }).populate('user','name phone');
+  return res.status(200).json({ success:true, count: skipped.length, data: skipped, meal: currentMeal });
+};
+
+
 // @desc    Get mess by ID
 // @route   GET /api/mess/:messId
 // @access  Private
@@ -240,12 +254,13 @@ exports.getDashboardStats = async (req, res, next) => {
       : 0;
 
     // Count "On Leave" - Approved leaves for today
-    const onLeave = await Leave.countDocuments({
-      mess: mess._id,
-      status: 'Approved',
-      startDate: { $lte: endOfDay },
-      endDate: { $gte: startOfDay }
-    });
+    // dashboard: onLeave without status
+const onLeave = await Leave.countDocuments({
+  mess: mess._id,
+  startDate: { $lte: endOfDay },
+  endDate: { $gte: startOfDay }
+});
+
 
     // Count "Not Eating (Skipped)" - Skipped meals for current meal
     const notEating = currentMeal !== 'None'

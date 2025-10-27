@@ -5,95 +5,115 @@ const Leave = require('../models/Leave');
 const Attendance = require('../models/Attendance');
 const { calculateDaysDifference, getStartAndEndOfMonth } = require('../utils/billCalculation');
 
+
+// List all customer payment submissions awaiting approval for this manager
+exports.getPendingApprovals = async (req, res, next) => {
+  try {
+    const mess = await Mess.findOne({ owner: req.user.id });
+    if (!mess) {
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
+    }
+    const pending = await Bill.find({ mess: mess._id, status: 'Pending Approval' })
+      .sort({ updatedAt: -1 })
+      .populate('user', 'name phone');
+    return res.status(200).json({ success: true, count: pending.length, data: pending });
+  } catch (err) { next(err); }
+};
+
+// Show a single payment (bill) details including proof, scoped to this manager’s mess
+exports.getPaymentDetails = async (req, res, next) => {
+  try {
+    const mess = await Mess.findOne({ owner: req.user.id });
+    if (!mess) {
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
+    }
+    const bill = await Bill.findOne({ _id: req.params.billId, mess: mess._id })
+      .populate('user', 'name phone');
+    if (!bill) {
+      return res.status(404).json({ success: false, message: 'Bill not found' });
+    }
+    return res.status(200).json({ success: true, data: bill });
+  } catch (err) { next(err); }
+};
+
+
 // @desc    Generate monthly bills
 // @route   POST /api/billing/generate-bills
 // @access  Private (Manager only)
+// billingController.js
+
 exports.generateMonthlyBills = async (req, res, next) => {
   try {
     const { month, year } = req.body;
 
-    // Find manager's mess
+    // Manager's mess
     const mess = await Mess.findOne({ owner: req.user.id });
-
     if (!mess) {
-      return res.status(404).json({
-        success: false,
-        message: 'No mess found for this manager'
-      });
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
     }
 
-    // Use current month if not specified
+    // Determine billing window
     const billingMonth = month || new Date().getMonth() + 1;
     const billingYear = year || new Date().getFullYear();
-
-    // Get all active members
-    const activeMembers = await Membership.find({
-      mess: mess._id,
-      status: 'Active'
-    });
-
-    if (activeMembers.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No active members to generate bills for'
-      });
-    }
-
     const { startOfMonth, endOfMonth } = getStartAndEndOfMonth(billingMonth, billingYear);
 
+    // Active monthly members
+    const activeMembers = await Membership.find({ mess: mess._id, status: 'Active' });
+    if (activeMembers.length === 0) {
+      return res.status(400).json({ success: false, message: 'No active members to generate bills for' });
+    }
+
     const generatedBills = [];
-
     for (const member of activeMembers) {
-      // Check if bill already exists
-      const existingBill = await Bill.findOne({
-        user: member.user,
-        mess: mess._id,
-        month: billingMonth,
-        year: billingYear
+      // Avoid duplicate bill for this user/mess/month/year
+      const exists = await Bill.exists({
+        user: member.user, mess: mess._id, month: billingMonth, year: billingYear
       });
+      if (exists) continue;
 
-      if (existingBill) {
-        continue; // Skip if bill already generated
-      }
+      // Base = membership billingRate snapshot
+      const baseAmount = Number(member.billingRate || 0);
 
-      // Get base amount from current billing rate
-      const baseAmount = member.billingRate;
-
-      // Find eligible leaves
-      const eligibleLeaves = await Leave.find({
-        user: member.user,
-        mess: mess._id,
-        status: 'Approved',
-        isRebateEligible: true,
-        startDate: { $gte: startOfMonth },
-        endDate: { $lte: endOfMonth }
-      });
-
-      // Calculate leave days
-      let totalLeaveDays = 0;
-      eligibleLeaves.forEach(leave => {
-        totalLeaveDays += calculateDaysDifference(leave.startDate, leave.endDate);
-      });
-
-      // Find skipped meals
+      // Skipped meals in the month (Monthly members only)
       const skippedMeals = await Attendance.countDocuments({
         user: member.user,
         mess: mess._id,
-        status: 'Skipped',
-        date: { $gte: startOfMonth, $lte: endOfMonth }
+        memberType: 'Monthly',
+        date: { $gte: startOfMonth, $lte: endOfMonth },
+        status: 'Skipped'
       });
 
-      // Calculate rebate
-      const leaveRebate = totalLeaveDays * mess.rules.rebatePerThali;
-      const skipRebate = skippedMeals * mess.rules.rebatePerThali * (mess.rules.skipAllowancePercent / 100);
+      // Leaves overlapping the month window (no status field)
+      const leaves = await Leave.find({
+        user: member.user,
+        mess: mess._id,
+        startDate: { $lte: endOfMonth },
+        endDate: { $gte: startOfMonth }
+      });
+
+      // Sum eligible leave days by range; enforce minLeaveDaysForRebate per range
+      let leaveRebateDays = 0;
+      for (const lv of leaves) {
+        const s = lv.startDate < startOfMonth ? startOfMonth : lv.startDate;
+        const e = lv.endDate > endOfMonth ? endOfMonth : lv.endDate;
+        const days = calculateDaysDifference(s, e);
+        if (days >= (mess.rules?.minLeaveDaysForRebate || 0)) {
+          leaveRebateDays += days;
+        }
+      }
+
+      // Rebates
+      const rebatePerThali = Number(mess.rules?.rebatePerThali || 0);
+      const skipAllowancePercent = Number(mess.rules?.skipAllowancePercent || 0);
+      const leaveRebate = leaveRebateDays * rebatePerThali;
+      const skipRebate = skippedMeals * rebatePerThali * (skipAllowancePercent / 100);
       const rebateAmount = leaveRebate + skipRebate;
 
-      // Calculate total
-      let totalAmount = baseAmount - rebateAmount;
-      
-      // Apply minimum charge if exists
-      if (mess.rules.minMonthlyCharge && totalAmount < mess.rules.minMonthlyCharge) {
-        totalAmount = mess.rules.minMonthlyCharge;
+      // Total with minMonthlyCharge
+      const minMonthlyCharge = Number(mess.rules?.minMonthlyCharge || 0);
+      let totalAmount = Math.max(0, baseAmount - rebateAmount);
+      if (minMonthlyCharge && totalAmount < minMonthlyCharge) {
+        totalAmount = minMonthlyCharge;
       }
 
       // Create bill
@@ -107,18 +127,17 @@ exports.generateMonthlyBills = async (req, res, next) => {
         totalAmount,
         status: 'Due'
       });
-
       generatedBills.push(bill);
 
-      // Update billing rate for next month from current mess plans
-      const currentPlan = mess.plans.find(plan => plan.name === member.planName);
-      if (currentPlan) {
+      // Update membership rate from current Mess plan for next cycle (by planName)
+      const currentPlan = mess.plans?.find(p => p.name?.toLowerCase() === member.planName?.toLowerCase());
+      if (currentPlan && typeof currentPlan.rate === 'number') {
         member.billingRate = currentPlan.rate;
         await member.save();
       }
     }
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       count: generatedBills.length,
       data: generatedBills,
@@ -128,6 +147,7 @@ exports.generateMonthlyBills = async (req, res, next) => {
     next(error);
   }
 };
+
 
 // @desc    Submit payment proof
 // @route   POST /api/billing/submit-proof/:billId

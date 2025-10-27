@@ -6,96 +6,34 @@ const { calculateDaysDifference } = require('../utils/billCalculation');
 // @desc    Apply for leave
 // @route   POST /api/leave/apply/:membershipId
 // @access  Private (Customer only)
-exports.applyForLeave = async (req, res, next) => {
-  try {
-    const { membershipId } = req.params;
-    const { startDate, endDate } = req.body;
-
-    // Find membership
-    const membership = await Membership.findById(membershipId);
-
-    if (!membership) {
-      return res.status(404).json({
-        success: false,
-        message: 'Membership not found'
-      });
-    }
-
-    // Verify membership belongs to user and is active
-    if (membership.user.toString() !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized'
-      });
-    }
-
-    if (membership.status !== 'Active') {
-      return res.status(400).json({
-        success: false,
-        message: 'Membership is not active'
-      });
-    }
-
-    // Validate dates
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-
-    if (start < tomorrow) {
-      return res.status(400).json({
-        success: false,
-        message: 'Start date must be at least tomorrow'
-      });
-    }
-
-    // Check if both dates are in same month
-    if (start.getMonth() !== end.getMonth() || start.getFullYear() !== end.getFullYear()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Start and end date must be in the same month'
-      });
-    }
-
-    // Check for overlapping leaves
-    const overlappingLeave = await Leave.findOne({
-      user: req.user.id,
-      mess: membership.mess,
-      status: { $in: ['Pending', 'Approved'] },
-      $or: [
-        { startDate: { $lte: end }, endDate: { $gte: start } }
-      ]
-    });
-
-    if (overlappingLeave) {
-      return res.status(400).json({
-        success: false,
-        message: 'You already have a leave request for overlapping dates'
-      });
-    }
-
-    // Create leave request
-    const leave = await Leave.create({
-      user: req.user.id,
-      mess: membership.mess,
-      startDate: start,
-      endDate: end,
-      status: 'Pending'
-    });
-
-    const populatedLeave = await Leave.findById(leave._id)
-      .populate('mess', 'messName');
-
-    res.status(201).json({
-      success: true,
-      data: populatedLeave,
-      message: 'Leave application submitted successfully'
-    });
-  } catch (error) {
-    next(error);
-  }
+// POST /api/leave/apply/:membershipId
+exports.applyForLeave = async (req,res,next) => {
+  const { membershipId } = req.params; const { startDate, endDate } = req.body;
+  const m = await Membership.findById(membershipId);
+  if (!m) return res.status(404).json({ success:false, message:'Membership not found' });
+  if (m.user.toString() !== req.user.id) return res.status(403).json({ success:false, message:'Not authorized' });
+  if (m.status !== 'Active') return res.status(400).json({ success:false, message:'Membership is not active' });
+  const start = new Date(startDate), end = new Date(endDate);
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1); tomorrow.setHours(0,0,0,0);
+  if (start < tomorrow) return res.status(400).json({ success:false, message:'Start date must be at least tomorrow' });
+  if (start.getMonth()!==end.getMonth() || start.getFullYear()!==end.getFullYear())
+    return res.status(400).json({ success:false, message:'Start and end date must be in the same month' });
+  const overlap = await Leave.findOne({ user:req.user.id, mess:m.mess, $or: [{ startDate:{ $lte:end }, endDate:{ $gte:start } }] });
+  if (overlap) return res.status(400).json({ success:false, message:'Overlapping leave exists' });
+  const leave = await Leave.create({ user:req.user.id, mess:m.mess, startDate:start, endDate:end });
+  const populated = await Leave.findById(leave._id).populate('mess','messName');
+  return res.status(201).json({ success:true, data: populated, message:'Leave added; rebate depends on rules at billing' });
 };
+
+// GET /api/leave/my/:membershipId
+exports.getMyLeaves = async (req,res,next) => {
+  const m = await Membership.findById(req.params.membershipId);
+  if (!m) return res.status(404).json({ success:false, message:'Membership not found' });
+  if (m.user.toString() !== req.user.id) return res.status(403).json({ success:false, message:'Not authorized' });
+  const leaves = await Leave.find({ user:req.user.id, mess:m.mess }).sort({ startDate:-1 });
+  return res.status(200).json({ success:true, count: leaves.length, data: leaves });
+};
+
 
 // @desc    Get leave requests for manager's mess
 // @route   GET /api/leave/requests/my-mess
@@ -130,87 +68,3 @@ exports.getLeaveRequests = async (req, res, next) => {
   }
 };
 
-// @desc    Approve leave
-// @route   PUT /api/leave/approve/:leaveId
-// @access  Private (Manager only)
-exports.approveLeave = async (req, res, next) => {
-  try {
-    const leave = await Leave.findById(req.params.leaveId);
-
-    if (!leave) {
-      return res.status(404).json({
-        success: false,
-        message: 'Leave request not found'
-      });
-    }
-
-    // Verify manager owns the mess
-    const mess = await Mess.findOne({ _id: leave.mess, owner: req.user.id });
-
-    if (!mess) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to approve this leave'
-      });
-    }
-
-    // Calculate duration
-    const duration = calculateDaysDifference(leave.startDate, leave.endDate);
-
-    // Check if eligible for rebate
-    const isEligible = duration >= mess.rules.minLeaveDaysForRebate;
-
-    leave.status = 'Approved';
-    leave.isRebateEligible = isEligible;
-    await leave.save();
-
-    const populatedLeave = await Leave.findById(leave._id)
-      .populate('user', 'name phone');
-
-    res.status(200).json({
-      success: true,
-      data: populatedLeave,
-      message: isEligible 
-        ? 'Leave approved. Rebate will be applied in billing.' 
-        : 'Leave approved. Duration is less than minimum required for rebate.'
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Reject leave
-// @route   PUT /api/leave/reject/:leaveId
-// @access  Private (Manager only)
-exports.rejectLeave = async (req, res, next) => {
-  try {
-    const leave = await Leave.findById(req.params.leaveId);
-
-    if (!leave) {
-      return res.status(404).json({
-        success: false,
-        message: 'Leave request not found'
-      });
-    }
-
-    // Verify manager owns the mess
-    const mess = await Mess.findOne({ _id: leave.mess, owner: req.user.id });
-
-    if (!mess) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to reject this leave'
-      });
-    }
-
-    leave.status = 'Rejected';
-    await leave.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Leave request rejected'
-    });
-  } catch (error) {
-    next(error);
-  }
-};

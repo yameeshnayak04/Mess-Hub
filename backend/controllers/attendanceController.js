@@ -89,124 +89,90 @@ exports.skipMeal = async (req, res, next) => {
 // @desc    Mark attendance via kiosk (for monthly members)
 // @route   POST /api/attendance/kiosk/mark
 // @access  Private (Manager only)
+// attendanceController.js
+
 exports.kioskMarkAttendance = async (req, res, next) => {
   try {
     const { userId, kioskPin, mealType } = req.body;
 
-    // Find manager's mess
+    // Manager's mess (kiosk runs under manager auth)
     const mess = await Mess.findOne({ owner: req.user.id });
-
     if (!mess) {
-      return res.status(404).json({
-        success: false,
-        message: 'No mess found for this manager'
-      });
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
     }
 
-    // 1. Find User and validate kioskPin
-    const user = await User.findById(userId);
-
+    // 1) User + PIN validation
+    const user = await User.findById(userId).select('+pin');
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    if (!user.pin || String(user.pin) !== String(kioskPin)) {
+      return res.status(401).json({ success: false, message: 'Invalid Kiosk PIN' });
     }
 
-    const isPinValid = await user.compareKioskPin(kioskPin);
-
-    if (!isPinValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid Kiosk PIN'
-      });
-    }
-
-    // 2. Check Mess timings
-    const timingCheck = checkMealTiming(mess.timings, mealType);
-
-    if (!timingCheck.isWithin) {
+    // 2) Meal timing window
+    const timingCheck = checkMealTiming(mess.timings, mealType || null);
+    const resolvedMeal = mealType || timingCheck.currentMeal;
+    if (!resolvedMeal || !timingCheck.isWithin) {
       return res.status(403).json({
         success: false,
-        message: `${mealType} time has passed. Cannot mark attendance.`
+        message: `${mealType || 'Current'} time has passed. Cannot mark attendance.`
       });
     }
 
-    // 3. Check Membership - must be Active and planName should match meal type
+    // 3) Active membership in this mess
     const membership = await Membership.findOne({
       user: userId,
       mess: mess._id,
       status: 'Active'
     });
-
     if (!membership) {
-      return res.status(403).json({
-        success: false,
-        message: 'No active membership found for this user'
-      });
+      return res.status(403).json({ success: false, message: 'No active membership found for this user' });
     }
 
-    // Validate plan allows this meal type
-    const planName = membership.planName.toLowerCase();
-    if (mealType === 'Lunch' && !planName.includes('lunch')) {
-      return res.status(403).json({
-        success: false,
-        message: 'Your plan does not include lunch'
-      });
+    // Plan eligibility check via planName
+    const planName = String(membership.planName || '').toLowerCase();
+    if (resolvedMeal === 'Lunch' && !planName.includes('lunch')) {
+      return res.status(403).json({ success: false, message: 'Your plan does not include lunch' });
     }
-    if (mealType === 'Dinner' && !planName.includes('dinner')) {
-      return res.status(403).json({
-        success: false,
-        message: 'Your plan does not include dinner'
-      });
+    if (resolvedMeal === 'Dinner' && !planName.includes('dinner')) {
+      return res.status(403).json({ success: false, message: 'Your plan does not include dinner' });
     }
 
-    // 4. Check Leave - if user is on approved leave
+    // 4) Leave check (date-range only; no status)
     const { startOfDay, endOfDay } = getStartAndEndOfDay();
-
     const activeLeave = await Leave.findOne({
       user: userId,
       mess: mess._id,
-      status: 'Approved',
       startDate: { $lte: endOfDay },
       endDate: { $gte: startOfDay }
     });
-
     if (activeLeave) {
-      return res.status(403).json({
-        success: false,
-        message: 'User is on approved leave'
-      });
+      return res.status(403).json({ success: false, message: 'User is on leave' });
     }
 
-    // 5. Check if attendance already exists
+    // 5) Existing attendance check
     const existingAttendance = await Attendance.findOne({
       user: userId,
       mess: mess._id,
       date: { $gte: startOfDay, $lte: endOfDay },
-      mealType
+      mealType: resolvedMeal
     });
-
     if (existingAttendance) {
       if (existingAttendance.status === 'Present') {
-        return res.status(400).json({
-          success: false,
-          message: 'Attendance already marked as Present'
-        });
-      } else if (existingAttendance.status === 'Skipped') {
-        return res.status(400).json({
-          success: false,
-          message: 'User has already skipped this meal'
-        });
+        return res.status(400).json({ success: false, message: 'Attendance already marked as Present' });
+      }
+      if (existingAttendance.status === 'Skipped') {
+        return res.status(400).json({ success: false, message: 'User has already skipped this meal' });
       }
     }
 
-    // 6. Create Present attendance for MONTHLY member
+    // 6) Create Present attendance (Monthly)
     const attendance = await Attendance.create({
       user: userId,
       mess: mess._id,
       date: new Date(),
-      mealType,
+      mealType: resolvedMeal,
       status: 'Present',
       memberType: 'Monthly'
     });
@@ -214,7 +180,7 @@ exports.kioskMarkAttendance = async (req, res, next) => {
     const populatedAttendance = await Attendance.findById(attendance._id)
       .populate('user', 'name phone');
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       data: populatedAttendance,
       message: 'Attendance marked successfully'
@@ -223,6 +189,7 @@ exports.kioskMarkAttendance = async (req, res, next) => {
     next(error);
   }
 };
+
 
 // @desc    Mark daily/walk-in meal
 // @route   POST /api/attendance/kiosk/daily

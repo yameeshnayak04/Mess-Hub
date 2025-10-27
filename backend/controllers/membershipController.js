@@ -1,6 +1,139 @@
 const Membership = require('../models/Membership');
 const Mess = require('../models/Mess');
 const Bill = require('../models/Bill');
+const Attendance = require('../models/Attendance'); // for summaries
+const Menu = require('../models/Menu');             // today’s menu
+const { getStartAndEndOfMonth } = require('../utils/billCalculation'); // month window
+
+// @desc   Get membership details for customer dashboard
+// @route  GET /api/membership/details/:membershipId
+// @access Private (Customer only)
+exports.getMembershipDetails = async (req, res, next) => {
+  try {
+    const { membershipId } = req.params;
+
+    // Load membership with mess and user
+    const membership = await Membership.findById(membershipId)
+      .populate('mess', 'messName messImage address city contactPhone serviceType cuisine timings')
+      .populate('user', 'name phone');
+
+    if (!membership) {
+      return res.status(404).json({ success: false, message: 'Membership not found' });
+    }
+
+    // Ownership check
+    if (membership.user._id.toString() !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Not authorized' });
+    }
+
+    // Month-to-date attendance summary
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+    const { startOfMonth, endOfMonth } = getStartAndEndOfMonth(month, year);
+
+    const [present, skipped, onLeave, absent] = await Promise.all([
+      Attendance.countDocuments({
+        user: membership.user._id,
+        mess: membership.mess._id,
+        date: { $gte: startOfMonth, $lte: endOfMonth },
+        status: 'Present',
+      }),
+      Attendance.countDocuments({
+        user: membership.user._id,
+        mess: membership.mess._id,
+        date: { $gte: startOfMonth, $lte: endOfMonth },
+        status: 'Skipped',
+      }),
+      Attendance.countDocuments({
+        user: membership.user._id,
+        mess: membership.mess._id,
+        date: { $gte: startOfMonth, $lte: endOfMonth },
+        status: 'Leave',
+      }),
+      Attendance.countDocuments({
+        user: membership.user._id,
+        mess: membership.mess._id,
+        date: { $gte: startOfMonth, $lte: endOfMonth },
+        status: 'Absent',
+      }),
+    ]);
+
+    // Recent bills
+    const recentBills = await Bill.find({
+      user: membership.user._id,
+      mess: membership.mess._id,
+    })
+      .sort({ year: -1, month: -1, createdAt: -1 })
+      .limit(6);
+
+    // Today’s menu snapshot
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todaysMenu = await Menu.findOne({
+      mess: membership.mess._id,
+      date: today,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        membership,
+        attendanceSummary: { present, skipped, leave: onLeave, absent },
+        recentBills,
+        todaysMenu,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc   Manager verifies member can leave (no dues), then sets Inactive
+// @route  PUT /api/membership/verify-leave/:membershipId
+// @access Private (Manager only)
+exports.verifyLeaveMembership = async (req, res, next) => {
+  try {
+    const { membershipId } = req.params;
+
+    const membership = await Membership.findById(membershipId);
+    if (!membership) {
+      return res.status(404).json({ success: false, message: 'Membership not found' });
+    }
+
+    // Ensure the manager owns this mess
+    const mess = await Mess.findOne({ _id: membership.mess, owner: req.user.id });
+    if (!mess) {
+      return res.status(403).json({ success: false, message: 'Not authorized to verify this membership' });
+    }
+
+    // Block if any outstanding bills exist
+    const outstanding = await Bill.exists({
+      user: membership.user,
+      mess: membership.mess,
+      status: { $in: ['Due', 'Pending Approval'] },
+    });
+    if (outstanding) {
+      return res.status(400).json({ success: false, message: 'Outstanding dues found; cannot deactivate membership' });
+    }
+
+    membership.status = 'Inactive';
+    await membership.save();
+
+    const populated = await Membership.findById(membership._id)
+      .populate('user', 'name phone')
+      .populate('mess', 'messName');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Membership set to Inactive',
+      data: populated,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 // @desc    Join a mess
 // @route   POST /api/membership/join/:messId
