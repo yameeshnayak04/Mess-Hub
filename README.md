@@ -49,16 +49,36 @@ Built using a **Clean Architecture** approach to separate business logic from UI
 
 ### ⚙️ Backend (Node.js)
 
-A robust and scalable **REST API** built to handle multiple tenants (messes) securely.
+# Mess Management System - Backend
 
-| **Layer**              | **Technology**   | **Why?** |
-|------------------------|------------------|-----------|
-| **Framework**          | Express.js       | Fast, unopinionated, and minimalist — perfect for building powerful REST APIs. |
-| **Database**           | MongoDB (Atlas)  | Flexible NoSQL database that handles diverse data structures easily and scales with Atlas. |
-| **ODM**                | Mongoose         | Elegant object data modeling for MongoDB with schema validation and middleware hooks. |
-| **Authentication**     | JWT & OTP        | Secure, password-less authentication flow using phone numbers and JSON Web Tokens. |
+A complete backend solution for managing mess operations with dual roles (Customers and Managers).
 
----
+## Features
+
+- **Dual Role System**: Customer and Manager roles with distinct permissions
+- **Geospatial Discovery**: Find nearby messes using MongoDB geospatial queries
+- **Membership Management**: Join, approve, and manage mess memberships
+- **Attendance Tracking**: Kiosk-based attendance with meal tracking
+- **Leave Management**: Apply for leaves with rebate eligibility
+- **Billing System**: Automated monthly bill generation with rebate calculations
+- **Menu Management**: Daily menu planning for lunch and dinner
+- **Review System**: Rate and review messes
+- **Payment Proof**: Upload and verify payment screenshots
+
+## Tech Stack
+
+- Node.js
+- Express.js
+- MongoDB with Mongoose
+- JWT Authentication
+- Bcrypt for password hashing
+- Multer for file uploads
+- Joi for validation
+
+## Installation
+
+1. Clone the repository
+2. Install dependencies:
 
 ## 🚀 Getting Started
 

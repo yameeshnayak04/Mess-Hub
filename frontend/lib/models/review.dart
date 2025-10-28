@@ -1,8 +1,9 @@
+// lib/models/review.dart
 class Review {
   final String id;
-  final dynamic user; // Can be String or Map
+  final dynamic user; // String or populated { _id, name }
   final String mess;
-  final int rating;
+  final int rating; // 1..5
   final String? comment;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -24,31 +25,23 @@ class Review {
       mess: json['mess'] as String,
       rating: json['rating'] as int,
       comment: json['comment'] as String?,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : null,
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
-          : null,
+      createdAt:
+          json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
+      updatedAt:
+          json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      '_id': id,
-      'user': user,
-      'mess': mess,
-      'rating': rating,
-      if (comment != null) 'comment': comment,
-      if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
-      if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
-    };
-  }
+  Map<String, dynamic> toJson() => {
+        '_id': id,
+        'user': user,
+        'mess': mess,
+        'rating': rating,
+        if (comment != null) 'comment': comment,
+        if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
+        if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
+      };
 
-  String? get userName {
-    if (user is Map<String, dynamic>) {
-      return user['name'] as String?;
-    }
-    return null;
-  }
+  String? get userName =>
+      user is Map<String, dynamic> ? user['name'] as String? : null;
 }

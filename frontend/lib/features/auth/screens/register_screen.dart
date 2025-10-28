@@ -19,22 +19,29 @@ class RegisterScreen extends ConsumerStatefulWidget {
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _pinController = TextEditingController();
+
   String _selectedRole = 'Customer';
   Location? _location;
-  bool _isLoading = false;
-  bool _isGettingLocation = false;
+  bool _isLoadingLocation = false;
+  bool _isRegistering = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _pinController.dispose();
     super.dispose();
   }
 
   Future<void> _getLocation() async {
-    setState(() => _isGettingLocation = true);
+    setState(() => _isLoadingLocation = true);
 
     try {
       final locationService = ref.read(locationServiceProvider);
@@ -47,32 +54,41 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             coordinates: [position.longitude, position.latitude],
           );
         });
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Location obtained successfully')),
+            const SnackBar(
+              content: Text('Location captured successfully'),
+              backgroundColor: AppTheme.successGreen,
+            ),
           );
         }
       } else {
+        // Handle case where position is null (e.g., permission denied)
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to get location')),
+            const SnackBar(
+              content:
+                  Text('Could not get location. Please enable permissions.'),
+            ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
+          SnackBar(content: Text('Failed to get location: $e')),
         );
       }
     } finally {
       if (mounted) {
-        setState(() => _isGettingLocation = false);
+        setState(() => _isLoadingLocation = false);
       }
     }
   }
 
   Future<void> _handleRegister() async {
+    // Validation
     if (_nameController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter your name')),
@@ -88,40 +104,66 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       return;
     }
 
-    if (_pinController.text.length != 4) {
+    // *** FIXED: Changed from 6 to 8 ***
+    if (_passwordController.text.length < 8) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a 4-digit Kiosk PIN')),
+        const SnackBar(content: Text('Password must be at least 8 characters')),
       );
       return;
     }
 
-    if (_selectedRole == 'Customer' && _location == null) {
+    if (_passwordController.text != _confirmPasswordController.text) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please get your location for registration')),
+        const SnackBar(content: Text('Passwords do not match')),
       );
       return;
     }
 
-    setState(() => _isLoading = true);
+    // Customers need PIN and location
+    if (_selectedRole == 'Customer') {
+      if (_pinController.text.length != 4) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Please set a 4-digit PIN for kiosk attendance')),
+        );
+        return;
+      }
+
+      if (_location == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content:
+                  Text('Please capture your location to find nearby messes')),
+        );
+        return;
+      }
+    }
+
+    setState(() => _isRegistering = true);
+    ref.read(authProvider.notifier).clearError();
 
     try {
       await ref.read(authProvider.notifier).register(
             name: _nameController.text,
             phone: _phoneController.text,
-            kioskPin: _pinController.text,
+            password: _passwordController.text,
             role: _selectedRole,
-            location: _location,
+            pin: _selectedRole == 'Customer' ? _pinController.text : null,
+            location: _selectedRole == 'Customer' ? _location : null,
           );
+      // Navigation will be handled by router redirect
     } catch (e) {
       if (mounted) {
+        // Get the error message from the provider
+        final err = ref.read(authProvider.notifier).errorMessage;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Registration failed: ${e.toString()}')),
+          SnackBar(
+              content: Text(err ?? 'Registration failed: ${e.toString()}')),
         );
       }
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => _isRegistering = false);
       }
     }
   }
@@ -141,6 +183,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              const Icon(
+                Icons.person_add,
+                size: 80,
+                color: AppTheme.primaryOrange,
+              ),
+              const SizedBox(height: 24),
               Text(
                 'Create Account',
                 style: Theme.of(context).textTheme.displayMedium,
@@ -155,15 +203,43 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 32),
+
+              // Role Selection
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: 'Customer',
+                    label: Text('Customer'),
+                    icon: Icon(Icons.person),
+                  ),
+                  ButtonSegment(
+                    value: 'Manager',
+                    label: Text('Manager'),
+                    icon: Icon(Icons.business),
+                  ),
+                ],
+                selected: {_selectedRole},
+                onSelectionChanged: (Set<String> newSelection) {
+                  setState(() {
+                    _selectedRole = newSelection.first;
+                    _location = null;
+                  });
+                },
+              ),
+              const SizedBox(height: 24),
+
+              // Name
               TextField(
                 controller: _nameController,
                 decoration: const InputDecoration(
                   labelText: 'Full Name',
                   hintText: 'Enter your full name',
-                  prefixIcon: Icon(Icons.person),
+                  prefixIcon: Icon(Icons.person_outline),
                 ),
               ),
               const SizedBox(height: 16),
+
+              // Phone Number
               TextField(
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
@@ -176,103 +252,176 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _selectedRole,
-                decoration: const InputDecoration(
-                  labelText: 'Register as',
-                  prefixIcon: Icon(Icons.work),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'Customer', child: Text('Customer')),
-                  DropdownMenuItem(value: 'Manager', child: Text('Manager')),
-                ],
-                onChanged: (value) {
-                  setState(() => _selectedRole = value!);
-                },
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Create 4-Digit Kiosk PIN',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 12),
-              Pinput(
-                controller: _pinController,
-                length: 4,
-                obscureText: true,
-                defaultPinTheme: PinTheme(
-                  width: 60,
-                  height: 60,
-                  textStyle: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceColor,
-                    border: Border.all(color: AppTheme.borderColor),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                focusedPinTheme: PinTheme(
-                  width: 60,
-                  height: 60,
-                  textStyle: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceColor,
-                    border: Border.all(color: AppTheme.primaryOrange, width: 2),
-                    borderRadius: BorderRadius.circular(12),
+
+              // Password
+              TextField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  // *** FIXED: Updated hint text ***
+                  hintText: 'Enter password (min 8 characters)',
+                  prefixIcon: const Icon(Icons.lock),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() => _obscurePassword = !_obscurePassword);
+                    },
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
+
+              // Confirm Password
+              TextField(
+                controller: _confirmPasswordController,
+                obscureText: _obscureConfirmPassword,
+                decoration: InputDecoration(
+                  labelText: 'Confirm Password',
+                  hintText: 'Re-enter your password',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureConfirmPassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() =>
+                          _obscureConfirmPassword = !_obscureConfirmPassword);
+                    },
+                  ),
+                ),
+              ),
+
+              // Only show PIN for Customers
               if (_selectedRole == 'Customer') ...[
+                const SizedBox(height: 24),
+                Text(
+                  'Set Kiosk PIN',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'This PIN will be used to mark attendance at the kiosk',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                ),
+                const SizedBox(height: 12),
+                Pinput(
+                  controller: _pinController,
+                  length: 4,
+                  obscureText: true,
+                  defaultPinTheme: PinTheme(
+                    width: 60,
+                    height: 60,
+                    textStyle: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceColor,
+                      border: Border.all(color: AppTheme.borderColor),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  focusedPinTheme: PinTheme(
+                    width: 60,
+                    height: 60,
+                    textStyle: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceColor,
+                      border:
+                          Border.all(color: AppTheme.primaryOrange, width: 2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+
+                // Location for Customers
                 const SizedBox(height: 24),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Icon(
-                              _location != null
-                                  ? Icons.check_circle
-                                  : Icons.location_on,
-                              color: _location != null
-                                  ? AppTheme.successGreen
-                                  : AppTheme.primaryOrange,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                _location != null
-                                    ? 'Location obtained'
-                                    : 'Location required',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          'Your Location',
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        const SizedBox(height: 12),
-                        PrimaryButton(
-                          text: 'Get My Location',
-                          onPressed: _getLocation,
-                          isLoading: _isGettingLocation,
-                          icon: Icons.my_location,
-                          isOutlined: _location != null,
+                        const SizedBox(height: 8),
+                        Text(
+                          'We need your location to show nearby messes',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
                         ),
+                        const SizedBox(height: 16),
+                        if (_location == null)
+                          PrimaryButton(
+                            text: 'Capture Location',
+                            onPressed: _getLocation,
+                            isLoading: _isLoadingLocation,
+                            icon: Icons.my_location,
+                            isOutlined: true,
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.successGreen.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppTheme.successGreen),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: AppTheme.successGreen,
+                                ),
+                                const SizedBox(width: 8),
+                                const Expanded(
+                                  child: Text(
+                                    'Location captured',
+                                    style:
+                                        TextStyle(color: AppTheme.successGreen),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: _getLocation,
+                                  child: const Text('Update'),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                   ),
                 ),
               ],
+
               const SizedBox(height: 32),
               PrimaryButton(
-                text: 'Complete Registration',
+                text: 'Register',
                 onPressed: _handleRegister,
-                isLoading: _isLoading,
+                isLoading: _isRegistering,
+                icon: Icons.check,
+              ),
+
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => context.go(RouteNames.login),
+                child: const Text('Already have an account? Login'),
               ),
             ],
           ),

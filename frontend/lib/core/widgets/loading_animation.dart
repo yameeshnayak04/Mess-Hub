@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lottie/lottie.dart';
-import '../utils/constants.dart';
 
 class LoadingAnimation extends StatelessWidget {
   final String? message;
@@ -19,8 +17,8 @@ class LoadingAnimation extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           SizedBox(
-            width: size,
-            height: size,
+            width: size * 0.3,
+            height: size * 0.3,
             child: const CircularProgressIndicator(
               strokeWidth: 3,
             ),
@@ -58,7 +56,7 @@ class SuccessAnimation extends StatelessWidget {
           Icon(
             Icons.check_circle,
             color: Colors.green,
-            size: size,
+            size: size * 0.5,
           ),
           const SizedBox(height: 16),
           Text(
@@ -91,7 +89,7 @@ class ErrorAnimation extends StatelessWidget {
           Icon(
             Icons.error_outline,
             color: Colors.red,
-            size: size,
+            size: size * 0.5,
           ),
           const SizedBox(height: 16),
           Text(

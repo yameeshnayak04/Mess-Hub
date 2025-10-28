@@ -1,3 +1,4 @@
+// lib/core/navigation/app_router.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,39 +27,59 @@ import '../../features/manager/create_mess/screens/create_mess_wizard_screen.dar
 import '../../core/utils/constants.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
+  // Watch the auth provider to trigger redirects on state change
   final authState = ref.watch(authProvider);
 
   return GoRouter(
     initialLocation: RouteNames.splash,
     debugLogDiagnostics: true,
     redirect: (context, state) {
-      final isLoading = authState.isLoading;
-      final user = authState.value;
+      // Get user (or null) from data or error state
+      final user = authState.valueOrNull;
+
+      // isLoading should only be true for the very first app load
+      final isLoading = authState.isLoading && !authState.hasValue;
 
       final isOnSplash = state.matchedLocation == RouteNames.splash;
       final isOnLogin = state.matchedLocation == RouteNames.login;
       final isOnRegister = state.matchedLocation == RouteNames.register;
+      final isOnAuthScreen = isOnLogin || isOnRegister;
+      final isOnCreateMess =
+          state.matchedLocation == RouteNames.createMessWizard;
 
-      // While loading, stay on splash
-      if (isLoading && !isOnSplash) {
-        return RouteNames.splash;
+      // 1. Handle Initial App Load
+      if (isLoading) {
+        // If we are loading, we must be on the splash screen.
+        // If we are anywhere else, redirect to splash.
+        return isOnSplash ? null : RouteNames.splash;
       }
 
-      // If not logged in and not on auth pages, go to login
-      if (user == null && !isOnLogin && !isOnRegister && !isOnSplash) {
-        return RouteNames.login;
+      // 2. Handle Not Authenticated (user is null)
+      if (user == null) {
+        // If we are on the splash screen, or any protected route, go to login.
+        // But if we are already on an auth screen, stay there.
+        return isOnAuthScreen ? null : RouteNames.login;
       }
 
-      // If logged in and on auth pages, redirect based on role
-      if (user != null && (isOnLogin || isOnRegister || isOnSplash)) {
-        if (user.role == 'Customer') {
-          return RouteNames.home;
-        } else if (user.role == 'Manager') {
+      // 3. Handle Authenticated (user exists)
+      if (user.role == 'Manager') {
+        if (user.hasMess == false || user.hasMess == null) {
+          // Manager has NO mess. Force them to the create mess screen.
+          if (isOnCreateMess) return null; // They are already on the right page
+          return RouteNames.createMessWizard;
+        }
+        // Manager HAS a mess. Send them home if they are on auth/splash/create.
+        if (isOnSplash || isOnAuthScreen || isOnCreateMess) {
           return RouteNames.managerHome;
+        }
+      } else if (user.role == 'Customer') {
+        // Customer is logged in. Send to home if on auth/splash.
+        if (isOnSplash || isOnAuthScreen) {
+          return RouteNames.home;
         }
       }
 
-      return null; // No redirect needed
+      return null; // No redirect
     },
     routes: [
       GoRoute(

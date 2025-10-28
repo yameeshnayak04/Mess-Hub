@@ -253,18 +253,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           TextButton(
             onPressed: () async {
               if (pinController.text.length == 4) {
-                try {
-                  await ref.read(authProvider.notifier).updateProfile(
-                        kioskPin: pinController.text,
-                      );
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Kiosk PIN updated successfully')),
-                    );
-                  }
-                } catch (e) {
+                try {} catch (e) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Failed to update PIN: $e')),
@@ -301,26 +290,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           TextButton(
             onPressed: () async {
-              if (nameController.text.isNotEmpty) {
-                try {
-                  await ref.read(authProvider.notifier).updateProfile(
-                        name: nameController.text,
-                      );
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Name updated successfully')),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to update name: $e')),
-                    );
-                  }
-                }
-              }
+              if (nameController.text.isNotEmpty) {}
             },
             child: const Text('Update'),
           ),

@@ -18,53 +18,61 @@ class CustomerShell extends StatefulWidget {
 class _CustomerShellState extends State<CustomerShell> {
   int _currentIndex = 0;
 
-  void _onItemTapped(int index) {
-    setState(() => _currentIndex = index);
+  // Map index -> route
+  static const _tabs = <int, String>{
+    0: RouteNames.home,
+    1: RouteNames.discover,
+    2: RouteNames.profile,
+  };
 
-    switch (index) {
-      case 0:
-        context.go(RouteNames.home);
-        break;
-      case 1:
-        context.go(RouteNames.discover);
-        break;
-      case 2:
-        context.go(RouteNames.profile);
-        break;
-    }
+  // Map route -> index
+  int _indexForLocation(String location) {
+    if (location.startsWith(RouteNames.home)) return 0;
+    if (location.startsWith(RouteNames.discover)) return 1;
+    if (location.startsWith(RouteNames.profile)) return 2;
+    return 0;
+  }
+
+  void _onItemTapped(int index) {
+    if (_currentIndex == index) return;
+    setState(() => _currentIndex = index);
+    final target = _tabs[index]!;
+    // Use go to replace stack for tab switch
+    context.go(target);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Determine current index based on location
+    // Keep bottom bar selection in sync with current route
     final location = GoRouterState.of(context).matchedLocation;
-    if (location == RouteNames.home) {
-      _currentIndex = 0;
-    } else if (location == RouteNames.discover) {
-      _currentIndex = 1;
-    } else if (location == RouteNames.profile) {
-      _currentIndex = 2;
+    final derived = _indexForLocation(location);
+    if (derived != _currentIndex) {
+      // Avoid setState during build cascades
+      _currentIndex = derived;
     }
 
     return Scaffold(
       body: widget.child,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: _onItemTapped,
-        items: const [
-          BottomNavigationBarItem(
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: _onItemTapped,
+        backgroundColor: Colors.white,
+        indicatorColor: AppTheme.lightOrange,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        destinations: const [
+          NavigationDestination(
             icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
+            selectedIcon: Icon(Icons.home, color: AppTheme.primaryOrange),
             label: 'Home',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
             icon: Icon(Icons.explore_outlined),
-            activeIcon: Icon(Icons.explore),
+            selectedIcon: Icon(Icons.explore, color: AppTheme.primaryOrange),
             label: 'Discover',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
             icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
+            selectedIcon: Icon(Icons.person, color: AppTheme.primaryOrange),
             label: 'Profile',
           ),
         ],

@@ -1,6 +1,6 @@
 class ApiConstants {
   static const String baseUrl =
-      'http://your-backend-url:5000'; // Change to your backend URL
+      'http://10.121.118.41:3000'; // Change to your backend URL
   static const String apiPrefix = '/api';
 
   // Timeout
@@ -35,11 +35,4 @@ class RouteNames {
   static const String managerMenu = '/manager-menu';
   static const String createMessWizard = '/create-mess-wizard';
   static const String memberDetails = '/manager-member-details/:id';
-}
-
-class LottieAssets {
-  static const String loading = 'assets/lottie/loading.json';
-  static const String success = 'assets/lottie/success.json';
-  static const String error = 'assets/lottie/error.json';
-  static const String empty = 'assets/lottie/empty.json';
 }

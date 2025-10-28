@@ -23,7 +23,6 @@ router.post(
   protect,
   authorize('Manager'),
   uploadMessImage.single('messImage'),          // <-- use uploadMessImage
-  validate(createMessSchema),
   createMess
 );
 

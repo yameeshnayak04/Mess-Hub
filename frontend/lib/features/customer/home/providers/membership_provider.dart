@@ -20,7 +20,6 @@ final membershipProvider =
 
 class MembershipNotifier extends StateNotifier<AsyncValue<List<Membership>>> {
   final MembershipRepository _repository;
-
   MembershipNotifier(this._repository) : super(const AsyncValue.loading()) {
     loadMemberships();
   }
@@ -35,16 +34,5 @@ class MembershipNotifier extends StateNotifier<AsyncValue<List<Membership>>> {
     }
   }
 
-  Future<void> refresh() async {
-    await loadMemberships();
-  }
-
-  Future<void> leaveMembership(String membershipId) async {
-    try {
-      await _repository.leaveMembership(membershipId);
-      await loadMemberships();
-    } catch (e) {
-      rethrow;
-    }
-  }
+  Future<void> refresh() => loadMemberships();
 }

@@ -1,7 +1,8 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const Mess = require('../models/Mess');
 
-const buildUserPayload = (user) => {
+const buildUserPayload = async (user) => {
   const payload = {
     _id: user._id,
     name: user.name,
@@ -15,6 +16,11 @@ const buildUserPayload = (user) => {
     user.location.coordinates.length === 2
   ) {
     payload.location = user.location;
+  }
+
+  if (user.role === 'Manager') {
+    const mess = await Mess.exists({ owner: user._id });
+    payload.hasMess = !!mess; // Sets true if mess exists, false otherwise
   }
   return payload;
 };
@@ -106,14 +112,35 @@ exports.register = async (req, res) => {
 // @route   POST /api/auth/login
 // @access  Public
 // login (password)
-exports.login = async (req, res) => {
-  const { phone, password } = req.body;
-  const user = await User.findOne({ phone }).select('+password');
-  if (!user) return res.status(401).json({ success:false, message:'Invalid credentials' });
-  const ok = await user.comparePassword(password);
-  if (!ok) return res.status(401).json({ success:false, message:'Invalid credentials' });
-  const token = generateToken(user._id);
-  return res.json({ success:true, token, data: { _id:user._id, name:user.name, phone:user.phone, role:user.role, location:user.location } });
+// In controllers/authController.js
+exports.login = async (req, res, next) => {
+  try {
+    const { phone, password } = req.body;
+    const user = await User.findOne({ phone }).select('+password');
+
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials (user not found)' });
+    }
+
+    const isMatch = await user.comparePassword(password);
+
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials (password mismatch)' }); // <-- More specific message
+    }
+
+    const token = generateToken(user._id);
+    const userPayload = await buildUserPayload(user);
+
+    return res.json({
+      success: true,
+      token,
+      data: userPayload
+    });
+
+  } catch (error) {
+     console.error('Login error:', error);
+     next(error);
+   }
 };
 
 

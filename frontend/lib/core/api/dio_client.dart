@@ -13,6 +13,8 @@ class DioClient {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       };
+    // Do not throw on non-2xx; handle in repositories/providers
+    _dio.options.validateStatus = (status) => true;
   }
 
   // GET request

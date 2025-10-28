@@ -1,3 +1,4 @@
+// lib/features/discover/providers/discover_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/api/dio_client_provider.dart';
 import '../../../../models/mess.dart';
@@ -16,6 +17,7 @@ class DiscoverNotifier extends StateNotifier<AsyncValue<List<Mess>>> {
   final DiscoverRepository _repository;
   String? _currentCuisine;
   String? _currentServiceType;
+  String? _currentSearch;
 
   DiscoverNotifier(this._repository) : super(const AsyncValue.loading()) {
     loadMesses();
@@ -24,16 +26,22 @@ class DiscoverNotifier extends StateNotifier<AsyncValue<List<Mess>>> {
   Future<void> loadMesses({
     String? cuisine,
     String? serviceType,
+    String? search,
+    int page = 1,
+    int limit = 10,
   }) async {
     _currentCuisine = cuisine;
     _currentServiceType = serviceType;
+    _currentSearch = search;
 
     state = const AsyncValue.loading();
-
     try {
       final messes = await _repository.discoverMesses(
         cuisine: cuisine,
         serviceType: serviceType,
+        search: search,
+        page: page,
+        limit: limit,
       );
       state = AsyncValue.data(messes);
     } catch (e, stack) {
@@ -45,6 +53,7 @@ class DiscoverNotifier extends StateNotifier<AsyncValue<List<Mess>>> {
     await loadMesses(
       cuisine: _currentCuisine,
       serviceType: _currentServiceType,
+      search: _currentSearch,
     );
   }
 }

@@ -4,17 +4,18 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/loading_animation.dart';
-import '../../../../models/mess.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../providers/membership_provider.dart';
+import '../../../../models/membership.dart';
+import 'package:intl/intl.dart';
 
 class CustomerHomeScreen extends ConsumerWidget {
   const CustomerHomeScreen({super.key});
 
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good Morning';
-    if (hour < 17) return 'Good Afternoon';
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good Morning';
+    if (h < 17) return 'Good Afternoon';
     return 'Good Evening';
   }
 
@@ -24,178 +25,80 @@ class CustomerHomeScreen extends ConsumerWidget {
     final membershipsState = ref.watch(membershipProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home'),
-        elevation: 0,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(140),
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF1976D2), Color(0xFF2196F3)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 48, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                  '${_greeting()}, ${ref.read(authProvider).maybeWhen(
+                        data: (u) => u?.name ?? 'User',
+                        orElse: () => 'User',
+                      )}',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Text(DateFormat('EEEE, MMMM d').format(DateTime.now()),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            ],
+          ),
+        ),
       ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(membershipProvider.notifier).refresh(),
-        child: authState.when(
-          data: (user) {
-            if (user == null) return const SizedBox();
-
-            return SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header Section
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceColor,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+        child: Consumer(
+          builder: (context, ref, _) {
+            final state = ref.watch(membershipProvider);
+            return state.when(
+              loading: () =>
+                  const LoadingAnimation(message: 'Loading memberships...'),
+              error: (e, _) => Center(child: Text('$e')),
+              data: (memberships) {
+                final activeCount =
+                    memberships.where((m) => m.status == 'Active').length;
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          '${_getGreeting()}, ${user.name}',
-                          style: Theme.of(context).textTheme.headlineMedium,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          DateFormat('EEEE, MMMM d, y').format(DateTime.now()),
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
+                        Text('My Memberships',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.lightOrange,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Text('$activeCount Active',
+                              style: const TextStyle(
+                                color: AppTheme.primaryOrange,
+                                fontWeight: FontWeight.w600,
+                              )),
                         ),
                       ],
                     ),
-                  ),
-
-                  // Memberships Section
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'My Memberships',
-                              style: Theme.of(context).textTheme.headlineSmall,
-                            ),
-                            TextButton.icon(
-                              onPressed: () => context.go('/discover'),
-                              icon: const Icon(Icons.add),
-                              label: const Text('Join More'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        membershipsState.when(
-                          data: (memberships) {
-                            if (memberships.isEmpty) {
-                              return _buildEmptyState(context);
-                            }
-
-                            final activeMemberships = memberships
-                                .where((m) => m.status == 'Active')
-                                .toList();
-                            final pendingMemberships = memberships
-                                .where((m) => m.status == 'Pending')
-                                .toList();
-
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (activeMemberships.isNotEmpty) ...[
-                                  Text(
-                                    'Active (${activeMemberships.length})',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(
-                                          color: AppTheme.successGreen,
-                                        ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  ...activeMemberships.map(
-                                    (membership) => _buildMembershipCard(
-                                      context,
-                                      membership,
-                                      true,
-                                    ),
-                                  ),
-                                ],
-                                if (pendingMemberships.isNotEmpty) ...[
-                                  const SizedBox(height: 24),
-                                  Text(
-                                    'Pending Approval (${pendingMemberships.length})',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(
-                                          color: AppTheme.warningYellow,
-                                        ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  ...pendingMemberships.map(
-                                    (membership) => _buildMembershipCard(
-                                      context,
-                                      membership,
-                                      false,
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 16),
-                                _buildHelpCard(context),
-                              ],
-                            );
-                          },
-                          loading: () => const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(32.0),
-                              child: CircularProgressIndicator(),
-                            ),
-                          ),
-                          error: (error, stack) => Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(32.0),
-                              child: Column(
-                                children: [
-                                  const Icon(
-                                    Icons.error_outline,
-                                    size: 48,
-                                    color: AppTheme.errorRed,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'Failed to load memberships',
-                                    style:
-                                        Theme.of(context).textTheme.titleMedium,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    error.toString(),
-                                    style:
-                                        Theme.of(context).textTheme.bodySmall,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                    const SizedBox(height: 10),
+                    for (final m in memberships) _membershipCard(context, m),
+                    const SizedBox(height: 12),
+                    _hintCard(),
+                  ],
+                );
+              },
             );
           },
-          loading: () => const LoadingAnimation(),
-          error: (error, stack) => ErrorAnimation(message: error.toString()),
         ),
       ),
     );
@@ -359,6 +262,154 @@ class CustomerHomeScreen extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _membershipCard(BuildContext context, Membership m) {
+    final mess = m.messObject;
+    final joined = m.joinedDate != null
+        ? DateFormat('MMM d, y').format(m.joinedDate!)
+        : '-';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => context.go('/membership/${m.id}'),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.lightOrange,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.all(10),
+                child:
+                    const Icon(Icons.flatware, color: AppTheme.primaryOrange),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            mess?.messName ?? 'Mess',
+                            style: Theme.of(context).textTheme.titleMedium,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (mess?.averageRating != null) ...[
+                          const Icon(Icons.star,
+                              size: 16, color: Color(0xFFFFC107)),
+                          const SizedBox(width: 4),
+                          Text(
+                            mess!.averageRating!.toStringAsFixed(1),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _planChip(m.planName),
+                        _statusChip(m.status),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text('₹${m.billingRate.toStringAsFixed(0)}/month',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text('Member since: $joined',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: Colors.black54)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.black45),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statusChip(String status) {
+    Color bg = Colors.grey.shade200;
+    Color fg = Colors.black87;
+    if (status == 'Active') {
+      bg = const Color(0xFFE6F4EA);
+      fg = const Color(0xFF1E8E3E);
+    } else if (status == 'Pending') {
+      bg = const Color(0xFFFFF4E5);
+      fg = const Color(0xFFB26A00);
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration:
+          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+      child: Text(status,
+          style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
+    );
+  }
+
+  Widget _planChip(String plan) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.lightOrange,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(plan,
+          style: const TextStyle(
+              color: AppTheme.primaryOrange, fontWeight: FontWeight.w600)),
+    );
+  }
+
+  Widget _hintCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.tips_and_updates, color: AppTheme.primaryOrange),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Tap on any membership to view attendance, bills, apply for leave, and more.',
+              style: const TextStyle(color: Colors.black87),
+            ),
+          ),
+        ],
       ),
     );
   }

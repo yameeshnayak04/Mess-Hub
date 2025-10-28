@@ -15,4 +15,13 @@ class MembershipRepository {
   Future<void> leaveMembership(String membershipId) async {
     await _dioClient.put('/membership/leave/$membershipId');
   }
+
+  Future<Map<String, dynamic>> getMessRating(String messId) async {
+    final res = await _dioClient.get('/mess/$messId');
+    final m = res.data['data'] as Map<String, dynamic>;
+    return {
+      'avg': (m['averageRating'] as num?)?.toDouble(),
+      'count': m['reviewCount'] as int? ?? 0,
+    };
+  }
 }

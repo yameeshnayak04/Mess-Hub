@@ -1,15 +1,32 @@
 const User = require('../models/User');
+const Mess = require('../models/Mess');
 
 // @desc    Get logged-in user profile
 // @route   GET /api/users/profile/me
 // @access  Private
 exports.getMyProfile = async (req, res, next) => {
   try {
+    // Fetch user, excluding PIN by default
     const user = await User.findById(req.user.id).select('-pin');
+
+    if (!user) {
+       // Although 'protect' middleware usually handles this, double-check
+       return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Convert to plain object to add properties
+    const userProfile = user.toObject();
+
+    // *** ADD hasMess check for Managers ***
+    if (userProfile.role === 'Manager') {
+      const messExists = await Mess.exists({ owner: userProfile._id });
+      userProfile.hasMess = !!messExists; // Add hasMess: true or false
+    }
 
     res.status(200).json({
       success: true,
-      data: user
+      // Send the modified profile object
+      data: userProfile
     });
   } catch (error) {
     next(error);
@@ -21,33 +38,46 @@ exports.getMyProfile = async (req, res, next) => {
 // @access  Private
 exports.updateMyProfile = async (req, res, next) => {
   try {
-    const { name, pin } = req.body;
+    const { name, pin } = req.body; // Only allow updating name/pin here
 
-    const updateFields = {};
-    if (name) updateFields.name = name;
-    if (pin) updateFields.pin = pin;
-
-    const user = await User.findById(req.user.id);
+    // Find user including PIN for potential update
+    const user = await User.findById(req.user.id).select('+pin'); // Select pin here if needed
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Update fields
-    if (name) user.name = name;
-    if (pin) user.pin = pin;
+    // Update fields if provided
+    let updated = false;
+    if (name && name !== user.name) {
+       user.name = name;
+       updated = true;
+    }
+    // Only update PIN for customers and if provided/different
+    if (user.role === 'Customer' && pin && pin !== user.pin) {
+       user.pin = pin;
+       updated = true;
+    }
 
-    await user.save();
+    // Save only if changes were made
+    if (updated) {
+       await user.save();
+    }
 
-    // Return user without pin
-    const userResponse = await User.findById(user._id).select('-pin');
+
+    // Fetch the updated profile *without* the PIN to send back
+    // Re-run the hasMess check here as well for consistency, although it shouldn't change on profile update
+    const updatedUserProfile = await User.findById(user._id).select('-pin').lean(); // Use lean() for plain object
+
+     if (updatedUserProfile.role === 'Manager') {
+       const messExists = await Mess.exists({ owner: updatedUserProfile._id });
+       updatedUserProfile.hasMess = !!messExists;
+     }
+
 
     res.status(200).json({
       success: true,
-      data: userResponse
+      data: updatedUserProfile // Send updated profile without PIN
     });
   } catch (error) {
     next(error);

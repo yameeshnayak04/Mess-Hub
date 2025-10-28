@@ -1,23 +1,28 @@
+// lib/models/mess.dart
 import 'user.dart';
 
 class Mess {
   final String id;
   final String messName;
   final String? messImage;
-  final Location location;
+  final Location
+      location; // GeoJSON: { type: 'Point', coordinates: [lng, lat] }
   final String address;
   final String city;
   final String contactPhone;
-  final String serviceType;
-  final String cuisine;
+  final String serviceType; // 'Monthly Only' | 'Both Daily & Monthly'
+  final String cuisine; // 'Veg' | 'Non-Veg' | 'Both'
   final int? maxCapacity;
-  final MessTimings timings;
-  final List<MessPlan> plans;
-  final double? dailyThaliRate;
+  final bool tiffinService; // NEW: required in backend
+  final String basicThaliDetails; // NEW: required in backend
+  final MessTimings timings; // strings "HH:mm"
+  final List<MessPlan> plans; // strong type
+  final double?
+      dailyThaliRate; // required if serviceType == 'Both Daily & Monthly'
   final MessRules rules;
-  final double? averageRating;
-  final int? reviewCount;
-  final double? distance;
+  final double? averageRating; // computed/populated
+  final int? reviewCount; // computed/populated
+  final double? distance; // meters from /mess/discover
 
   Mess({
     required this.id,
@@ -30,6 +35,8 @@ class Mess {
     required this.serviceType,
     required this.cuisine,
     this.maxCapacity,
+    required this.tiffinService,
+    required this.basicThaliDetails,
     required this.timings,
     required this.plans,
     this.dailyThaliRate,
@@ -51,15 +58,17 @@ class Mess {
       serviceType: json['serviceType'] as String,
       cuisine: json['cuisine'] as String,
       maxCapacity: json['maxCapacity'] as int?,
+      tiffinService: (json['tiffinService'] as bool?) ?? false,
+      basicThaliDetails: json['basicThaliDetails'] as String? ?? '',
       timings: MessTimings.fromJson(json['timings'] as Map<String, dynamic>),
       plans: (json['plans'] as List)
-          .map((plan) => MessPlan.fromJson(plan as Map<String, dynamic>))
+          .map((e) => MessPlan.fromJson(e as Map<String, dynamic>))
           .toList(),
-      dailyThaliRate: json['dailyThaliRate']?.toDouble(),
+      dailyThaliRate: (json['dailyThaliRate'] as num?)?.toDouble(),
       rules: MessRules.fromJson(json['rules'] as Map<String, dynamic>),
-      averageRating: json['averageRating']?.toDouble(),
+      averageRating: (json['averageRating'] as num?)?.toDouble(),
       reviewCount: json['reviewCount'] as int?,
-      distance: json['distance']?.toDouble(),
+      distance: (json['distance'] as num?)?.toDouble(),
     );
   }
 
@@ -75,8 +84,10 @@ class Mess {
       'serviceType': serviceType,
       'cuisine': cuisine,
       if (maxCapacity != null) 'maxCapacity': maxCapacity,
+      'tiffinService': tiffinService,
+      'basicThaliDetails': basicThaliDetails,
       'timings': timings.toJson(),
-      'plans': plans.map((plan) => plan.toJson()).toList(),
+      'plans': plans.map((p) => p.toJson()).toList(),
       if (dailyThaliRate != null) 'dailyThaliRate': dailyThaliRate,
       'rules': rules.toJson(),
       if (averageRating != null) 'averageRating': averageRating,
@@ -96,6 +107,8 @@ class Mess {
     String? serviceType,
     String? cuisine,
     int? maxCapacity,
+    bool? tiffinService,
+    String? basicThaliDetails,
     MessTimings? timings,
     List<MessPlan>? plans,
     double? dailyThaliRate,
@@ -115,6 +128,8 @@ class Mess {
       serviceType: serviceType ?? this.serviceType,
       cuisine: cuisine ?? this.cuisine,
       maxCapacity: maxCapacity ?? this.maxCapacity,
+      tiffinService: tiffinService ?? this.tiffinService,
+      basicThaliDetails: basicThaliDetails ?? this.basicThaliDetails,
       timings: timings ?? this.timings,
       plans: plans ?? this.plans,
       dailyThaliRate: dailyThaliRate ?? this.dailyThaliRate,
@@ -130,10 +145,7 @@ class MessTimings {
   final MealTiming lunch;
   final MealTiming dinner;
 
-  MessTimings({
-    required this.lunch,
-    required this.dinner,
-  });
+  MessTimings({required this.lunch, required this.dinner});
 
   factory MessTimings.fromJson(Map<String, dynamic> json) {
     return MessTimings(
@@ -142,22 +154,17 @@ class MessTimings {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'lunch': lunch.toJson(),
-      'dinner': dinner.toJson(),
-    };
-  }
+  Map<String, dynamic> toJson() => {
+        'lunch': lunch.toJson(),
+        'dinner': dinner.toJson(),
+      };
 }
 
 class MealTiming {
-  final String start;
-  final String end;
+  final String start; // "HH:mm"
+  final String end; // "HH:mm"
 
-  MealTiming({
-    required this.start,
-    required this.end,
-  });
+  MealTiming({required this.start, required this.end});
 
   factory MealTiming.fromJson(Map<String, dynamic> json) {
     return MealTiming(
@@ -166,22 +173,14 @@ class MealTiming {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'start': start,
-      'end': end,
-    };
-  }
+  Map<String, dynamic> toJson() => {'start': start, 'end': end};
 }
 
 class MessPlan {
   final String name;
   final double rate;
 
-  MessPlan({
-    required this.name,
-    required this.rate,
-  });
+  MessPlan({required this.name, required this.rate});
 
   factory MessPlan.fromJson(Map<String, dynamic> json) {
     return MessPlan(
@@ -190,12 +189,7 @@ class MessPlan {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'name': name,
-      'rate': rate,
-    };
-  }
+  Map<String, dynamic> toJson() => {'name': name, 'rate': rate};
 }
 
 class MessRules {
@@ -224,13 +218,11 @@ class MessRules {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'minLeaveDaysForRebate': minLeaveDaysForRebate,
-      'rebatePerThali': rebatePerThali,
-      'skipAllowancePercent': skipAllowancePercent,
-      if (securityDeposit != null) 'securityDeposit': securityDeposit,
-      if (minMonthlyCharge != null) 'minMonthlyCharge': minMonthlyCharge,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+        'minLeaveDaysForRebate': minLeaveDaysForRebate,
+        'rebatePerThali': rebatePerThali,
+        'skipAllowancePercent': skipAllowancePercent,
+        if (securityDeposit != null) 'securityDeposit': securityDeposit,
+        if (minMonthlyCharge != null) 'minMonthlyCharge': minMonthlyCharge,
+      };
 }

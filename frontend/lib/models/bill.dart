@@ -1,3 +1,4 @@
+// lib/models/bill.dart
 class Bill {
   final String id;
   final String user;
@@ -7,7 +8,7 @@ class Bill {
   final double baseAmount;
   final double rebateAmount;
   final double totalAmount;
-  final String status;
+  final String status; // 'Due' | 'Pending Approval' | 'Paid'
   final String? paymentProofUrl;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -39,29 +40,25 @@ class Bill {
       totalAmount: (json['totalAmount'] as num).toDouble(),
       status: json['status'] as String,
       paymentProofUrl: json['paymentProofUrl'] as String?,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : null,
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
-          : null,
+      createdAt:
+          json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
+      updatedAt:
+          json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      '_id': id,
-      'user': user,
-      'mess': mess,
-      'month': month,
-      'year': year,
-      'baseAmount': baseAmount,
-      'rebateAmount': rebateAmount,
-      'totalAmount': totalAmount,
-      'status': status,
-      if (paymentProofUrl != null) 'paymentProofUrl': paymentProofUrl,
-      if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
-      if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
-    };
-  }
+  Map<String, dynamic> toJson() => {
+        '_id': id,
+        'user': user,
+        'mess': mess,
+        'month': month,
+        'year': year,
+        'baseAmount': baseAmount,
+        'rebateAmount': rebateAmount,
+        'totalAmount': totalAmount,
+        'status': status,
+        if (paymentProofUrl != null) 'paymentProofUrl': paymentProofUrl,
+        if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
+        if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
+      };
 }

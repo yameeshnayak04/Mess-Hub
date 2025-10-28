@@ -7,18 +7,51 @@ const { checkMealTiming, getStartAndEndOfDay } = require('../utils/billCalculati
 // @desc    Create new mess
 // @route   POST /api/mess
 // @access  Private (Manager only)
-exports.createMess = async (req, res, next) => {
-  try {
-    const messData = {
-      ...req.body,
-      owner: req.user.id
-    };
 
-    // Add image path if uploaded
+exports.createMess = async (req, res, next) => {
+
+
+  try {
+    let messData = { ...req.body };
+
+    // --- Manually Parse Nested Fields (Crucial Now) ---
+    const fieldsToParse = ['location', 'timings', 'rules', 'plans'];
+    for (const key of fieldsToParse) {
+      if (messData[key] && typeof messData[key] === 'string') {
+        try {
+          messData[key] = JSON.parse(messData[key]);
+        } catch (e) {
+          console.error(`!!! Failed to JSON parse field '${key}':`, e);
+          // If parsing fails here, Mongoose validation will fail later due to type mismatch
+           return res.status(400).json({ success: false, message: `Invalid JSON format for field: ${key}` }); // Fail fast
+        }
+      }
+       // Add checks for missing required nested fields if needed, although Mongoose will catch them
+       else if (!messData[key] && ['location', 'timings', 'rules', 'plans'].includes(key)) {
+         console.warn(`Required nested field '${key}' might be missing.`);
+       }
+    }
+
+    // --- Explicitly Convert Boolean String ---
+    if (messData.tiffinService === 'true') {
+      messData.tiffinService = true;
+    } else if (messData.tiffinService === 'false') {
+      messData.tiffinService = false;
+    } else {
+        // Let Mongoose handle the 'required: true' validation if it's missing or invalid
+        console.warn(`tiffinService value before Mongoose: ${messData.tiffinService}`);
+    }
+
+     // Log basicThaliDetails (Mongoose will validate 'required: true')
+     console.warn(`basicThaliDetails value before Mongoose: ${messData.basicThaliDetails}`);
+
+
+    // --- Add Owner and Image ---
+    messData.owner = req.user.id;
     if (req.file) {
       messData.messImage = `/uploads/mess-images/${req.file.filename}`;
     }
-
+    // --- Create Mess Document (Mongoose handles final validation) ---
     const mess = await Mess.create(messData);
 
     res.status(201).json({
@@ -26,15 +59,18 @@ exports.createMess = async (req, res, next) => {
       data: mess
     });
   } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'A mess with this name and address already exists'
-      });
+    console.error("Error during Mess.create or data processing:", error);
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ success: false, message: `Validation failed: ${error.message}`, errors: error.errors });
     }
+    if (error.code === 11000) { /* ... */ }
     next(error);
   }
 };
+
+// ... (rest of controller)
+
+// ... (rest of controller)
 
 // @desc    Get manager's mess
 // @route   GET /api/mess/my-mess

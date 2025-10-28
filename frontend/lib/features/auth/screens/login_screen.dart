@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:pinput/pinput.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/utils/constants.dart';
@@ -16,13 +15,14 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _phoneController = TextEditingController();
-  final _pinController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
     _phoneController.dispose();
-    _pinController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -35,9 +35,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    if (_pinController.text.length != 4) {
+    if (_passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your 4-digit Kiosk PIN')),
+        const SnackBar(content: Text('Please enter your password')),
       );
       return;
     }
@@ -47,13 +47,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       await ref.read(authProvider.notifier).login(
             _phoneController.text,
-            _pinController.text,
+            _passwordController.text,
           );
-    } catch (e) {
+
+      final authState = ref.read(authProvider);
+      final err = ref.read(authProvider.notifier).errorMessage;
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login failed: ${e.toString()}')),
-        );
+        if (authState.value == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(err ?? 'Invalid credentials')),
+          );
+        } else {
+          // Router redirect will take the user to the right home
+          // Leaving explicit navigation out avoids race with redirect
+        }
       }
     } finally {
       if (mounted) {
@@ -72,7 +79,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 60),
-              Icon(
+              const Icon(
                 Icons.restaurant_menu,
                 size: 80,
                 color: AppTheme.primaryOrange,
@@ -103,40 +110,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   counterText: '',
                 ),
               ),
-              const SizedBox(height: 24),
-              Text(
-                'Kiosk PIN',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 12),
-              Pinput(
-                controller: _pinController,
-                length: 4,
-                obscureText: true,
-                defaultPinTheme: PinTheme(
-                  width: 60,
-                  height: 60,
-                  textStyle: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceColor,
-                    border: Border.all(color: AppTheme.borderColor),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                focusedPinTheme: PinTheme(
-                  width: 60,
-                  height: 60,
-                  textStyle: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceColor,
-                    border: Border.all(color: AppTheme.primaryOrange, width: 2),
-                    borderRadius: BorderRadius.circular(12),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  hintText: 'Enter your password',
+                  prefixIcon: const Icon(Icons.lock),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() => _obscurePassword = !_obscurePassword);
+                    },
                   ),
                 ),
               ),

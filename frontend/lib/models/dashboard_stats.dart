@@ -1,11 +1,12 @@
+// lib/models/dashboard_stats.dart
 class DashboardStats {
-  final String liveStatus;
-  final String currentMeal;
+  final String liveStatus; // e.g., "Open" | "Closed"
+  final String currentMeal; // "Lunch" | "Dinner" | "-"
   final int eatingNow;
   final int onLeave;
   final int notEating;
   final int totalActiveMembers;
-  final int? dailyMembers;
+  final int? dailyMembers; // present if serviceType supports daily
 
   DashboardStats({
     required this.liveStatus,
@@ -29,15 +30,13 @@ class DashboardStats {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'liveStatus': liveStatus,
-      'currentMeal': currentMeal,
-      'eatingNow': eatingNow,
-      'onLeave': onLeave,
-      'notEating': notEating,
-      'totalActiveMembers': totalActiveMembers,
-      if (dailyMembers != null) 'dailyMembers': dailyMembers,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+        'liveStatus': liveStatus,
+        'currentMeal': currentMeal,
+        'eatingNow': eatingNow,
+        'onLeave': onLeave,
+        'notEating': notEating,
+        'totalActiveMembers': totalActiveMembers,
+        if (dailyMembers != null) 'dailyMembers': dailyMembers,
+      };
 }
