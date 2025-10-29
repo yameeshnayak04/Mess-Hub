@@ -6,6 +6,23 @@ class ApiConstants {
   // Timeout
   static const Duration connectionTimeout = Duration(seconds: 30);
   static const Duration receiveTimeout = Duration(seconds: 30);
+
+  static String fullImageUrl(String? path) {
+    if (path == null || path.isEmpty) {
+      // Return a placeholder or handle error as needed
+      // For now, returning empty string for Image.network to handle errorBuilder
+      return '';
+    }
+    if (path.startsWith('http')) {
+      return path; // Already a full URL
+    }
+    // Prepend base URL (ensure no double slash if path starts with /)
+    final separator =
+        (baseUrl.endsWith('/') || path.startsWith('/')) ? '' : '/';
+    return baseUrl +
+        separator +
+        path.replaceAll(r'\', '/'); // Handle potential backslashes
+  }
 }
 
 class StorageKeys {
