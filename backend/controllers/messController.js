@@ -168,7 +168,7 @@ exports.discoverMesses = async (req, res, next) => {
             coordinates: userLocation
           },
           distanceField: 'distance',
-          maxDistance: 50000, // 50km radius
+          maxDistance: 500000000, // 50km radius
           spherical: true
         }
       },

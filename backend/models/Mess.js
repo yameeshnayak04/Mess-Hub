@@ -118,5 +118,7 @@ messSchema.pre('validate', function (next) {
 // Indexes
 messSchema.index({ location: '2dsphere' });
 messSchema.index({ messName: 1, address: 1 }, { unique: true });
+messSchema.index({ owner: 1 });
+messSchema.index({ cuisine: 1, serviceType: 1 });
 
 module.exports = mongoose.model('Mess', messSchema);
