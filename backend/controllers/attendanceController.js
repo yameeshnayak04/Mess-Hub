@@ -86,6 +86,34 @@ exports.skipMeal = async (req, res, next) => {
   }
 };
 
+// controllers/attendanceController.js
+exports.getMemberAttendanceForManager = async (req, res, next) => {
+  try {
+    const { membershipId } = req.params;
+    const { month, year } = req.query;
+
+    const membership = await Membership.findById(membershipId).populate('mess', 'owner');
+    if (!membership) {
+      return res.status(404).json({ success: false, message: 'Membership not found' });
+    }
+    if (!membership.mess || membership.mess.owner.toString() !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Not authorized' });
+    }
+
+    const { start, end } = getStartAndEndOfMonth(month, year);
+    const entries = await Attendance.find({
+      membership: membershipId,
+      date: { $gte: start, $lte: end },
+    })
+      .sort({ date: 1, mealType: 1 });
+
+    return res.status(200).json({ success: true, count: entries.length, data: entries });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
 // @desc    Mark attendance via kiosk (for monthly members)
 // @route   POST /api/attendance/kiosk/mark
 // @access  Private (Manager only)

@@ -1,11 +1,12 @@
 // lib/core/navigation/app_router.dart
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/auth/screens/splash_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
+
 import '../../features/customer/customer_shell.dart';
 import '../../features/customer/home/screens/customer_home_screen.dart';
 import '../../features/customer/discover/screens/discover_screen.dart';
@@ -15,6 +16,7 @@ import '../../features/customer/membership/screens/membership_dashboard_screen.d
 import '../../features/customer/membership/screens/attendance_calendar_screen.dart';
 import '../../features/customer/membership/screens/apply_leave_screen.dart';
 import '../../features/customer/membership/screens/billing_screen.dart';
+
 import '../../features/manager/manager_shell.dart';
 import '../../features/manager/home/screens/manager_home_screen.dart';
 import '../../features/manager/members/screens/members_screen.dart';
@@ -24,175 +26,137 @@ import '../../features/manager/kiosk/screens/kiosk_launcher_screen.dart';
 import '../../features/manager/kiosk/screens/kiosk_mode_screen.dart';
 import '../../features/manager/menu/screens/menu_editor_screen.dart';
 import '../../features/manager/create_mess/screens/create_mess_wizard_screen.dart';
+
 import '../../core/utils/constants.dart';
 
-final appRouterProvider = Provider<GoRouter>((ref) {
-  // Watch the auth provider to trigger redirects on state change
+final appRouterProvider = Provider((ref) {
   final authState = ref.watch(authProvider);
 
   return GoRouter(
     initialLocation: RouteNames.splash,
     debugLogDiagnostics: true,
     redirect: (context, state) {
-      // Get user (or null) from data or error state
       final user = authState.valueOrNull;
-
-      // isLoading should only be true for the very first app load
       final isLoading = authState.isLoading && !authState.hasValue;
 
-      final isOnSplash = state.matchedLocation == RouteNames.splash;
-      final isOnLogin = state.matchedLocation == RouteNames.login;
-      final isOnRegister = state.matchedLocation == RouteNames.register;
-      final isOnAuthScreen = isOnLogin || isOnRegister;
-      final isOnCreateMess =
-          state.matchedLocation == RouteNames.createMessWizard;
+      final loc = state.matchedLocation;
+      final onSplash = loc == RouteNames.splash;
+      final onLogin = loc == RouteNames.login;
+      final onRegister = loc == RouteNames.register;
+      final onAuth = onLogin || onRegister;
+      final onCreateMess = loc == RouteNames.createMessWizard;
 
-      // 1. Handle Initial App Load
-      if (isLoading) {
-        // If we are loading, we must be on the splash screen.
-        // If we are anywhere else, redirect to splash.
-        return isOnSplash ? null : RouteNames.splash;
-      }
+      // 1) Initial boot: stay on splash until auth resolves
+      if (isLoading) return onSplash ? null : RouteNames.splash;
 
-      // 2. Handle Not Authenticated (user is null)
-      if (user == null) {
-        // If we are on the splash screen, or any protected route, go to login.
-        // But if we are already on an auth screen, stay there.
-        return isOnAuthScreen ? null : RouteNames.login;
-      }
+      // 2) Not authenticated: send to login unless already on auth
+      if (user == null) return onAuth ? null : RouteNames.login;
 
-      // 3. Handle Authenticated (user exists)
+      // 3) Authenticated manager: ensure mess exists
       if (user.role == 'Manager') {
-        if (user.hasMess == false || user.hasMess == null) {
-          // Manager has NO mess. Force them to the create mess screen.
-          if (isOnCreateMess) return null; // They are already on the right page
-          return RouteNames.createMessWizard;
+        if (user.hasMess != true) {
+          return onCreateMess ? null : RouteNames.createMessWizard;
         }
-        // Manager HAS a mess. Send them home if they are on auth/splash/create.
-        if (isOnSplash || isOnAuthScreen || isOnCreateMess) {
-          return RouteNames.managerHome;
-        }
-      } else if (user.role == 'Customer') {
-        // Customer is logged in. Send to home if on auth/splash.
-        if (isOnSplash || isOnAuthScreen) {
-          return RouteNames.home;
-        }
+        // If coming from splash/auth/create, push to manager home
+        if (onSplash || onAuth || onCreateMess) return RouteNames.managerHome;
+        return null;
       }
 
-      return null; // No redirect
+      // 4) Authenticated customer: if coming from splash/auth, push to home
+      if (user.role == 'Customer') {
+        if (onSplash || onAuth) return RouteNames.home;
+        return null;
+      }
+
+      return null;
     },
     routes: [
+      // Auth
       GoRoute(
-        path: RouteNames.splash,
-        builder: (context, state) => const SplashScreen(),
-      ),
+          path: RouteNames.splash, builder: (_, __) => const SplashScreen()),
+      GoRoute(path: RouteNames.login, builder: (_, __) => const LoginScreen()),
       GoRoute(
-        path: RouteNames.login,
-        builder: (context, state) => const LoginScreen(),
-      ),
-      GoRoute(
-        path: RouteNames.register,
-        builder: (context, state) => const RegisterScreen(),
-      ),
+          path: RouteNames.register,
+          builder: (_, __) => const RegisterScreen()),
 
-      // Customer routes with shell
+      // Customer tabs
       ShellRoute(
-        builder: (context, state, child) => CustomerShell(child: child),
+        builder: (_, __, child) => CustomerShell(child: child),
         routes: [
           GoRoute(
-            path: RouteNames.home,
-            builder: (context, state) => const CustomerHomeScreen(),
-          ),
+              path: RouteNames.home,
+              builder: (_, __) => const CustomerHomeScreen()),
           GoRoute(
-            path: RouteNames.discover,
-            builder: (context, state) => const DiscoverScreen(),
-          ),
+              path: RouteNames.discover,
+              builder: (_, __) => const DiscoverScreen()),
           GoRoute(
-            path: RouteNames.profile,
-            builder: (context, state) => const ProfileScreen(),
-          ),
+              path: RouteNames.profile,
+              builder: (_, __) => const ProfileScreen()),
         ],
       ),
 
-      // Customer sub-routes (without shell)
+      // Customer subpages (outside shell)
       GoRoute(
         path: '/mess-details/:id',
-        builder: (context, state) {
-          final messId = state.pathParameters['id']!;
-          return MessDetailsScreen(messId: messId);
-        },
+        builder: (_, state) =>
+            MessDetailsScreen(messId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/membership-dashboard/:id',
-        builder: (context, state) {
-          final membershipId = state.pathParameters['id']!;
-          return MembershipDashboardScreen(membershipId: membershipId);
-        },
+        builder: (_, state) => MembershipDashboardScreen(
+            membershipId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/attendance-calendar/:id',
-        builder: (context, state) {
-          final membershipId = state.pathParameters['id']!;
-          return AttendanceCalendarScreen(membershipId: membershipId);
-        },
+        builder: (_, state) =>
+            AttendanceCalendarScreen(membershipId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/apply-leave/:id',
-        builder: (context, state) {
-          final membershipId = state.pathParameters['id']!;
-          return ApplyLeaveScreen(membershipId: membershipId);
-        },
+        builder: (_, state) =>
+            ApplyLeaveScreen(membershipId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/billing/:id',
-        builder: (context, state) {
-          final membershipId = state.pathParameters['id']!;
-          return BillingScreen(membershipId: membershipId);
-        },
+        builder: (_, state) =>
+            BillingScreen(membershipId: state.pathParameters['id']!),
       ),
 
-      // Manager routes with shell
+      // Manager tabs
       ShellRoute(
-        builder: (context, state, child) => ManagerShell(child: child),
+        builder: (_, __, child) => ManagerShell(child: child),
         routes: [
           GoRoute(
-            path: RouteNames.managerHome,
-            builder: (context, state) => const ManagerHomeScreen(),
-          ),
+              path: RouteNames.managerHome,
+              builder: (_, __) => const ManagerHomeScreen()),
           GoRoute(
-            path: RouteNames.managerMembers,
-            builder: (context, state) => const MembersScreen(),
-          ),
+              path: RouteNames.managerMembers,
+              builder: (_, __) => const MembersScreen()),
           GoRoute(
-            path: RouteNames.managerPayments,
-            builder: (context, state) => const PaymentsScreen(),
-          ),
+              path: RouteNames.managerPayments,
+              builder: (_, __) => const PaymentsScreen()),
           GoRoute(
-            path: RouteNames.managerKiosk,
-            builder: (context, state) => const KioskLauncherScreen(),
-          ),
+              path: RouteNames.kioskLauncher,
+              builder: (_, __) => const KioskLauncherScreen()),
         ],
       ),
 
-      // Manager sub-routes (without shell)
+      // Manager subpages (outside shell)
       GoRoute(
-        path: RouteNames.kioskMode,
-        builder: (context, state) => const KioskModeScreen(),
-      ),
+          path: RouteNames.kioskMode,
+          builder: (_, __) => const KioskModeScreen()),
       GoRoute(
-        path: RouteNames.managerMenu,
-        builder: (context, state) => const MenuEditorScreen(),
-      ),
+          path: RouteNames.managerMenu,
+          builder: (_, __) => const MenuEditorScreen()),
       GoRoute(
-        path: RouteNames.createMessWizard,
-        builder: (context, state) => const CreateMessWizardScreen(),
-      ),
+          path: RouteNames.createMessWizard,
+          builder: (_, __) => const CreateMessWizardScreen()),
       GoRoute(
-        path: '/manager-member-details/:id',
-        builder: (context, state) {
-          final memberId = state.pathParameters['id']!;
-          return MemberDetailsScreen(memberId: memberId);
-        },
+        path: '/manager/member/:membershipId',
+        builder: (_, state) => MemberDetailsScreen(
+          membershipId: state.pathParameters['membershipId']!,
+          membership: state.extra as Map<String, dynamic>?,
+        ),
       ),
     ],
   );

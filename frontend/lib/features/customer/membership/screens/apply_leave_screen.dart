@@ -1,17 +1,16 @@
+// lib/features/customer/membership/screens/apply_leave_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/primary_button.dart';
+import '../providers/membership_providers.dart';
+import '../providers/leave_providers.dart';
 
 class ApplyLeaveScreen extends ConsumerStatefulWidget {
   final String membershipId;
-
-  const ApplyLeaveScreen({
-    super.key,
-    required this.membershipId,
-  });
+  const ApplyLeaveScreen({super.key, required this.membershipId});
 
   @override
   ConsumerState<ApplyLeaveScreen> createState() => _ApplyLeaveScreenState();
@@ -23,8 +22,30 @@ class _ApplyLeaveScreenState extends ConsumerState<ApplyLeaveScreen> {
   DateTime? _rangeStart;
   DateTime? _rangeEnd;
   RangeSelectionMode _rangeSelectionMode = RangeSelectionMode.toggledOn;
-  final int _minLeaveDaysForRebate = 3; // This should come from mess rules
   bool _isSubmitting = false;
+  int _minLeaveDaysForRebate = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRules();
+  }
+
+  void _loadRules() async {
+    try {
+      final data =
+          await ref.read(membershipDetailsProvider(widget.membershipId).future);
+      final rules =
+          (data['membership']?['mess']?['rules'] as Map<String, dynamic>?) ??
+              {};
+      if (mounted) {
+        setState(() {
+          _minLeaveDaysForRebate =
+              (rules['minLeaveDaysForRebate'] as int?) ?? 1;
+        });
+      }
+    } catch (_) {}
+  }
 
   int get _selectedDays {
     if (_rangeStart == null || _rangeEnd == null) return 0;
@@ -34,7 +55,6 @@ class _ApplyLeaveScreenState extends ConsumerState<ApplyLeaveScreen> {
   bool get _isRebateEligible => _selectedDays >= _minLeaveDaysForRebate;
 
   bool _isSelectable(DateTime day) {
-    // Can't select today or past dates
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     return day.isAfter(today);
@@ -63,44 +83,47 @@ class _ApplyLeaveScreenState extends ConsumerState<ApplyLeaveScreen> {
     }
 
     setState(() => _isSubmitting = true);
-
     try {
-      // API call would go here
-      await Future.delayed(const Duration(seconds: 2));
-
+      await ref.read(leaveRepositoryProvider).applyLeave(
+            membershipId: widget.membershipId,
+            startDate: _rangeStart!,
+            endDate: _rangeEnd!,
+          );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Leave application submitted successfully')),
+            content: Text('Leave application submitted successfully'),
+            backgroundColor: AppTheme.successGreen,
+          ),
         );
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to submit leave: $e')),
+          SnackBar(
+            content:
+                Text('Failed: ${e.toString().replaceAll('Exception: ', '')}'),
+            backgroundColor: AppTheme.errorRed,
+          ),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-      }
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Apply for Leave'),
-      ),
+      appBar: AppBar(title: const Text('Apply for Leave')),
       body: Column(
         children: [
           Expanded(
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  // Instructions Card
+                  // Instructions
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
@@ -117,10 +140,8 @@ class _ApplyLeaveScreenState extends ConsumerState<ApplyLeaveScreen> {
                       children: [
                         Row(
                           children: [
-                            const Icon(
-                              Icons.info_outline,
-                              color: AppTheme.primaryOrange,
-                            ),
+                            const Icon(Icons.info_outline,
+                                color: AppTheme.primaryOrange),
                             const SizedBox(width: 8),
                             Text(
                               'Leave Application Guidelines',
@@ -137,8 +158,8 @@ class _ApplyLeaveScreenState extends ConsumerState<ApplyLeaveScreen> {
                         Text(
                           '• Leave must start from tomorrow onwards\n'
                           '• Both dates must be in the same month\n'
-                          '• Minimum $_minLeaveDaysForRebate days required for rebate eligibility\n'
-                          '• Manager approval required',
+                          '• Minimum $_minLeaveDaysForRebate days required for rebate\n'
+                          '• Automatically approved if criteria are met',
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: AppTheme.darkOrange,
@@ -147,7 +168,6 @@ class _ApplyLeaveScreenState extends ConsumerState<ApplyLeaveScreen> {
                       ],
                     ),
                   ),
-
                   // Calendar
                   TableCalendar(
                     firstDay: DateTime.now(),
@@ -167,7 +187,6 @@ class _ApplyLeaveScreenState extends ConsumerState<ApplyLeaveScreen> {
                         );
                         return;
                       }
-
                       setState(() {
                         _focusedDay = focusedDay;
                         if (_rangeStart == null || _rangeEnd != null) {
@@ -183,14 +202,9 @@ class _ApplyLeaveScreenState extends ConsumerState<ApplyLeaveScreen> {
                         }
                       });
                     },
-                    onFormatChanged: (format) {
-                      setState(() {
-                        _calendarFormat = format;
-                      });
-                    },
-                    onPageChanged: (focusedDay) {
-                      _focusedDay = focusedDay;
-                    },
+                    onFormatChanged: (format) =>
+                        setState(() => _calendarFormat = format),
+                    onPageChanged: (focusedDay) => _focusedDay = focusedDay,
                     enabledDayPredicate: _isSelectable,
                     calendarStyle: CalendarStyle(
                       rangeStartDecoration: const BoxDecoration(
@@ -218,159 +232,19 @@ class _ApplyLeaveScreenState extends ConsumerState<ApplyLeaveScreen> {
                       formatButtonShowsNext: false,
                     ),
                   ),
-
                   // Selection Summary
-                  if (_rangeStart != null) ...[
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Card(
-                        color: _isRebateEligible
-                            ? AppTheme.successGreen.withOpacity(0.1)
-                            : AppTheme.warningYellow.withOpacity(0.1),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Selected Leave Period',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const SizedBox(height: 12),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Start Date',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                              color: AppTheme.textSecondary,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        DateFormat('MMM d, y')
-                                            .format(_rangeStart!),
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleMedium,
-                                      ),
-                                    ],
-                                  ),
-                                  const Icon(Icons.arrow_forward),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        'End Date',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                              color: AppTheme.textSecondary,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        _rangeEnd != null
-                                            ? DateFormat('MMM d, y')
-                                                .format(_rangeEnd!)
-                                            : 'Select end date',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleMedium,
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              if (_rangeEnd != null) ...[
-                                const Divider(height: 24),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Total Days',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium,
-                                    ),
-                                    Text(
-                                      '$_selectedDays days',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleLarge
-                                          ?.copyWith(
-                                            color: AppTheme.primaryOrange,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: _isRebateEligible
-                                        ? AppTheme.successGreen.withOpacity(0.1)
-                                        : AppTheme.warningYellow
-                                            .withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: _isRebateEligible
-                                          ? AppTheme.successGreen
-                                          : AppTheme.warningYellow,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        _isRebateEligible
-                                            ? Icons.check_circle
-                                            : Icons.info_outline,
-                                        color: _isRebateEligible
-                                            ? AppTheme.successGreen
-                                            : AppTheme.warningYellow,
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          _isRebateEligible
-                                              ? 'Eligible for rebate'
-                                              : 'Not eligible for rebate (minimum $_minLeaveDaysForRebate days required)',
-                                          style: TextStyle(
-                                            color: _isRebateEligible
-                                                ? AppTheme.successGreen
-                                                : AppTheme.warningYellow,
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
+                  if (_rangeStart != null)
+                    _SelectionSummary(
+                      rangeStart: _rangeStart!,
+                      rangeEnd: _rangeEnd,
+                      selectedDays: _selectedDays,
+                      isRebateEligible: _isRebateEligible,
+                      minDays: _minLeaveDaysForRebate,
                     ),
-                  ],
                 ],
               ),
             ),
           ),
-
           // Submit Button
           Container(
             padding: const EdgeInsets.all(16),
@@ -397,6 +271,142 @@ class _ApplyLeaveScreenState extends ConsumerState<ApplyLeaveScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SelectionSummary extends StatelessWidget {
+  final DateTime rangeStart;
+  final DateTime? rangeEnd;
+  final int selectedDays;
+  final bool isRebateEligible;
+  final int minDays;
+
+  const _SelectionSummary({
+    required this.rangeStart,
+    required this.rangeEnd,
+    required this.selectedDays,
+    required this.isRebateEligible,
+    required this.minDays,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Card(
+        color: isRebateEligible
+            ? AppTheme.successGreen.withOpacity(0.1)
+            : AppTheme.warningYellow.withOpacity(0.1),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Selected Leave Period',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildDateColumn(context, 'Start Date', rangeStart),
+                  const Icon(Icons.arrow_forward),
+                  _buildDateColumn(
+                    context,
+                    'End Date',
+                    rangeEnd,
+                    placeholder: 'Select end date',
+                  ),
+                ],
+              ),
+              if (rangeEnd != null) ...[
+                const Divider(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Total Days',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      '$selectedDays days',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: AppTheme.primaryOrange,
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isRebateEligible
+                        ? AppTheme.successGreen.withOpacity(0.1)
+                        : AppTheme.warningYellow.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isRebateEligible
+                          ? AppTheme.successGreen
+                          : AppTheme.warningYellow,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isRebateEligible
+                            ? Icons.check_circle
+                            : Icons.info_outline,
+                        color: isRebateEligible
+                            ? AppTheme.successGreen
+                            : AppTheme.warningYellow,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isRebateEligible
+                              ? 'Eligible for rebate'
+                              : 'Not eligible for rebate (minimum $minDays days required)',
+                          style: TextStyle(
+                            color: isRebateEligible
+                                ? AppTheme.successGreen
+                                : AppTheme.warningYellow,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDateColumn(BuildContext context, String label, DateTime? date,
+      {String? placeholder}) {
+    return Column(
+      crossAxisAlignment:
+          date != null ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: AppTheme.textSecondary),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          date != null
+              ? DateFormat('MMM d, y').format(date)
+              : (placeholder ?? ''),
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+      ],
     );
   }
 }

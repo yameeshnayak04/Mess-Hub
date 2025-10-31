@@ -6,10 +6,10 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/constants.dart';
 import '../../../../core/widgets/loading_animation.dart';
 import '../../../../models/mess.dart';
 import '../providers/discover_provider.dart';
-import '../../../../core/utils/constants.dart'; // Import constants
 
 class DiscoverScreen extends ConsumerStatefulWidget {
   const DiscoverScreen({super.key});
@@ -24,7 +24,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   Timer? _debounce;
 
-  // Helper to construct full URL
+  // Helper to construct full URL (moved from previous example)
   String fullImageUrl(String? path) {
     if (path == null || path.isEmpty) {
       return ''; // Let error builder handle
@@ -296,7 +296,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppTheme.successGreen,
+                            color: Colors.amber[700],
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -466,7 +466,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                     radius: 28,
                     backgroundColor: AppTheme.lightOrange,
                     backgroundImage: (mess.messImage != null)
-                        ? NetworkImage(mess.messImage!)
+                        ? NetworkImage(fullImageUrl(mess.messImage))
                         : null,
                     child: (mess.messImage == null)
                         ? const Icon(Icons.restaurant,
@@ -502,13 +502,6 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => context.go(
-                            '/mess-details/${mess.id}'), // join from details flow
-                        child: const Text('Join'),
-                      ),
-                    ),
                   ],
                 ),
               ],

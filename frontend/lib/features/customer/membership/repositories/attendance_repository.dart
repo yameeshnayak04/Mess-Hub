@@ -1,3 +1,4 @@
+// lib/features/attendance/repositories/attendance_repository.dart
 import '../../../../core/api/dio_client.dart';
 
 class AttendanceRepository {
@@ -17,6 +18,7 @@ class AttendanceRepository {
     return res.data;
   }
 
+  // list of attendance entries for calendar
   Future<List<dynamic>> getMyCalendar({
     required String membershipId,
     int? month,

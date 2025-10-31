@@ -1,3 +1,4 @@
+// lib/features/customer/home/screens/customer_home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,7 +8,6 @@ import '../../../../core/widgets/loading_animation.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../providers/membership_provider.dart';
 import '../../../../models/membership.dart';
-import 'package:intl/intl.dart';
 
 class CustomerHomeScreen extends ConsumerWidget {
   const CustomerHomeScreen({super.key});
@@ -22,80 +22,142 @@ class CustomerHomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
-    final membershipsState = ref.watch(membershipProvider);
+    final membershipsState =
+        ref.watch(membershipProvider); // Watch the StateNotifierProvider
+
+    // Get user's first name, default to 'Customer'
+    final String userName = authState.maybeWhen(
+      data: (u) => u?.name.split(' ').first ?? 'Customer',
+      orElse: () => 'Customer',
+    );
 
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(140),
         child: Container(
+          // Match screenshot color
           decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF1976D2), Color(0xFF2196F3)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: Color(0xFF1976D2), // Solid blue from screenshot
           ),
-          padding: const EdgeInsets.fromLTRB(16, 48, 16, 16),
+          padding: EdgeInsets.fromLTRB(
+              16, MediaQuery.of(context).padding.top + 16, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
               Text(
-                  '${_greeting()}, ${ref.read(authProvider).maybeWhen(
-                        data: (u) => u?.name ?? 'User',
-                        orElse: () => 'User',
-                      )}',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600)),
+                '${_greeting()}, $userName',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24, // Match screenshot
+                    fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 6),
-              Text(DateFormat('EEEE, MMMM d').format(DateTime.now()),
-                  style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              // Match screenshot format (e.g., Friday, October 31)
+              Text(DateFormat('EEEE, MMMM dd').format(DateTime.now()),
+                  style: const TextStyle(
+                      color: Colors.white70, fontSize: 14)), // Match screenshot
             ],
           ),
         ),
       ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(membershipProvider.notifier).refresh(),
-        child: Consumer(
-          builder: (context, ref, _) {
-            final state = ref.watch(membershipProvider);
-            return state.when(
-              loading: () =>
-                  const LoadingAnimation(message: 'Loading memberships...'),
-              error: (e, _) => Center(child: Text('$e')),
-              data: (memberships) {
-                final activeCount =
-                    memberships.where((m) => m.status == 'Active').length;
-                return ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('My Memberships',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppTheme.lightOrange,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Text('$activeCount Active',
-                              style: const TextStyle(
-                                color: AppTheme.primaryOrange,
-                                fontWeight: FontWeight.w600,
-                              )),
+        child: membershipsState.when(
+          loading: () =>
+              const LoadingAnimation(message: 'Loading memberships...'),
+          error: (e, stack) => Center(
+            // Show error message nicely
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline,
+                      color: AppTheme.errorRed, size: 50),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Failed to load memberships',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    e.toString(), // Display the actual error
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppTheme.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          data: (memberships) {
+            final activeCount =
+                memberships.where((m) => m.status == 'Active').length;
+
+            // Use ListView.custom for empty state + list
+            return ListView.separated(
+              padding: const EdgeInsets.fromLTRB(
+                  16, 20, 16, 24), // Match screenshot padding
+              // Add 1 for the header row + 1 for the hint card
+              itemCount: memberships.length + 2,
+              separatorBuilder: (context, index) {
+                // No separator after header
+                if (index == 0) return const SizedBox(height: 16);
+                // No separator before hint card
+                if (index == memberships.length)
+                  return const SizedBox(height: 12);
+                // Separator between membership cards (which is just margin)
+                return const SizedBox(height: 0); // Cards have their own margin
+              },
+              itemBuilder: (context, index) {
+                // --- HEADER ---
+                if (index == 0) {
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'My Memberships',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 18,
+                            ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.blue[50],
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    for (final m in memberships) _membershipCard(context, m),
-                    const SizedBox(height: 12),
-                    _hintCard(),
-                  ],
-                );
+                        child: Text(
+                          '$activeCount Active',
+                          style: const TextStyle(
+                            color: Colors.blue,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                // --- HINT CARD (at the end) ---
+                if (index == memberships.length + 1) {
+                  return _hintCard();
+                }
+
+                // --- EMPTY STATE (if list is empty) ---
+                if (memberships.isEmpty) {
+                  // This is shown at index 1 if count is 0
+                  return _buildEmptyState(context);
+                }
+
+                // --- MEMBERSHIP CARD ---
+                // Adjust index to get from list
+                final membership = memberships[index - 1];
+                return _membershipCard(context, membership);
               },
             );
           },
@@ -104,8 +166,12 @@ class CustomerHomeScreen extends ConsumerWidget {
     );
   }
 
+  // Card for when no memberships are found
   Widget _buildEmptyState(BuildContext context) {
     return Card(
+      margin: const EdgeInsets.only(top: 8),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
@@ -131,133 +197,11 @@ class CustomerHomeScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () => context.go('/discover'),
-              icon: const Icon(Icons.explore),
+              icon: const Icon(Icons.explore_outlined),
               label: const Text('Discover Messes'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMembershipCard(
-    BuildContext context,
-    membership,
-    bool isActive,
-  ) {
-    final mess = membership.messObject;
-    final messName = mess != null ? mess.messName : 'Unknown Mess';
-    final messImage = mess?.messImage;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: isActive
-            ? () => context.go('/membership-dashboard/${membership.id}')
-            : null,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              // Mess Image
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryOrange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  image: messImage != null
-                      ? DecorationImage(
-                          image: NetworkImage(messImage),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
-                ),
-                child: messImage == null
-                    ? const Icon(
-                        Icons.restaurant,
-                        color: AppTheme.primaryOrange,
-                        size: 32,
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 16),
-              // Mess Details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      messName,
-                      style: Theme.of(context).textTheme.titleMedium,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      membership.planName,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppTheme.textSecondary,
-                          ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isActive
-                            ? AppTheme.successGreen.withOpacity(0.1)
-                            : AppTheme.warningYellow.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        membership.status,
-                        style: TextStyle(
-                          color: isActive
-                              ? AppTheme.successGreen
-                              : AppTheme.warningYellow,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (isActive)
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: AppTheme.textSecondary,
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHelpCard(BuildContext context) {
-    return Card(
-      color: AppTheme.lightOrange,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.info_outline,
-              color: AppTheme.primaryOrange,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Tap on any active membership to view details, mark attendance, and more',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppTheme.darkOrange,
-                    ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryOrange,
+                foregroundColor: Colors.white,
               ),
             ),
           ],
@@ -266,58 +210,79 @@ class CustomerHomeScreen extends ConsumerWidget {
     );
   }
 
+  // This is the card widget matching the screenshot
   Widget _membershipCard(BuildContext context, Membership m) {
-    final mess = m.messObject;
+    final mess = m.messObject; // This is an enriched Mess object
     final joined = m.joinedDate != null
         ? DateFormat('MMM d, y').format(m.joinedDate!)
         : '-';
+    final bool isActive = m.status == 'Active';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      elevation: 1, // Subtle shadow
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => context.go('/membership/${m.id}'),
+        // Navigate to dashboard only if active
+        onTap:
+            isActive ? () => context.go('/membership-dashboard/${m.id}') : null,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+          padding: const EdgeInsets.fromLTRB(16, 16, 12, 16), // Match padding
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Icon
               Container(
                 decoration: BoxDecoration(
-                  color: AppTheme.lightOrange,
+                  color: Colors.blue[50], // Match screenshot
                   borderRadius: BorderRadius.circular(10),
                 ),
-                padding: const EdgeInsets.all(10),
-                child:
-                    const Icon(Icons.flatware, color: AppTheme.primaryOrange),
+                padding: const EdgeInsets.all(12), // Match screenshot
+                child: const Icon(Icons.flatware,
+                    color: Colors.blue, size: 28), // Match screenshot
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
+              // Details
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Mess Name & Rating
                     Row(
                       children: [
                         Expanded(
                           child: Text(
                             mess?.messName ?? 'Mess',
-                            style: Theme.of(context).textTheme.titleMedium,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(
+                                    fontWeight:
+                                        FontWeight.w600), // Match screenshot
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (mess?.averageRating != null) ...[
+                        // *** FIX: Add null check for mess object as well ***
+                        if (mess?.averageRating != null &&
+                            mess!.averageRating! > 0) ...[
                           const Icon(Icons.star,
-                              size: 16, color: Color(0xFFFFC107)),
+                              size: 18,
+                              color: Color(0xFFFFC107)), // Match screenshot
                           const SizedBox(width: 4),
                           Text(
-                            mess!.averageRating!.toStringAsFixed(1),
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                            mess.averageRating!.toStringAsFixed(1),
+                            style:
+                                Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ), // Match screenshot
                           ),
                         ],
                       ],
                     ),
                     const SizedBox(height: 6),
+                    // Plan & Status Chips
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -327,25 +292,26 @@ class CustomerHomeScreen extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Text('₹${m.billingRate.toStringAsFixed(0)}/month',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text('Member since: $joined',
+                    // Price
+                    Text('₹${m.billingRate.toStringAsFixed(0)}/month',
                         style: Theme.of(context)
                             .textTheme
-                            .bodySmall
-                            ?.copyWith(color: Colors.black54)),
+                            .bodyLarge // Match screenshot
+                            ?.copyWith(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    // Member Since
+                    Text('Member since: $joined',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppTheme.textSecondary)), // Match screenshot
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.black45),
+              // Chevron
+              if (isActive)
+                const Icon(Icons.chevron_right, color: Colors.black45)
+              else
+                // Maintain space even if inactive
+                const SizedBox(width: 24),
             ],
           ),
         ),
@@ -353,60 +319,67 @@ class CustomerHomeScreen extends ConsumerWidget {
     );
   }
 
+  // Status Chip (Active, Pending)
   Widget _statusChip(String status) {
-    Color bg = Colors.grey.shade200;
-    Color fg = Colors.black87;
+    Color bg = AppTheme.borderColor;
+    Color fg = AppTheme.textSecondary;
     if (status == 'Active') {
-      bg = const Color(0xFFE6F4EA);
-      fg = const Color(0xFF1E8E3E);
+      bg = AppTheme.successGreen.withOpacity(0.1); // Match screenshot
+      fg = AppTheme.successGreen;
     } else if (status == 'Pending') {
-      bg = const Color(0xFFFFF4E5);
-      fg = const Color(0xFFB26A00);
+      bg = AppTheme.warningYellow.withOpacity(0.1); // Match screenshot
+      fg = AppTheme.warningYellow;
+    } else if (status == 'Inactive') {
+      bg = Colors.grey.shade200;
+      fg = Colors.grey.shade700;
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration:
-          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Smaller
+      decoration: BoxDecoration(
+          color: bg, borderRadius: BorderRadius.circular(6)), // Rounded
       child: Text(status,
-          style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
+          style:
+              TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: 12)),
     );
   }
 
+  // Plan Chip (Lunch Only, Dinner Only)
   Widget _planChip(String plan) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Smaller
       decoration: BoxDecoration(
-        color: AppTheme.lightOrange,
-        borderRadius: BorderRadius.circular(14),
+        color: Colors.blue[50], // Match screenshot
+        borderRadius: BorderRadius.circular(6), // Rounded
       ),
       child: Text(plan,
           style: const TextStyle(
-              color: AppTheme.primaryOrange, fontWeight: FontWeight.w600)),
+              color: Colors.blue, // Match screenshot
+              fontWeight: FontWeight.w600,
+              fontSize: 12)),
     );
   }
 
+  // Hint Card at the bottom
   Widget _hintCard() {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.blue[50], // Match screenshot
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.tips_and_updates, color: AppTheme.primaryOrange),
-          const SizedBox(width: 10),
+          Icon(Icons.tips_and_updates,
+              color: Colors.blue[700], size: 20), // Match screenshot
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               'Tap on any membership to view attendance, bills, apply for leave, and more.',
-              style: const TextStyle(color: Colors.black87),
+              style: TextStyle(
+                  color: Colors.blue[900], fontSize: 13), // Match screenshot
             ),
           ),
         ],
