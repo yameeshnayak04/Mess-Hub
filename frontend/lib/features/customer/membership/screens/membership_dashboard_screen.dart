@@ -5,8 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/membership_providers.dart';
 import '../providers/attendance_providers.dart';
-import '../repositories/attendance_repository.dart';
-import '../repositories/membership_repository.dart';
 
 class MembershipDashboardScreen extends ConsumerWidget {
   final String membershipId;

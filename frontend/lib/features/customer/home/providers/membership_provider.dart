@@ -2,7 +2,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/api/dio_client_provider.dart';
 import '../../../../models/membership.dart';
-import '../../../../models/mess.dart'; // Import Mess model
 import '../repositories/membership_repository.dart';
 
 final membershipRepositoryProvider = Provider<MembershipRepository>((ref) {

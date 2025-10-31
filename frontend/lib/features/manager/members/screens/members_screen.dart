@@ -1,318 +1,351 @@
+// lib/features/manager/members/screens/members_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../providers/manager_members_providers.dart';
 
 class MembersScreen extends ConsumerStatefulWidget {
   const MembersScreen({super.key});
-
   @override
   ConsumerState<MembersScreen> createState() => _MembersScreenState();
 }
 
 class _MembersScreenState extends ConsumerState<MembersScreen>
     with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final TextEditingController _searchController = TextEditingController();
+  late TabController _controller;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _controller = TabController(length: 3, vsync: this);
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
-    _searchController.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final pending = ref.watch(pendingMembersProvider);
+    final active = ref.watch(membersByStatusProvider('Active'));
+    final inactive = ref.watch(membersByStatusProvider('Inactive'));
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Members'),
         bottom: TabBar(
-          controller: _tabController,
+          controller: _controller,
           labelColor: AppTheme.primaryOrange,
           unselectedLabelColor: AppTheme.textSecondary,
           indicatorColor: AppTheme.primaryOrange,
           tabs: const [
             Tab(text: 'Pending'),
             Tab(text: 'Active'),
-            Tab(text: 'Inactive'),
+            Tab(text: 'Inactive')
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              ref.invalidate(pendingMembersProvider);
+              ref.invalidate(membersByStatusProvider('Active'));
+              ref.invalidate(membersByStatusProvider('Inactive'));
+            },
+          ),
+        ],
       ),
-      body: Column(
+      body: TabBarView(
+        controller: _controller,
         children: [
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search members...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          setState(() {
-                            _searchController.clear();
-                          });
-                        },
-                      )
-                    : null,
-              ),
-              onChanged: (value) {
-                setState(() {});
+          // Pending
+          pending.when(
+            loading: () => const Center(
+                child: CircularProgressIndicator(
+                    valueColor:
+                        AlwaysStoppedAnimation(AppTheme.primaryOrange))),
+            error: (e, st) => _ErrorRetry(
+                message: 'Failed to load pending members',
+                detail: e.toString(),
+                onRetry: () => ref.refresh(pendingMembersProvider)),
+            data: (list) => _PendingList(
+              list: list.cast<Map<String, dynamic>>(),
+              onApprove: (id) async {
+                try {
+                  await ref
+                      .read(managerMembersRepositoryProvider)
+                      .approveMembership(id);
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Membership approved'),
+                      backgroundColor: AppTheme.successGreen));
+                  ref.invalidate(pendingMembersProvider);
+                  ref.invalidate(membersByStatusProvider('Active'));
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Failed: $e'),
+                      backgroundColor: AppTheme.errorRed));
+                }
+              },
+              onReject: (id) async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Reject Membership'),
+                    content: const Text(
+                        'Are you sure you want to reject this membership?'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel')),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: TextButton.styleFrom(
+                            foregroundColor: AppTheme.errorRed),
+                        child: const Text('Reject'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm != true) return;
+                try {
+                  await ref
+                      .read(managerMembersRepositoryProvider)
+                      .rejectMembership(id);
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Membership rejected'),
+                      backgroundColor: AppTheme.warningYellow));
+                  ref.invalidate(pendingMembersProvider);
+                  ref.invalidate(membersByStatusProvider('Inactive'));
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Failed: $e'),
+                      backgroundColor: AppTheme.errorRed));
+                }
               },
             ),
           ),
 
-          // Tab Content
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildPendingTab(),
-                _buildActiveTab(),
-                _buildInactiveTab(),
-              ],
+          // Active
+          active.when(
+            loading: () => const Center(
+                child: CircularProgressIndicator(
+                    valueColor:
+                        AlwaysStoppedAnimation(AppTheme.primaryOrange))),
+            error: (e, st) => _ErrorRetry(
+                message: 'Failed to load active members',
+                detail: e.toString(),
+                onRetry: () => ref.refresh(membersByStatusProvider('Active'))),
+            data: (list) => _MemberList(
+              list: list.cast<Map<String, dynamic>>(),
+              onTap: (m) =>
+                  context.push('/manager/member/${m['_id']}', extra: m),
+            ),
+          ),
+
+          // Inactive
+          inactive.when(
+            loading: () => const Center(
+                child: CircularProgressIndicator(
+                    valueColor:
+                        AlwaysStoppedAnimation(AppTheme.primaryOrange))),
+            error: (e, st) => _ErrorRetry(
+                message: 'Failed to load inactive members',
+                detail: e.toString(),
+                onRetry: () =>
+                    ref.refresh(membersByStatusProvider('Inactive'))),
+            data: (list) => _MemberList(
+              list: list.cast<Map<String, dynamic>>(),
+              onTap: (m) =>
+                  context.push('/manager/member/${m['_id']}', extra: m),
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildPendingTab() {
-    // Sample data - replace with actual API data
-    final members = [
-      {
-        'id': '1',
-        'name': 'Rahul Kumar',
-        'phone': '9876543210',
-        'plan': 'Lunch + Dinner',
-        'joinedDate': DateTime.now().subtract(const Duration(days: 2)),
-      },
-      {
-        'id': '2',
-        'name': 'Priya Sharma',
-        'phone': '9876543211',
-        'plan': 'Lunch Only',
-        'joinedDate': DateTime.now().subtract(const Duration(days: 1)),
-      },
-    ];
+class _PendingList extends StatelessWidget {
+  final List<Map<String, dynamic>> list;
+  final Future<void> Function(String id) onApprove;
+  final Future<void> Function(String id) onReject;
+  const _PendingList(
+      {required this.list, required this.onApprove, required this.onReject});
 
-    if (members.isEmpty) {
-      return _buildEmptyState('No pending requests');
-    }
-
+  @override
+  Widget build(BuildContext context) {
+    if (list.isEmpty) return const _EmptyState(message: 'No pending requests');
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: members.length,
-      itemBuilder: (context, index) {
-        final member = members[index];
-        return _buildPendingMemberCard(member);
-      },
-    );
-  }
-
-  Widget _buildActiveTab() {
-    // Sample data - replace with actual API data
-    final members = [
-      {
-        'id': '3',
-        'name': 'Amit Singh',
-        'phone': '9876543212',
-        'plan': 'Lunch + Dinner',
-        'paymentStatus': 'Paid',
-      },
-      {
-        'id': '4',
-        'name': 'Sneha Patel',
-        'phone': '9876543213',
-        'plan': 'Dinner Only',
-        'paymentStatus': 'Due',
-      },
-    ];
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: members.length,
-      itemBuilder: (context, index) {
-        final member = members[index];
-        return _buildActiveMemberCard(member);
-      },
-    );
-  }
-
-  Widget _buildInactiveTab() {
-    return _buildEmptyState('No inactive members');
-  }
-
-  Widget _buildPendingMemberCard(Map<String, dynamic> member) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
+      padding: const EdgeInsets.all(16),
+      itemCount: list.length,
+      itemBuilder: (context, i) {
+        final m = list[i];
+        final user = m['user'] as Map<String, dynamic>?;
+        final plan = m['planName'] ?? 'Plan';
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
                 CircleAvatar(
-                  backgroundColor: AppTheme.primaryOrange.withOpacity(0.1),
-                  child: Text(
-                    member['name'][0].toUpperCase(),
-                    style: const TextStyle(
-                      color: AppTheme.primaryOrange,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  backgroundColor: AppTheme.infoBlue.withOpacity(0.1),
+                  child: Text((user?['name'] ?? 'U')[0].toUpperCase(),
+                      style: const TextStyle(color: AppTheme.infoBlue)),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        member['name'],
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        member['phone'],
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.textSecondary,
-                            ),
-                      ),
-                    ],
-                  ),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(user?['name'] ?? 'Unknown',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 2),
+                        Text(user?['phone'] ?? 'N/A',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: AppTheme.textSecondary)),
+                      ]),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Chip(
-                  label: Text(member['plan']),
-                  backgroundColor: AppTheme.lightOrange,
-                  labelStyle: const TextStyle(
-                    color: AppTheme.primaryOrange,
-                    fontSize: 12,
-                  ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: AppTheme.warningYellow.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: AppTheme.warningYellow)),
+                  child: const Text('Pending',
+                      style: TextStyle(
+                          color: AppTheme.warningYellow,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600)),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
+              ]),
+              const SizedBox(height: 12),
+              Text('Requested Plan: $plan'),
+              const SizedBox(height: 16),
+              Row(children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () {
-                      // Reject logic
-                    },
+                    onPressed: () => onReject(m['_id'] as String),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.errorRed,
-                      side: const BorderSide(color: AppTheme.errorRed),
-                    ),
+                        foregroundColor: AppTheme.errorRed,
+                        side: const BorderSide(color: AppTheme.errorRed)),
                     child: const Text('Reject'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      // Approve logic
-                    },
-                    child: const Text('Approve'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+                    child: ElevatedButton(
+                        onPressed: () => onApprove(m['_id'] as String),
+                        child: const Text('Approve'))),
+              ]),
+            ]),
+          ),
+        );
+      },
     );
   }
+}
 
-  Widget _buildActiveMemberCard(Map<String, dynamic> member) {
-    final paymentStatus = member['paymentStatus'] as String;
-    final isPaid = paymentStatus == 'Paid';
+class _MemberList extends StatelessWidget {
+  final List<Map<String, dynamic>> list;
+  final void Function(Map<String, dynamic>) onTap;
+  const _MemberList({required this.list, required this.onTap});
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: AppTheme.primaryOrange.withOpacity(0.1),
-          child: Text(
-            member['name'][0].toUpperCase(),
-            style: const TextStyle(
-              color: AppTheme.primaryOrange,
-              fontWeight: FontWeight.bold,
+  @override
+  Widget build(BuildContext context) {
+    if (list.isEmpty) return const _EmptyState(message: 'No members found');
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: list.length,
+      itemBuilder: (context, i) {
+        final m = list[i];
+        final user = m['user'] as Map<String, dynamic>?;
+        final status = m['status'] as String? ?? 'Unknown';
+        final color =
+            status == 'Active' ? AppTheme.successGreen : AppTheme.textSecondary;
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            onTap: () => onTap(m),
+            leading: CircleAvatar(
+              backgroundColor: color.withOpacity(0.1),
+              child: Text((user?['name'] ?? 'U')[0].toUpperCase(),
+                  style: TextStyle(color: color)),
+            ),
+            title: Text(user?['name'] ?? 'Unknown'),
+            subtitle: Text(user?['phone'] ?? 'N/A'),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4)),
+              child: Text(status,
+                  style: TextStyle(
+                      color: color, fontSize: 12, fontWeight: FontWeight.w600)),
             ),
           ),
-        ),
-        title: Text(member['name']),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(member['phone']),
-            const SizedBox(height: 4),
-            Text(
-              member['plan'],
-              style: const TextStyle(fontSize: 12),
-            ),
-          ],
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: isPaid
-                ? AppTheme.successGreen.withOpacity(0.1)
-                : AppTheme.errorRed.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: isPaid ? AppTheme.successGreen : AppTheme.errorRed,
-            ),
-          ),
-          child: Text(
-            paymentStatus,
-            style: TextStyle(
-              color: isPaid ? AppTheme.successGreen : AppTheme.errorRed,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        onTap: () {
-          // Navigate to member details
-        },
-      ),
+        );
+      },
     );
   }
+}
 
-  Widget _buildEmptyState(String message) {
+class _EmptyState extends StatelessWidget {
+  final String message;
+  const _EmptyState({required this.message});
+  @override
+  Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.people_outline,
-            size: 80,
-            color: AppTheme.textSecondary.withOpacity(0.5),
-          ),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(Icons.people_outline,
+            size: 80, color: AppTheme.textSecondary.withOpacity(0.5)),
+        const SizedBox(height: 16),
+        Text(message,
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(color: AppTheme.textSecondary)),
+      ]),
+    );
+  }
+}
+
+class _ErrorRetry extends StatelessWidget {
+  final String message;
+  final String detail;
+  final VoidCallback onRetry;
+  const _ErrorRetry(
+      {required this.message, required this.detail, required this.onRetry});
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Icon(Icons.error_outline, size: 64, color: AppTheme.errorRed),
           const SizedBox(height: 16),
-          Text(
-            message,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
-          ),
-        ],
+          Text(message, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(detail,
+              style: Theme.of(context).textTheme.bodySmall,
+              textAlign: TextAlign.center),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry')),
+        ]),
       ),
     );
   }

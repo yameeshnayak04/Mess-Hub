@@ -18,5 +18,7 @@ router.post('/kiosk/daily', protect, authorize('Manager'), validate(kioskDailySc
 
 // NEW: Manager route for single member attendance
 router.get('/member/:membershipId', protect, authorize('Manager'), attendanceController.getMemberAttendance);
+router.get('/member-calendar/:membershipId', protect, authorize('Manager'), attendanceController.getMemberAttendanceForManager);
+
 
 module.exports = router;

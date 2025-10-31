@@ -1,12 +1,6 @@
 import 'dart:convert';
-
-import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
-
 import '../../../../core/api/dio_client.dart';
-
-import '../../../../core/api/dio_client.dart';
-import 'dart:io'; // Import dart:io for File
 import 'package:dio/dio.dart'; // Import Dio for FormData and MultipartFile
 import '../../../../models/mess.dart'; // Import Mess model for typing
 

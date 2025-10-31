@@ -1,11 +1,8 @@
 // lib/features/manager/create_mess/providers/create_mess_provider.dart
-import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geocoding/geocoding.dart' hide Location;
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:mess_management_app/features/auth/providers/auth_provider.dart';
-import '../../../../models/mess.dart'; // Import Mess model
 import '../../../../models/user.dart'; // Import Location model
 import '../repositories/mess_repository.dart'; // Import MessRepository
 import '../../../../core/api/dio_client_provider.dart'; // Import dioClientProvider
@@ -124,7 +121,7 @@ class CreateMessNotifier extends StateNotifier<CreateMessState> {
     try {
       final plans = (state.formData['plans'] as List?)
           ?.where((p) => p is Map && p['name'] != null && p['rate'] != null)
-          ?.toList();
+          .toList();
 
       if (plans == null || plans.isEmpty) {
         throw 'Please add at least one monthly plan.';

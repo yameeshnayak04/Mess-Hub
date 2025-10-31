@@ -1,12 +1,15 @@
+// lib/features/manager/dashboard/providers/dashboard_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/api/dio_client_provider.dart';
 import '../../../../models/dashboard_stats.dart';
 import '../repositories/dashboard_repository.dart';
 
-final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
+// Repo
+final dashboardRepositoryProvider = Provider((ref) {
   return DashboardRepository(ref.watch(dioClientProvider));
 });
 
+// Stats
 final dashboardStatsProvider =
     StateNotifierProvider<DashboardStatsNotifier, AsyncValue<DashboardStats>>(
         (ref) {
@@ -15,7 +18,6 @@ final dashboardStatsProvider =
 
 class DashboardStatsNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
   final DashboardRepository _repository;
-
   DashboardStatsNotifier(this._repository) : super(const AsyncValue.loading()) {
     loadStats();
   }
@@ -25,24 +27,33 @@ class DashboardStatsNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
     try {
       final stats = await _repository.getDashboardStats();
       state = AsyncValue.data(stats);
-    } catch (e, stack) {
-      state = AsyncValue.error(e, stack);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
     }
   }
 
-  Future<void> refresh() async {
-    await loadStats();
-  }
+  Future<void> refresh() async => loadStats();
 
-  Future<List<dynamic>> getMembersEating() async {
-    return await _repository.getMembersEating();
-  }
-
-  Future<List<dynamic>> getMembersOnLeave() async {
-    return await _repository.getMembersOnLeave();
-  }
-
-  Future<List<dynamic>> getMembersSkipped() async {
-    return await _repository.getMembersSkipped();
-  }
+  // Drill-down helpers
+  Future<List<dynamic>> getMembersEating() => _repository.getMembersEating();
+  Future<List<dynamic>> getMembersOnLeave() => _repository.getMembersOnLeave();
+  Future<List<dynamic>> getMembersSkipped() => _repository.getMembersSkipped();
 }
+
+// Pending approvals
+final pendingApprovalsProvider =
+    FutureProvider.autoDispose<List<dynamic>>((ref) async {
+  return ref.watch(dashboardRepositoryProvider).getPendingApprovals();
+});
+
+// Pending join requests
+final pendingJoinRequestsProvider =
+    FutureProvider.autoDispose<List<dynamic>>((ref) async {
+  return ref.watch(dashboardRepositoryProvider).getPendingJoinRequests();
+});
+
+// Today’s menu
+final todaysMenuProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
+  return ref.watch(dashboardRepositoryProvider).getTodaysMenu();
+});

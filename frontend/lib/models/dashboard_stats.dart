@@ -1,12 +1,12 @@
 // lib/models/dashboard_stats.dart
 class DashboardStats {
-  final String liveStatus; // e.g., "Open" | "Closed"
-  final String currentMeal; // "Lunch" | "Dinner" | "-"
+  final String liveStatus; // "Open" | "Closed"
+  final String currentMeal; // "Lunch" | "Dinner" | "None"
   final int eatingNow;
   final int onLeave;
   final int notEating;
   final int totalActiveMembers;
-  final int? dailyMembers; // present if serviceType supports daily
+  final int? dailyMembers; // present for 'Both Daily & Monthly'
 
   DashboardStats({
     required this.liveStatus,

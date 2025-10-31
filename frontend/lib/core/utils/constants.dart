@@ -30,26 +30,38 @@ class StorageKeys {
   static const String userData = 'user_data';
 }
 
+// lib/core/utils/constants.dart (excerpt)
 class RouteNames {
-  static const String splash = '/';
+  // Auth
+  static const String splash = '/splash';
   static const String login = '/login';
   static const String register = '/register';
-  static const String home = '/home';
+
+  // Customer tabs
+  static const String home = '/';
   static const String discover = '/discover';
   static const String profile = '/profile';
+
+  // Customer subroutes
   static const String messDetails = '/mess-details/:id';
   static const String membershipDashboard = '/membership-dashboard/:id';
   static const String attendanceCalendar = '/attendance-calendar/:id';
   static const String applyLeave = '/apply-leave/:id';
   static const String billing = '/billing/:id';
 
-  // Manager routes
-  static const String managerHome = '/manager-home';
-  static const String managerMembers = '/manager-members';
-  static const String managerPayments = '/manager-payments';
-  static const String managerKiosk = '/manager-kiosk';
-  static const String kioskMode = '/kiosk-mode';
-  static const String managerMenu = '/manager-menu';
-  static const String createMessWizard = '/create-mess-wizard';
-  static const String memberDetails = '/manager-member-details/:id';
+  // Manager tabs
+  static const String managerHome = '/manager';
+  static const String managerMembers = '/manager/members';
+  static const String managerPayments = '/manager/payments';
+  // Back-compat alias to fix "managerBillingApprovals" not defined
+  static const String managerBillingApprovals = managerPayments;
+
+  static const String kioskLauncher = '/manager/kiosk';
+  static const String kioskMode = '/manager/kiosk/mode';
+  static const String managerMenu = '/manager/menu-editor';
+  static const String createMessWizard = '/manager/create-mess';
+
+  // Helper
+  static String managerMemberDetails(String membershipId) =>
+      '/manager/member/$membershipId';
 }

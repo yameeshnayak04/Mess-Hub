@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/primary_button.dart';
 import '../providers/membership_providers.dart';
-import '../repositories/leave_repository.dart';
 import '../providers/leave_providers.dart';
 
 class ApplyLeaveScreen extends ConsumerStatefulWidget {

@@ -8,7 +8,6 @@ import '../../../../core/widgets/loading_animation.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../providers/membership_provider.dart';
 import '../../../../models/membership.dart';
-import '../../../../models/mess.dart'; // Import Mess model
 
 class CustomerHomeScreen extends ConsumerWidget {
   const CustomerHomeScreen({super.key});

@@ -4,6 +4,7 @@ const Bill = require('../models/Bill');
 const Attendance = require('../models/Attendance'); // for summaries
 const Menu = require('../models/Menu');             // today’s menu
 const { getStartAndEndOfMonth } = require('../utils/billCalculation'); // month window
+const Leave = require('../models/Leave');
 
 // @desc   Get membership details for customer dashboard
 // @route  GET /api/membership/details/:membershipId

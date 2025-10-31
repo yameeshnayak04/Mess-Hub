@@ -7,7 +7,6 @@ import 'dart:io';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/primary_button.dart';
 import '../providers/billing_providers.dart';
-import '../repositories/billing_repository.dart';
 
 class BillingScreen extends ConsumerWidget {
   final String membershipId;

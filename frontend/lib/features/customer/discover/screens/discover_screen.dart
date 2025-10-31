@@ -10,7 +10,6 @@ import '../../../../core/utils/constants.dart';
 import '../../../../core/widgets/loading_animation.dart';
 import '../../../../models/mess.dart';
 import '../providers/discover_provider.dart';
-import '../../../../core/utils/constants.dart'; // Import constants
 
 class DiscoverScreen extends ConsumerStatefulWidget {
   const DiscoverScreen({super.key});
