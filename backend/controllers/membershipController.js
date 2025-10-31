@@ -318,9 +318,12 @@ exports.getMyMemberships = async (req, res, next) => {
   try {
     const memberships = await Membership.find({
       user: req.user.id,
-      status: { $in: ['Pending', 'Active'] }
+      // *** FIX: Also show 'Inactive' memberships so users can see their history ***
+      // You can filter this on the frontend if needed
+      status: { $in: ['Pending', 'Active', 'Inactive'] } 
     })
-      .populate('mess', 'messName messImage address city contactPhone serviceType cuisine timings')
+      // *** FIX: Populate *all* required fields from the Mess model ***
+      .populate('mess', 'messName messImage address city contactPhone serviceType cuisine timings location plans rules tiffinService basicThaliDetails')
       .sort({ createdAt: -1 });
 
     res.status(200).json({

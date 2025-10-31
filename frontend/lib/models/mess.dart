@@ -13,8 +13,8 @@ class Mess {
   final String serviceType; // 'Monthly Only' | 'Both Daily & Monthly'
   final String cuisine; // 'Veg' | 'Non-Veg' | 'Both'
   final int? maxCapacity;
-  final bool tiffinService; // NEW: required in backend
-  final String basicThaliDetails; // NEW: required in backend
+  final bool tiffinService;
+  final String basicThaliDetails;
   final MessTimings timings; // strings "HH:mm"
   final List<MessPlan> plans; // strong type
   final double?
@@ -47,55 +47,55 @@ class Mess {
   });
 
   factory Mess.fromJson(Map<String, dynamic> json) {
+    // Helper to safely parse lists, returning empty list if null
+    List<T> _parseList<T>(
+        dynamic jsonList, T Function(Map<String, dynamic>) fromJson) {
+      if (jsonList is List) {
+        return jsonList
+            .where((e) => e is Map<String, dynamic>) // Ensure elements are maps
+            .map((e) => fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+      return []; // Return empty list if jsonList is null or not a List
+    }
+
     return Mess(
       id: json['_id'] as String,
       messName: json['messName'] as String,
       messImage: json['messImage'] as String?,
-      location: Location.fromJson(json['location'] as Map<String, dynamic>),
-      address: json['address'] as String,
-      city: json['city'] as String,
-      contactPhone: json['contactPhone'] as String,
-      serviceType: json['serviceType'] as String,
-      cuisine: json['cuisine'] as String,
+      location: json['location'] != null
+          ? Location.fromJson(json['location'] as Map<String, dynamic>)
+          : Location(type: 'Point', coordinates: [0, 0]), // Default location
+      address: json['address'] as String? ?? 'N/A',
+      city: json['city'] as String? ?? 'N/A',
+      contactPhone: json['contactPhone'] as String? ?? 'N/A',
+      serviceType: json['serviceType'] as String? ?? 'N/A',
+      cuisine: json['cuisine'] as String? ?? 'N/A',
       maxCapacity: json['maxCapacity'] as int?,
       tiffinService: (json['tiffinService'] as bool?) ?? false,
       basicThaliDetails: json['basicThaliDetails'] as String? ?? '',
-      timings: MessTimings.fromJson(json['timings'] as Map<String, dynamic>),
-      plans: (json['plans'] as List)
-          .map((e) => MessPlan.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      timings: json['timings'] != null
+          ? MessTimings.fromJson(json['timings'] as Map<String, dynamic>)
+          : MessTimings(
+              // Default timings
+              lunch: MealTiming(start: '00:00', end: '00:00'),
+              dinner: MealTiming(start: '00:00', end: '00:00')),
+      plans: _parseList(json['plans'], MessPlan.fromJson), // Use safe parser
       dailyThaliRate: (json['dailyThaliRate'] as num?)?.toDouble(),
-      rules: MessRules.fromJson(json['rules'] as Map<String, dynamic>),
+      rules: json['rules'] != null
+          ? MessRules.fromJson(json['rules'] as Map<String, dynamic>)
+          : MessRules(
+              // Default rules
+              minLeaveDaysForRebate: 99,
+              rebatePerThali: 0,
+              skipAllowancePercent: 0),
       averageRating: (json['averageRating'] as num?)?.toDouble(),
       reviewCount: json['reviewCount'] as int?,
       distance: (json['distance'] as num?)?.toDouble(),
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      '_id': id,
-      'messName': messName,
-      if (messImage != null) 'messImage': messImage,
-      'location': location.toJson(),
-      'address': address,
-      'city': city,
-      'contactPhone': contactPhone,
-      'serviceType': serviceType,
-      'cuisine': cuisine,
-      if (maxCapacity != null) 'maxCapacity': maxCapacity,
-      'tiffinService': tiffinService,
-      'basicThaliDetails': basicThaliDetails,
-      'timings': timings.toJson(),
-      'plans': plans.map((p) => p.toJson()).toList(),
-      if (dailyThaliRate != null) 'dailyThaliRate': dailyThaliRate,
-      'rules': rules.toJson(),
-      if (averageRating != null) 'averageRating': averageRating,
-      if (reviewCount != null) 'reviewCount': reviewCount,
-      if (distance != null) 'distance': distance,
-    };
-  }
-
+  // Add copyWith
   Mess copyWith({
     String? id,
     String? messName,
@@ -139,6 +139,30 @@ class Mess {
       distance: distance ?? this.distance,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        '_id': id,
+        'messName': messName,
+        // Only include optional fields if they are not null
+        if (messImage != null) 'messImage': messImage,
+        'location': location.toJson(), // Assumes Location model has toJson()
+        'address': address,
+        'city': city,
+        'contactPhone': contactPhone,
+        'serviceType': serviceType,
+        'cuisine': cuisine,
+        if (maxCapacity != null) 'maxCapacity': maxCapacity,
+        'tiffinService': tiffinService,
+        'basicThaliDetails': basicThaliDetails,
+        'timings': timings.toJson(),
+        // Convert list of MessPlan objects to a list of maps
+        'plans': plans.map((e) => e.toJson()).toList(),
+        if (dailyThaliRate != null) 'dailyThaliRate': dailyThaliRate,
+        'rules': rules.toJson(),
+        if (averageRating != null) 'averageRating': averageRating,
+        if (reviewCount != null) 'reviewCount': reviewCount,
+        if (distance != null) 'distance': distance,
+      };
 }
 
 class MessTimings {
@@ -148,9 +172,15 @@ class MessTimings {
   MessTimings({required this.lunch, required this.dinner});
 
   factory MessTimings.fromJson(Map<String, dynamic> json) {
+    // *** FIX: Add null checks before casting ***
+    final defaultTiming = MealTiming(start: '00:00', end: '00:00');
     return MessTimings(
-      lunch: MealTiming.fromJson(json['lunch'] as Map<String, dynamic>),
-      dinner: MealTiming.fromJson(json['dinner'] as Map<String, dynamic>),
+      lunch: json['lunch'] != null
+          ? MealTiming.fromJson(json['lunch'] as Map<String, dynamic>)
+          : defaultTiming,
+      dinner: json['dinner'] != null
+          ? MealTiming.fromJson(json['dinner'] as Map<String, dynamic>)
+          : defaultTiming,
     );
   }
 
@@ -168,8 +198,8 @@ class MealTiming {
 
   factory MealTiming.fromJson(Map<String, dynamic> json) {
     return MealTiming(
-      start: json['start'] as String,
-      end: json['end'] as String,
+      start: json['start'] as String? ?? 'N/A', // Add defaults
+      end: json['end'] as String? ?? 'N/A', // Add defaults
     );
   }
 
@@ -179,6 +209,8 @@ class MealTiming {
 class MessPlan {
   final String name;
   final double rate;
+  // Add _id if it exists in your schema
+  // final String? id;
 
   MessPlan({required this.name, required this.rate});
 
@@ -209,8 +241,8 @@ class MessRules {
 
   factory MessRules.fromJson(Map<String, dynamic> json) {
     return MessRules(
-      minLeaveDaysForRebate: json['minLeaveDaysForRebate'] as int,
-      rebatePerThali: (json['rebatePerThali'] as num).toDouble(),
+      minLeaveDaysForRebate: json['minLeaveDaysForRebate'] as int? ?? 99,
+      rebatePerThali: (json['rebatePerThali'] as num?)?.toDouble() ?? 0,
       skipAllowancePercent:
           (json['skipAllowancePercent'] as num?)?.toDouble() ?? 0,
       securityDeposit: (json['securityDeposit'] as num?)?.toDouble(),
