@@ -7,7 +7,6 @@ import '../providers/manager_payments_providers.dart';
 
 class PaymentsScreen extends ConsumerStatefulWidget {
   const PaymentsScreen({super.key});
-
   @override
   ConsumerState<PaymentsScreen> createState() => _PaymentsScreenState();
 }
@@ -16,7 +15,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  // Filters for history
+  // single, stable filter used by the family provider
+  late PaymentsHistoryFilter _filter;
+
+  // local UI selections (kept in sync with _filter)
   String? _statusFilter;
   int? _monthFilter;
   int? _yearFilter;
@@ -25,7 +27,8 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
+    _filter = const PaymentsHistoryFilter(page: 1, limit: 20);
   }
 
   @override
@@ -34,21 +37,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
     super.dispose();
   }
 
-  PaymentsHistoryFilter _currentFilter() {
-    return PaymentsHistoryFilter(
-      status: _statusFilter,
-      month: _monthFilter,
-      year: _yearFilter,
-      query: _searchQuery,
-      page: 1,
-      limit: 20,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final pending = ref.watch(pendingApprovalsProvider);
-    final history = ref.watch(paymentsHistoryProvider(_currentFilter()));
+    final history = ref.watch(paymentsHistoryProvider(_filter));
 
     return Scaffold(
       appBar: AppBar(
@@ -59,6 +51,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
           unselectedLabelColor: AppTheme.textSecondary,
           indicatorColor: AppTheme.primaryOrange,
           tabs: const [
+            Tab(text: 'Due Payments'),
             Tab(text: 'Pending Approvals'),
             Tab(text: 'Payment History'),
           ],
@@ -72,8 +65,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
+              // invalidate all three tabs once
+              ref.invalidate(dueBillsProvider);
               ref.invalidate(pendingApprovalsProvider);
-              ref.invalidate(paymentsHistoryProvider(_currentFilter()));
+              ref.invalidate(paymentsHistoryProvider(_filter));
             },
           ),
         ],
@@ -81,22 +76,54 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
+          // Dues
+          ref.watch(dueBillsProvider).when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, st) => _ErrorRetry(
+                  message: 'Failed to load dues',
+                  detail: e.toString(),
+                  onRetry: () => ref.invalidate(dueBillsProvider),
+                ),
+                data: (list) {
+                  if (list.isEmpty) {
+                    return const _EmptyState(message: 'No dues found');
+                  }
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      ref.invalidate(dueBillsProvider);
+                    },
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: list.length,
+                      itemBuilder: (context, i) => _HistoryBillTile(
+                          bill: list[i] as Map<String, dynamic>),
+                    ),
+                  );
+                },
+              ),
+
           // Pending approvals
           pending.when(
             loading: () => const Center(
-                child: CircularProgressIndicator(
-                    valueColor:
-                        AlwaysStoppedAnimation(AppTheme.primaryOrange))),
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(AppTheme.primaryOrange),
+              ),
+            ),
             error: (e, st) => _ErrorRetry(
-                message: 'Failed to load pending approvals',
-                detail: e.toString(),
-                onRetry: () => ref.refresh(pendingApprovalsProvider)),
+              message: 'Failed to load pending approvals',
+              detail: e.toString(),
+              onRetry: () => ref.invalidate(pendingApprovalsProvider),
+            ),
             data: (list) {
-              if (list.isEmpty)
-                return _EmptyState(message: 'No pending payment approvals');
+              if (list.isEmpty) {
+                return const _EmptyState(
+                    message: 'No pending payment approvals');
+              }
               return RefreshIndicator(
                 color: AppTheme.primaryOrange,
-                onRefresh: () async => ref.refresh(pendingApprovalsProvider),
+                onRefresh: () async {
+                  ref.invalidate(pendingApprovalsProvider);
+                },
                 child: ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: list.length,
@@ -111,7 +138,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
             },
           ),
 
-          // History with filters
+          // History with filters (uses stable _filter)
           Column(
             children: [
               _HistoryFilters(
@@ -124,33 +151,46 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
                     _monthFilter = month;
                     _yearFilter = year;
                     _searchQuery = query;
+                    _filter = _filter.copyWith(
+                      status: status,
+                      month: month,
+                      year: year,
+                      query: query,
+                      page: 1,
+                    );
                   });
-                  ref.invalidate(paymentsHistoryProvider(_currentFilter()));
+                  ref.invalidate(paymentsHistoryProvider(_filter));
                 },
               ),
               Expanded(
                 child: history.when(
                   loading: () => const Center(
-                      child: CircularProgressIndicator(
-                          valueColor:
-                              AlwaysStoppedAnimation(AppTheme.primaryOrange))),
+                    child: CircularProgressIndicator(
+                      valueColor:
+                          AlwaysStoppedAnimation(AppTheme.primaryOrange),
+                    ),
+                  ),
                   error: (e, st) => _ErrorRetry(
-                      message: 'Failed to load history',
-                      detail: e.toString(),
-                      onRetry: () => ref
-                          .refresh(paymentsHistoryProvider(_currentFilter()))),
+                    message: 'Failed to load history',
+                    detail: e.toString(),
+                    onRetry: () =>
+                        ref.invalidate(paymentsHistoryProvider(_filter)),
+                  ),
                   data: (list) {
-                    if (list.isEmpty)
-                      return _EmptyState(message: 'No records found');
+                    if (list.isEmpty) {
+                      return const _EmptyState(message: 'No records found');
+                    }
                     return RefreshIndicator(
                       color: AppTheme.primaryOrange,
-                      onRefresh: () async => ref
-                          .refresh(paymentsHistoryProvider(_currentFilter())),
+                      onRefresh: () async {
+                        ref.invalidate(paymentsHistoryProvider(_filter));
+                      },
                       child: ListView.builder(
                         padding: const EdgeInsets.all(16),
                         itemCount: list.length,
                         itemBuilder: (context, index) => _HistoryBillTile(
-                            bill: list[index] as Map<String, dynamic>),
+                          bill: list[index] as Map<String, dynamic>,
+                        ),
                       ),
                     );
                   },
@@ -173,7 +213,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
             backgroundColor: AppTheme.successGreen),
       );
       ref.invalidate(pendingApprovalsProvider);
-      ref.invalidate(paymentsHistoryProvider(_currentFilter()));
+      ref.invalidate(paymentsHistoryProvider(_filter));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -209,7 +249,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
           content: Text('Payment rejected'),
           backgroundColor: AppTheme.warningYellow));
       ref.invalidate(pendingApprovalsProvider);
-      ref.invalidate(paymentsHistoryProvider(_currentFilter()));
+      ref.invalidate(paymentsHistoryProvider(_filter));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -249,7 +289,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('All pending payments approved')));
       ref.invalidate(pendingApprovalsProvider);
-      ref.invalidate(paymentsHistoryProvider(_currentFilter()));
+      ref.invalidate(paymentsHistoryProvider(_filter));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

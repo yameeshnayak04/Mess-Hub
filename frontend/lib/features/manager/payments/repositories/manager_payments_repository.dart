@@ -49,6 +49,11 @@ class ManagerPaymentsRepository {
     throw _msg(res, 'Failed to load pending approvals');
   }
 
+  Future<List> getDueBills() async {
+    final res = await _dio.get('/billing/due-bills');
+    return (res.data['data'] as List);
+  }
+
   // Approve a payment
   Future<Map<String, dynamic>> approvePayment(String billId) async {
     final res = await _dio.put('/billing/approve-payment/$billId');

@@ -9,21 +9,23 @@ class CustomerShell extends StatelessWidget {
   final Widget child;
   const CustomerShell({super.key, required this.child});
 
+  // Tab index -> route path
   static const Map<int, String> _tabs = {
-    0: RouteNames.home, // e.g., '/home'
-    1: RouteNames.discover, // e.g., '/discover'
-    2: RouteNames.profile, // e.g., '/profile'
+    0: RouteNames.home,
+    1: RouteNames.discover,
+    2: RouteNames.profile,
   };
 
-  int _indexForLocation(String location) {
-    if (location.startsWith(RouteNames.home)) return 0;
+  // Resolve a selected index from the current location
+  static int _indexForLocation(String location) {
     if (location.startsWith(RouteNames.discover)) return 1;
     if (location.startsWith(RouteNames.profile)) return 2;
-    return 0;
+    return 0; // default to Home
   }
 
   @override
   Widget build(BuildContext context) {
+    // Read the active route to highlight the correct tab
     final location = GoRouterState.of(context).matchedLocation;
     final selectedIndex = _indexForLocation(location);
 
@@ -33,10 +35,8 @@ class CustomerShell extends StatelessWidget {
         top: false,
         child: NavigationBar(
           selectedIndex: selectedIndex,
-          onDestinationSelected: (index) {
-            if (index == selectedIndex) return;
-            context.go(_tabs[index]!);
-          },
+          // Always navigate, even if tapping the current tab (re-opens root)
+          onDestinationSelected: (index) => context.go(_tabs[index]!),
           backgroundColor: Colors.white,
           indicatorColor: AppTheme.lightOrange,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,

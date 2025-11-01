@@ -3,62 +3,42 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/utils/constants.dart';
 
-class ManagerShell extends StatefulWidget {
+class ManagerShell extends StatelessWidget {
   final Widget child;
   const ManagerShell({super.key, required this.child});
 
-  @override
-  State<ManagerShell> createState() => _ManagerShellState();
-}
+  // Tab index -> route
+  static const Map<int, String> _tabs = {
+    0: RouteNames.managerHome,
+    1: RouteNames.managerMembers,
+    2: RouteNames.managerPayments, // also covers approvals
+    3: RouteNames.kioskLauncher, // kiosk root
+    4: RouteNames.managerProfile,
+  };
 
-class _ManagerShellState extends State<ManagerShell> {
-  int _currentIndex = 0;
-
-  void _onItemTapped(int index) {
-    setState(() => _currentIndex = index);
-    switch (index) {
-      case 0:
-        context.go(RouteNames.managerHome);
-        break;
-      case 1:
-        context.go(RouteNames.managerMembers);
-        break;
-      case 2:
-        context.go(
-            RouteNames.managerPayments); // also covers managerBillingApprovals
-        break;
-      case 3:
-        context.go(RouteNames.kioskLauncher);
-        break;
-      case 4:
-        context.go(RouteNames.managerProfile);
-        break;
-    }
+  // Compute selected index from location
+  static int _indexForLocation(String location) {
+    if (location.startsWith(RouteNames.managerMembers) ||
+        location.startsWith('/manager/member/')) return 1;
+    if (location.startsWith(RouteNames.managerPayments) ||
+        location.startsWith(RouteNames.managerBillingApprovals)) return 2;
+    if (location.startsWith(RouteNames.kioskLauncher) ||
+        location.startsWith(RouteNames.kioskMode)) return 3;
+    if (location.startsWith(RouteNames.managerProfile)) return 4;
+    return 0; // default to Home
   }
 
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
-    if (location.startsWith(RouteNames.managerHome)) {
-      _currentIndex = 0;
-    } else if (location.startsWith(RouteNames.managerMembers) ||
-        location.startsWith('/manager/member/')) {
-      _currentIndex = 1;
-    } else if (location.startsWith(RouteNames.managerPayments) ||
-        location.startsWith(RouteNames.managerBillingApprovals)) {
-      _currentIndex = 2;
-    } else if (location.startsWith(RouteNames.kioskLauncher) ||
-        location.startsWith(RouteNames.kioskMode)) {
-      _currentIndex = 3;
-    } else if (location == RouteNames.managerProfile) {
-      _currentIndex = 4;
-    }
+    final selectedIndex = _indexForLocation(location);
 
     return Scaffold(
-      body: widget.child,
+      body: child,
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: _onItemTapped,
+        currentIndex: selectedIndex,
+        // Always navigate, even when tapping the current tab (re-open root)
+        onTap: (index) => context.go(_tabs[index]!),
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(
