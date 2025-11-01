@@ -19,11 +19,13 @@ class Review {
   });
 
   factory Review.fromJson(Map<String, dynamic> json) {
+    int _toInt(dynamic v) =>
+        v is num ? v.toInt() : int.tryParse(v.toString()) ?? 0;
     return Review(
       id: json['_id'] as String,
       user: json['user'],
       mess: json['mess'] as String,
-      rating: json['rating'] as int,
+      rating: _toInt(json['rating']),
       comment: json['comment'] as String?,
       createdAt:
           json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,

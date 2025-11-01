@@ -163,19 +163,23 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
     );
   }
 
-  Future<void> _approvePayment(BuildContext context, String billId) async {
+  Future _approvePayment(BuildContext context, String billId) async {
     try {
       await ref.read(managerPaymentsRepositoryProvider).approvePayment(billId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Payment approved'),
-          backgroundColor: AppTheme.successGreen));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Payment approved'),
+            backgroundColor: AppTheme.successGreen),
+      );
       ref.invalidate(pendingApprovalsProvider);
       ref.invalidate(paymentsHistoryProvider(_currentFilter()));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Failed: $e'), backgroundColor: AppTheme.errorRed));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Failed: $e'), backgroundColor: AppTheme.errorRed),
+      );
     }
   }
 
@@ -254,58 +258,70 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
     }
   }
 
-  Future<void> _showPaymentProof(
-      BuildContext context, Map<String, dynamic> bill) async {
-    // Try embedded URL first, else fetch via /billing/payment/:billId
-    String? proofUrl = bill['proofUrl'] as String?;
-    if (proofUrl == null) {
-      try {
-        final detail = await ref
-            .read(managerPaymentsRepositoryProvider)
-            .getPaymentByBillId(bill['_id'] as String);
-        proofUrl = detail['proofUrl'] as String?;
-      } catch (_) {}
-    }
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Payment Proof',
-                      style: Theme.of(context).textTheme.titleLarge),
-                  IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context)),
-                ],
+  Future _showPaymentProof(BuildContext context, Map bill) async {
+    try {
+      final repo = ref.read(managerPaymentsRepositoryProvider);
+      final url =
+          await repo.getPaymentProofUrl(Map<String, dynamic>.from(bill));
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Payment Proof',
+                        style: Theme.of(context).textTheme.titleLarge),
+                    IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context)),
+                  ],
+                ),
               ),
-            ),
-            Container(
-              height: 420,
-              color: Colors.grey[100],
-              alignment: Alignment.center,
-              child: proofUrl != null
-                  ? Image.network(
-                      proofUrl,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const _ProofError(),
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return const Center(child: CircularProgressIndicator());
-                      },
-                    )
-                  : const _ProofError(),
-            ),
-            const SizedBox(height: 16),
+              Container(
+                height: 420,
+                color: Colors.grey[100],
+                alignment: Alignment.center,
+                child: (url != null)
+                    ? InteractiveViewer(
+                        minScale: 0.5,
+                        maxScale: 4,
+                        child: Image.network(
+                          url,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const _ProofError(),
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return const Center(
+                                child: CircularProgressIndicator());
+                          },
+                        ),
+                      )
+                    : const _ProofError(),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Payment Proof'),
+          content: Text('Failed to load proof: $e'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'))
           ],
         ),
-      ),
-    );
+      );
+    }
   }
 }
 

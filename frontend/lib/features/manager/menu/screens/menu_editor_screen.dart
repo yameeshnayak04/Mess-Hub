@@ -2,13 +2,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../core/utils/constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/manager_menu_providers.dart';
 
 class MenuEditorScreen extends ConsumerStatefulWidget {
   const MenuEditorScreen({super.key});
   @override
-  ConsumerState<MenuEditorScreen> createState() => _MenuEditorScreenState();
+  ConsumerState createState() => _MenuEditorScreenState();
 }
 
 class _MenuEditorScreenState extends ConsumerState<MenuEditorScreen> {
@@ -24,12 +26,14 @@ class _MenuEditorScreenState extends ConsumerState<MenuEditorScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future _load() async {
     setState(() => _loading = true);
     try {
       final menu = await ref.read(menuForDateProvider(_date).future);
-      final lunch = (menu?['lunchItems'] as List?)?.cast<String>() ?? [];
-      final dinner = (menu?['dinnerItems'] as List?)?.cast<String>() ?? [];
+      final lunch =
+          (menu?['lunchItems'] as List?)?.cast<String>() ?? <String>[];
+      final dinner =
+          (menu?['dinnerItems'] as List?)?.cast<String>() ?? <String>[];
       _lunchCtrl.text = lunch.join(', ');
       _dinnerCtrl.text = dinner.join(', ');
     } finally {
@@ -37,7 +41,7 @@ class _MenuEditorScreenState extends ConsumerState<MenuEditorScreen> {
     }
   }
 
-  Future<void> _pickDate() async {
+  Future _pickDate() async {
     final picked = await showDatePicker(
       context: context,
       initialDate: _date,
@@ -53,7 +57,7 @@ class _MenuEditorScreenState extends ConsumerState<MenuEditorScreen> {
   List<String> _parseItems(String s) =>
       s.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 
-  Future<void> _save() async {
+  Future _save() async {
     setState(() => _saving = true);
     try {
       await ref.read(managerMenuRepositoryProvider).setMenu(
@@ -91,20 +95,30 @@ class _MenuEditorScreenState extends ConsumerState<MenuEditorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: BackButton(
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go(RouteNames.managerHome);
+            }
+          },
+        ),
         title: const Text('Menu Editor'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.calendar_today),
-            onPressed: _pickDate,
-            tooltip: 'Pick Date',
-          ),
+              icon: const Icon(Icons.calendar_today),
+              onPressed: _pickDate,
+              tooltip: 'Pick Date'),
           const SizedBox(width: 8),
         ],
       ),
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation(AppTheme.primaryOrange)))
+                valueColor: AlwaysStoppedAnimation(AppTheme.primaryOrange),
+              ),
+            )
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [

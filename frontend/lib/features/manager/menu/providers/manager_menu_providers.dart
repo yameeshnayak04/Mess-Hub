@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/api/dio_client_provider.dart';
 import '../repositories/manager_menu_repository.dart';
 
-final managerMenuRepositoryProvider = Provider((ref) {
+final managerMenuRepositoryProvider = Provider<ManagerMenuRepository>((ref) {
   return ManagerMenuRepository(ref.watch(dioClientProvider));
 });
 

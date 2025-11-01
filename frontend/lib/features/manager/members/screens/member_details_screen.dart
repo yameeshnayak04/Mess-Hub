@@ -1,6 +1,7 @@
 // lib/features/manager/members/screens/member_details_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -13,8 +14,7 @@ class MemberDetailsScreen extends ConsumerStatefulWidget {
       {super.key, required this.membershipId, this.membership});
 
   @override
-  ConsumerState<MemberDetailsScreen> createState() =>
-      _MemberDetailsScreenState();
+  ConsumerState createState() => _MemberDetailsScreenState();
 }
 
 class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
@@ -32,8 +32,51 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
     final leaves = ref.watch(memberLeavesProvider(widget.membershipId));
     final bills = ref.watch(memberBillsProvider(widget.membershipId));
 
+    Future<void> _approve() async {
+      try {
+        await ref
+            .read(managerMembersRepositoryProvider)
+            .approveMembership(widget.membershipId);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Member approved')));
+        ref.invalidate(memberDetailsProvider(widget.membershipId));
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed: $e')));
+      }
+    }
+
+    Future<void> _reject() async {
+      try {
+        await ref
+            .read(managerMembersRepositoryProvider)
+            .rejectMembership(widget.membershipId);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Member rejected')));
+        ref.invalidate(memberDetailsProvider(widget.membershipId));
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed: $e')));
+      }
+    }
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Member Details')),
+      appBar: AppBar(
+        leading: BackButton(
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/manager/members');
+            }
+          },
+        ),
+        title: const Text('Member Details'),
+      ),
       body: RefreshIndicator(
         color: AppTheme.primaryOrange,
         onRefresh: () async {
@@ -49,87 +92,133 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
             // Header
             details.when(
               loading: () => const _HeaderSkeleton(),
-              error: (e, _) => _ErrorCard(
-                  title: 'Member Info',
-                  detail: e.toString(),
-                  onRetry: () =>
-                      ref.refresh(memberDetailsProvider(widget.membershipId))),
-              data: (data) {
-                final payload = Map<String, dynamic>.from(
-                    data); // tolerate backend shape changes
-                final m =
-                    (payload['membership'] as Map?)?.cast<String, dynamic>() ??
-                        widget.membership ??
-                        {};
-                final user = (m['user'] as Map?)?.cast<String, dynamic>();
-                final status = (m['status'] as String?) ?? '—';
-                final plan = (m['planName'] as String?) ?? '—';
-                final rate = (m['billingRate'] is num)
-                    ? (m['billingRate'] as num).toStringAsFixed(0)
-                    : '—';
-                final joined = (m['joinedDate'] is String)
-                    ? DateTime.tryParse(m['joinedDate'] as String)
+              error: (e, st) => _ErrorCard(
+                title: 'Member',
+                detail: e.toString(),
+                onRetry: () =>
+                    ref.refresh(memberDetailsProvider(widget.membershipId)),
+              ),
+              data: (d) {
+                final map = Map<String, dynamic>.from(d);
+                final user = (map['user'] is Map)
+                    ? Map<String, dynamic>.from(map['user'])
+                    : (widget.membership?['user'] as Map<String, dynamic>?) ??
+                        const {};
+                final name = (user['name'] ?? '').toString();
+                final phone = (user['phone'] ?? '').toString();
+                final status =
+                    (map['status'] ?? widget.membership?['status'] ?? 'Unknown')
+                        .toString();
+                final plan = (map['planName'] ??
+                        widget.membership?['planName'] ??
+                        'Plan')
+                    .toString();
+                final rate = ((map['billingRate'] ??
+                        widget.membership?['billingRate'] ??
+                        0) as num)
+                    .toString();
+                final paymentStatus = (map['paymentStatus'] ??
+                        widget.membership?['paymentStatus'] ??
+                        'Due')
+                    .toString();
+                final joined = (map['joinedDate'] as String?) != null
+                    ? DateTime.tryParse(map['joinedDate'])
                     : null;
-                final paymentStatus = (m['paymentStatus'] as String?) ?? '—';
-                final address = (m['address'] as String?) ?? '';
-                return _HeaderCard(
-                  name: (user?['name'] ?? 'Unknown').toString(),
-                  phone: (user?['phone'] ?? 'N/A').toString(),
-                  status: status,
-                  plan: plan,
-                  rate: rate,
-                  paymentStatus: paymentStatus,
-                  joined: joined,
-                  address: address,
+                final address = (map['address'] ?? '').toString().isNotEmpty
+                    ? (map['address'] as String?)
+                    : null;
+
+                return Column(
+                  children: [
+                    _HeaderCard(
+                      name: name,
+                      phone: phone,
+                      status: status,
+                      plan: plan,
+                      rate: rate,
+                      paymentStatus: paymentStatus,
+                      joined: joined,
+                      address: address,
+                    ),
+                    if (status == 'Pending')
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: _reject,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.errorRed,
+                                  side: const BorderSide(
+                                      color: AppTheme.errorRed),
+                                ),
+                                child: const Text('Reject'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                  onPressed: _approve,
+                                  child: const Text('Approve')),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 );
               },
             ),
 
             const SizedBox(height: 16),
 
-            // Attendance
+            // Attendance (as in your current screen)
             attendance.when(
               loading: () => const _SectionLoading(title: 'Attendance'),
               error: (e, _) => _ErrorCard(
-                  title: 'Attendance',
-                  detail: e.toString(),
-                  onRetry: () => ref.refresh(memberAttendanceProvider(
-                      MemberCalendarParams(widget.membershipId, _focused.month,
-                          _focused.year)))),
+                title: 'Attendance',
+                detail: e.toString(),
+                onRetry: () => ref.refresh(memberAttendanceProvider(
+                  MemberCalendarParams(
+                      widget.membershipId, _focused.month, _focused.year),
+                )),
+              ),
               data: (entries) {
-                final byDate = <DateTime, Map<String, Map<String, dynamic>>>{};
-// build from attendance entries
+                final Map<DateTime, Map<String, Map<String, dynamic>>> byDate =
+                    <DateTime, Map<String, Map<String, dynamic>>>{};
+
+                // Build from attendance
                 for (final raw in entries) {
-                  final e = Map<String, dynamic>.from(raw as Map);
-                  final dt = DateTime.parse((e['date'] as String)).toLocal();
+                  final e = Map<String, dynamic>.from(raw);
+                  final dt = DateTime.parse(e['date'] as String).toLocal();
                   final key = DateTime(dt.year, dt.month, dt.day);
-                  byDate.putIfAbsent(key, () => {});
+                  byDate.putIfAbsent(
+                      key, () => <String, Map<String, dynamic>>{});
                   final meal = (e['mealType'] as String?) ?? '';
                   if (meal.isNotEmpty) byDate[key]![meal] = e;
                 }
 
-                final leaveList = ref
-                        .read(memberLeavesProvider(widget.membershipId))
-                        .valueOrNull ??
-                    [];
+                // Overlay leaves if no explicit status
+                final leaveList =
+                    leaves.valueOrNull ?? <Map<String, dynamic>>[];
                 for (final raw in leaveList) {
-                  final l = Map<String, dynamic>.from(raw as Map);
+                  final l = Map<String, dynamic>.from(raw);
                   final sd = DateTime.parse(l['startDate'] as String).toLocal();
                   final ed = DateTime.parse(l['endDate'] as String).toLocal();
                   for (DateTime d = DateTime(sd.year, sd.month, sd.day);
                       !d.isAfter(DateTime(ed.year, ed.month, ed.day));
                       d = d.add(const Duration(days: 1))) {
                     final key = DateTime(d.year, d.month, d.day);
-                    byDate.putIfAbsent(key, () => {});
-                    // only mark leave if not already Present/Skipped/Absent
+                    byDate.putIfAbsent(
+                        key, () => <String, Map<String, dynamic>>{});
                     void putIfFree(String meal) {
                       final s =
                           (byDate[key]![meal]?['status'] as String?) ?? '';
                       if (s.isEmpty) {
-                        byDate[key]![meal] = {
+                        byDate[key]![meal] = <String, dynamic>{
                           'mealType': meal,
                           'status': 'Leave',
-                          'date': d.toIso8601String()
+                          'date': d.toIso8601String(),
                         };
                       }
                     }
@@ -140,80 +229,82 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
                 }
 
                 final counts = _monthlyCounts(byDate);
-
                 return Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Attendance',
-                              style: Theme.of(context).textTheme.titleLarge),
-                          const SizedBox(height: 8),
-                          _CountsRow(counts: counts),
-                          const SizedBox(height: 12),
-                          TableCalendar(
-                            firstDay: DateTime.utc(2020, 1, 1),
-                            lastDay: DateTime.utc(2030, 12, 31),
-                            focusedDay: _focused,
-                            calendarFormat: _format,
-                            selectedDayPredicate: (d) =>
-                                isSameDay(d, _selected),
-                            onDaySelected: (sd, fd) => setState(() {
-                              _selected = sd;
-                              _focused = fd;
-                            }),
-                            onFormatChanged: (f) => setState(() => _format = f),
-                            onPageChanged: (fd) =>
-                                setState(() => _focused = fd),
-                            headerStyle: const HeaderStyle(titleCentered: true),
-                            calendarStyle: CalendarStyle(
-                              todayDecoration: BoxDecoration(
-                                  color:
-                                      AppTheme.primaryOrange.withOpacity(0.25),
-                                  shape: BoxShape.circle),
-                              selectedDecoration: const BoxDecoration(
-                                  color: AppTheme.primaryOrange,
-                                  shape: BoxShape.circle),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Attendance',
+                            style: Theme.of(context).textTheme.titleLarge),
+                        const SizedBox(height: 8),
+                        _CountsRow(counts: counts),
+                        const SizedBox(height: 12),
+                        TableCalendar(
+                          firstDay: DateTime.utc(2020, 1, 1),
+                          lastDay: DateTime.utc(2030, 12, 31),
+                          focusedDay: _focused,
+                          calendarFormat: _format,
+                          selectedDayPredicate: (d) => isSameDay(d, _selected),
+                          onDaySelected: (sd, fd) => setState(() {
+                            _selected = sd;
+                            _focused = fd;
+                          }),
+                          onFormatChanged: (f) => setState(() => _format = f),
+                          onPageChanged: (fd) => setState(() => _focused = fd),
+                          headerStyle: const HeaderStyle(titleCentered: true),
+                          calendarStyle: CalendarStyle(
+                            todayDecoration: BoxDecoration(
+                              color: AppTheme.primaryOrange.withOpacity(0.25),
+                              shape: BoxShape.circle,
                             ),
-                            calendarBuilders: CalendarBuilders(
-                              markerBuilder: (context, date, _) {
-                                final key =
-                                    DateTime(date.year, date.month, date.day);
-                                final meals = byDate[key];
-                                if (meals == null) return null;
-                                final lunch = meals['Lunch'];
-                                final dinner = meals['Dinner'];
-                                final children = <Widget>[];
-                                if (lunch != null) {
-                                  children.add(Positioned(
-                                      bottom: 2,
-                                      left: 20,
-                                      child: _dot(_colorFor(
-                                          lunch['status'] as String?))));
-                                }
-                                if (dinner != null) {
-                                  children.add(Positioned(
-                                      bottom: 2,
-                                      right: 20,
-                                      child: _dot(_colorFor(
-                                          dinner['status'] as String?))));
-                                }
-                                return Stack(children: children);
-                              },
+                            selectedDecoration: const BoxDecoration(
+                              color: AppTheme.primaryOrange,
+                              shape: BoxShape.circle,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          _LegendRow(),
-                          const SizedBox(height: 12),
-                          _DayMeals(
-                            date: _selected,
-                            lunch: byDate[DateTime(_selected.year,
-                                _selected.month, _selected.day)]?['Lunch'],
-                            dinner: byDate[DateTime(_selected.year,
-                                _selected.month, _selected.day)]?['Dinner'],
+                          calendarBuilders: CalendarBuilders(
+                            markerBuilder: (context, date, _) {
+                              final key =
+                                  DateTime(date.year, date.month, date.day);
+                              final meals = byDate[key];
+                              if (meals == null) return null;
+                              final lunch = meals['Lunch'];
+                              final dinner = meals['Dinner'];
+                              final children = <Widget>[];
+                              if (lunch != null) {
+                                children.add(Positioned(
+                                  bottom: 2,
+                                  left: 20,
+                                  child: _dot(
+                                      _colorFor(lunch['status'] as String?)),
+                                ));
+                              }
+                              if (dinner != null) {
+                                children.add(Positioned(
+                                  bottom: 2,
+                                  right: 20,
+                                  child: _dot(
+                                      _colorFor(dinner['status'] as String?)),
+                                ));
+                              }
+                              if (children.isEmpty) return null;
+                              return Stack(children: children);
+                            },
                           ),
-                        ]),
+                        ),
+                        const SizedBox(height: 8),
+                        _LegendRow(),
+                        const SizedBox(height: 12),
+                        _DayMeals(
+                          date: _selected,
+                          lunch: byDate[DateTime(_selected.year,
+                              _selected.month, _selected.day)]?['Lunch'],
+                          dinner: byDate[DateTime(_selected.year,
+                              _selected.month, _selected.day)]?['Dinner'],
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -223,189 +314,151 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
 
             // Leaves
             leaves.when(
-              loading: () => const _SectionLoading(title: 'Leave History'),
+              loading: () => const _SectionLoading(title: 'Leaves'),
               error: (e, _) => _ErrorCard(
-                  title: 'Leave History',
-                  detail: e.toString(),
-                  onRetry: () =>
-                      ref.refresh(memberLeavesProvider(widget.membershipId))),
-              data: (list) => Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Leave History',
-                            style: Theme.of(context).textTheme.titleLarge),
-                        const SizedBox(height: 12),
-                        if (list.isEmpty)
-                          Text('No leave records',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: AppTheme.textSecondary))
-                        else
-                          ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: list.length,
-                            separatorBuilder: (_, __) =>
-                                const Divider(height: 16),
-                            itemBuilder: (context, i) {
-                              final l =
-                                  Map<String, dynamic>.from(list[i] as Map);
-                              final sd =
-                                  DateTime.parse(l['startDate'] as String)
-                                      .toLocal();
-                              final ed = DateTime.parse(l['endDate'] as String)
-                                  .toLocal();
-                              final days = ed.difference(sd).inDays + 1;
-                              return Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                        '${DateFormat('MMM d, y').format(sd)} → ${DateFormat('MMM d, y').format(ed)}'),
-                                    Text('$days days',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                                color: AppTheme.textSecondary)),
-                                  ]);
-                            },
-                          ),
-                      ]),
-                ),
+                title: 'Leaves',
+                detail: e.toString(),
+                onRetry: () =>
+                    ref.refresh(memberLeavesProvider(widget.membershipId)),
               ),
+              data: (list) {
+                final items = list
+                    .cast<Map>()
+                    .map((m) => Map<String, dynamic>.from(m))
+                    .toList();
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Leaves',
+                              style: Theme.of(context).textTheme.titleLarge),
+                          const SizedBox(height: 8),
+                          if (items.isEmpty)
+                            Text('No leaves',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: AppTheme.textSecondary))
+                          else
+                            ...items.map((l) {
+                              final sd =
+                                  DateTime.parse((l['startDate'] as String))
+                                      .toLocal();
+                              final ed =
+                                  DateTime.parse((l['endDate'] as String))
+                                      .toLocal();
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.beach_access,
+                                    color: AppTheme.infoBlue),
+                                title: Text(
+                                    '${DateFormat('MMM d, y').format(sd)} - ${DateFormat('MMM d, y').format(ed)}'),
+                                subtitle: Text(
+                                    '${(ed.difference(sd).inDays + 1)} days'),
+                              );
+                            }),
+                        ]),
+                  ),
+                );
+              },
             ),
 
             const SizedBox(height: 16),
 
-            // Payment history
+            // Bills
             bills.when(
-              loading: () => const _SectionLoading(title: 'Payment History'),
+              loading: () => const _SectionLoading(title: 'Bills'),
               error: (e, _) => _ErrorCard(
-                  title: 'Payment History',
-                  detail: e.toString(),
-                  onRetry: () =>
-                      ref.refresh(memberBillsProvider(widget.membershipId))),
-              data: (list) => Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Payment History',
-                            style: Theme.of(context).textTheme.titleLarge),
-                        const SizedBox(height: 12),
-                        if (list.isEmpty)
-                          Text('No bills yet',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: AppTheme.textSecondary))
-                        else
-                          ListView.separated(
-                            itemCount: list.length,
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            separatorBuilder: (_, __) =>
-                                const Divider(height: 16),
-                            itemBuilder: (context, i) {
-                              final b =
-                                  Map<String, dynamic>.from(list[i] as Map);
-                              final month = b['month'] as int? ?? 0;
-                              final year = b['year'] as int? ?? 0;
-                              final amount = (b['totalAmount'] ??
-                                  b['baseAmount'] ??
-                                  0) as num;
-                              final status =
-                                  (b['status'] as String?) ?? 'Unknown';
-                              final monthName = month > 0
-                                  ? DateFormat('MMMM')
-                                      .format(DateTime(year, month))
-                                  : '-';
-                              final color = _colorFor(status);
-                              return Row(children: [
-                                Expanded(
-                                  child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text('$monthName $year',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleMedium),
-                                        const SizedBox(height: 4),
-                                        Text('₹${amount.toStringAsFixed(0)}',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodyMedium
-                                                ?.copyWith(
-                                                    color:
-                                                        AppTheme.primaryOrange,
-                                                    fontWeight:
-                                                        FontWeight.bold)),
-                                      ]),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                      color: color.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: color)),
-                                  child: Text(status,
-                                      style: TextStyle(
-                                          color: color,
-                                          fontWeight: FontWeight.w600)),
-                                ),
-                              ]);
-                            },
-                          ),
-                      ]),
-                ),
+                title: 'Bills',
+                detail: e.toString(),
+                onRetry: () =>
+                    ref.refresh(memberBillsProvider(widget.membershipId)),
               ),
+              data: (list) {
+                final items = list
+                    .cast<Map>()
+                    .map((m) => Map<String, dynamic>.from(m))
+                    .toList();
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Payment History',
+                              style: Theme.of(context).textTheme.titleLarge),
+                          const SizedBox(height: 8),
+                          if (items.isEmpty)
+                            Text('No bills yet',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: AppTheme.textSecondary))
+                          else
+                            ...items.map((b) {
+                              final total =
+                                  (b['totalAmount'] as num?)?.toDouble() ?? 0.0;
+                              final status = (b['status'] ?? 'Due').toString();
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.receipt_long,
+                                    color: AppTheme.primaryOrange),
+                                title: Text(
+                                    '₹${total.toStringAsFixed(2)} • ${b['month']}/${b['year']}'),
+                                subtitle: Text('Status: $status'),
+                              );
+                            }),
+                        ]),
+                  ),
+                );
+              },
             ),
           ],
         ),
       ),
     );
   }
-
-  Map<String, int> _monthlyCounts(
-      Map<DateTime, Map<String, Map<String, dynamic>>> byDate) {
-    final result = {'Present': 0, 'Skipped': 0, 'Leave': 0, 'Absent': 0};
-    for (final meals in byDate.values) {
-      for (final e in meals.values) {
-        final s = (e['status'] as String?) ?? '';
-        if (result.containsKey(s)) result[s] = result[s]! + 1;
-      }
-    }
-    return result;
-  }
-
-  Color _colorFor(String? status) {
-    switch (status) {
-      case 'Present':
-        return AppTheme.successGreen;
-      case 'Skipped':
-        return AppTheme.warningYellow;
-      case 'Leave':
-        return AppTheme.infoBlue;
-      case 'Absent':
-        return AppTheme.errorRed;
-      default:
-        return AppTheme.textSecondary;
-    }
-  }
-
-  Widget _dot(Color c) => Container(
-      width: 8,
-      height: 8,
-      decoration: BoxDecoration(color: c, shape: BoxShape.circle));
 }
+
+// Helpers (ensure braces and typing are correct)
+Map<String, int> _monthlyCounts(
+    Map<DateTime, Map<String, Map<String, dynamic>>> byDate) {
+  final result = <String, int>{
+    'Present': 0,
+    'Skipped': 0,
+    'Leave': 0,
+    'Absent': 0
+  };
+  for (final meals in byDate.values) {
+    for (final e in meals.values) {
+      final s = (e['status'] as String?) ?? '';
+      if (result.containsKey(s)) result[s] = result[s]! + 1;
+    }
+  }
+  return result;
+}
+
+Color _colorFor(String? status) {
+  switch (status) {
+    case 'Present':
+      return AppTheme.successGreen;
+    case 'Skipped':
+      return AppTheme.warningYellow;
+    case 'Leave':
+      return AppTheme.infoBlue;
+    case 'Absent':
+      return AppTheme.errorRed;
+    default:
+      return AppTheme.textSecondary;
+  }
+}
+
+Widget _dot(Color c) => Container(
+    width: 8,
+    height: 8,
+    decoration: BoxDecoration(color: c, shape: BoxShape.circle));
 
 // NEW: missing widget
 class _CountsRow extends StatelessWidget {

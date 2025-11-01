@@ -118,6 +118,8 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen> {
     final mess = ref.watch(kioskMessProvider);
     final members = ref.watch(kioskActiveMembersProvider);
     final eatingNow = ref.watch(kioskMembersEatingProvider);
+    final onLeave = ref.watch(kioskMembersOnLeaveProvider);
+    final skipped = ref.watch(kioskMembersSkippedProvider);
 
     // ignore: deprecated_member_use
     return WillPopScope(
@@ -258,49 +260,82 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen> {
                         },
                       ),
                       data: (list) {
-                        final eatingList = eatingNow.valueOrNull ?? [];
-                        final eatingUserIds = eatingList
+                        final eatingUserIds = (eatingNow.valueOrNull ?? [])
                             .map((e) =>
                                 (e as Map)['user']?['_id'] ?? (e)['user'] ?? '')
+                            .cast<String>()
                             .toSet();
+
+                        final leaveUserIds = (onLeave.valueOrNull ?? [])
+                            .map((e) =>
+                                (e as Map)['user']?['_id'] ?? (e)['user'] ?? '')
+                            .cast<String>()
+                            .toSet();
+
+                        final skippedUserIds = (skipped.valueOrNull ?? [])
+                            .where((e) {
+                              final m = e as Map;
+                              final meal = (m['mealType'] ?? '').toString();
+                              return meal.isEmpty ||
+                                  meal == _meal; // guard by meal when provided
+                            })
+                            .map((e) =>
+                                (e as Map)['user']?['_id'] ?? (e)['user'] ?? '')
+                            .cast<String>()
+                            .toSet();
+
                         final q = _searchCtrl.text.trim().toLowerCase();
                         final filtered = list.where((m) {
-                          final mm = m as Map<String, dynamic>;
-                          final user = mm['user'] as Map<String, dynamic>?;
+                          final mm = m as Map;
+                          final user = mm['user'] as Map?;
                           final name =
                               (user?['name'] ?? '').toString().toLowerCase();
                           final id = (user?['_id'] ?? '').toString();
-                          final alreadyPresent = eatingUserIds.contains(id);
                           final matches = q.isEmpty || name.contains(q);
-                          return matches && !alreadyPresent;
+                          return matches;
                         }).toList();
-
-                        if (filtered.isEmpty) {
-                          return _EmptyFeed(
-                              message: q.isEmpty
-                                  ? 'All members have marked attendance for $_meal'
-                                  : 'No matching members');
-                        }
 
                         return GridView.builder(
                           padding: const EdgeInsets.all(20),
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            mainAxisSpacing: 16,
-                            crossAxisSpacing: 16,
-                            childAspectRatio:
-                                0.9, // was 1.2; more height per tile
-                          ),
+                                  crossAxisCount: 3,
+                                  mainAxisSpacing: 16,
+                                  crossAxisSpacing: 16,
+                                  childAspectRatio: 0.9),
                           itemCount: filtered.length,
                           itemBuilder: (context, i) {
-                            final m = filtered[i] as Map<String, dynamic>;
-                            final user = m['user'] as Map<String, dynamic>?;
+                            final m = filtered[i] as Map;
+                            final user = m['user'] as Map?;
                             final name = (user?['name'] ?? 'Unknown') as String;
                             final userId = (user?['_id'] ?? '') as String;
-                            return _MemberCard(
-                              name: name,
-                              onTap: () => _showPinDialog(userId, name),
+
+                            final alreadyPresent =
+                                eatingUserIds.contains(userId);
+                            final isLeave = leaveUserIds.contains(userId);
+                            final isSkipped = skippedUserIds.contains(userId);
+                            final disabled =
+                                alreadyPresent || isLeave || isSkipped;
+
+                            return Opacity(
+                              opacity: disabled ? 0.5 : 1,
+                              child: _MemberCard(
+                                name: name,
+                                onTap: () {
+                                  if (alreadyPresent) {
+                                    _snack('Already marked $_meal',
+                                        AppTheme.infoBlue);
+                                  } else if (isLeave) {
+                                    _snack('On leave for $_meal',
+                                        AppTheme.warningYellow);
+                                  } else if (isSkipped) {
+                                    _snack('Marked as Skipped for $_meal',
+                                        AppTheme.warningYellow);
+                                  } else {
+                                    _showPinDialog(userId, name);
+                                  }
+                                },
+                              ),
                             );
                           },
                         );

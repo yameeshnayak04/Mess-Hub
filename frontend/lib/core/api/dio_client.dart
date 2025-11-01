@@ -17,6 +17,8 @@ class DioClient {
     _dio.options.validateStatus = (status) => true;
   }
 
+  get baseUrl => null;
+
   void setAuthToken(String token) {
     _dio.options.headers['Authorization'] = 'Bearer $token';
   }

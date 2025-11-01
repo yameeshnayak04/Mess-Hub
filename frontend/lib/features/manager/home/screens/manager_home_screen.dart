@@ -59,9 +59,7 @@ class ManagerHomeScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Live status banner
                 _LiveBanner(stats: stats),
-                // Stat cards
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -118,10 +116,6 @@ class ManagerHomeScreen extends ConsumerWidget {
                         ],
                       ),
                       const SizedBox(height: 24),
-
-                      // Today's Menu (live)
-                      // In manager_home_screen.dart, inside the dashboard body where "Today's Menu" card should appear
-
                       Card(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
@@ -133,11 +127,10 @@ class ManagerHomeScreen extends ConsumerWidget {
                                     style:
                                         Theme.of(context).textTheme.titleLarge),
                                 const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
-                                ),
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2)),
                               ],
                             ),
                             error: (e, st) => Row(
@@ -146,57 +139,57 @@ class ManagerHomeScreen extends ConsumerWidget {
                                 Text("Today's Menu",
                                     style:
                                         Theme.of(context).textTheme.titleLarge),
-                                Icon(Icons.error_outline,
+                                const Icon(Icons.error_outline,
                                     color: AppTheme.errorRed),
                               ],
                             ),
                             data: (menu) {
                               final lunch = (menu?['lunchItems'] as List?)
                                       ?.cast<String>() ??
-                                  [];
+                                  const <String>[];
                               final dinner = (menu?['dinnerItems'] as List?)
                                       ?.cast<String>() ??
-                                  [];
+                                  const <String>[];
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text("Today's Menu",
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleLarge),
-                                        TextButton.icon(
-                                          onPressed: () => context
-                                              .push('/manager/menu-editor'),
-                                          icon: const Icon(Icons.edit),
-                                          label: const Text('Edit'),
-                                        ),
-                                      ]),
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text("Today's Menu",
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleLarge),
+                                      TextButton.icon(
+                                        onPressed: () => context
+                                            .push('/manager/menu-editor'),
+                                        icon: const Icon(Icons.edit),
+                                        label: const Text('Edit'),
+                                      ),
+                                    ],
+                                  ),
                                   const SizedBox(height: 12),
                                   _buildMenuSection(context, 'Lunch', lunch),
                                   if (lunch.isNotEmpty && dinner.isNotEmpty)
                                     const Divider(height: 24),
                                   _buildMenuSection(context, 'Dinner', dinner),
                                   if (lunch.isEmpty && dinner.isEmpty)
-                                    Text('No menu set for today',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                                color: AppTheme.textSecondary)),
+                                    Text(
+                                      'No menu set for today',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                              color: AppTheme.textSecondary),
+                                    ),
                                 ],
                               );
                             },
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 24),
-
-                      // Pending Approvals + Join Requests preview
                       Text('Action Center',
                           style: Theme.of(context).textTheme.titleLarge),
                       const SizedBox(height: 12),
@@ -298,32 +291,6 @@ class ManagerHomeScreen extends ConsumerWidget {
                             }
                           }
                         },
-                        onGenerateBills: () async {
-                          try {
-                            final now = DateTime.now();
-                            await ref
-                                .read(dashboardRepositoryProvider)
-                                .generateMonthlyBills(
-                                  month: now.month,
-                                  year: now.year,
-                                );
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text('Bills generated'),
-                                    backgroundColor: AppTheme.successGreen),
-                              );
-                            }
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                    content: Text('Failed: $e'),
-                                    backgroundColor: AppTheme.errorRed),
-                              );
-                            }
-                          }
-                        },
                         onGoApprovals: () =>
                             context.go(RouteNames.managerBillingApprovals),
                         onGoMembers: () =>
@@ -339,50 +306,152 @@ class ManagerHomeScreen extends ConsumerWidget {
       ),
     );
   }
+}
 
-  Future<void> _showMembersDialog(
-      BuildContext context, WidgetRef ref, String title, String type) async {
+class _ActionCenter extends StatelessWidget {
+  final AsyncValue<List<Map<String, dynamic>>> approvals;
+  final AsyncValue<List<Map<String, dynamic>>> joinRequests;
+  final Future<void> Function(String billId) onApprovePayment;
+  final Future<void> Function(String billId) onRejectPayment;
+  final Future<void> Function(String membershipId) onApproveMember;
+  final Future<void> Function(String membershipId) onRejectMember;
+  final VoidCallback onGoApprovals;
+  final VoidCallback onGoMembers;
+
+  const _ActionCenter({
+    required this.approvals,
+    required this.joinRequests,
+    required this.onApprovePayment,
+    required this.onRejectPayment,
+    required this.onApproveMember,
+    required this.onRejectMember,
+    required this.onGoApprovals,
+    required this.onGoMembers,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text('Pending Approvals',
+                style: Theme.of(context).textTheme.titleMedium),
+            TextButton(onPressed: onGoApprovals, child: const Text('View All')),
+          ]),
+          approvals.when(
+            loading: () => const LinearProgressIndicator(minHeight: 2),
+            error: (e, st) => Text('Failed to load approvals',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: AppTheme.errorRed)),
+            data: (list) => Column(
+              children: (list.take(3)).map((bill) {
+                final user = bill['user'] as Map?;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading:
+                      const Icon(Icons.payment, color: AppTheme.warningYellow),
+                  title: Text(
+                      '₹${(bill['totalAmount'] ?? 0).toString()} • ${bill['month']}/${bill['year']}'),
+                  subtitle: Text(user?['name'] ?? 'Unknown'),
+                  trailing: Wrap(spacing: 8, children: [
+                    OutlinedButton(
+                        onPressed: () => onRejectPayment(bill['_id'] as String),
+                        child: const Text('Reject')),
+                    ElevatedButton(
+                        onPressed: () =>
+                            onApprovePayment(bill['_id'] as String),
+                        child: const Text('Approve')),
+                  ]),
+                );
+              }).toList(),
+            ),
+          ),
+          const Divider(height: 24),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text('Join Requests',
+                style: Theme.of(context).textTheme.titleMedium),
+            TextButton(onPressed: onGoMembers, child: const Text('Manage')),
+          ]),
+          joinRequests.when(
+            loading: () => const LinearProgressIndicator(minHeight: 2),
+            error: (e, st) => Text('Failed to load join requests',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: AppTheme.errorRed)),
+            data: (list) => Column(
+              children: (list.take(3)).map((member) {
+                final user = member['user'] as Map?;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading:
+                      const Icon(Icons.person_add, color: AppTheme.infoBlue),
+                  title: Text(user?['name'] ?? 'Unknown'),
+                  subtitle: Text(user?['phone'] ?? 'N/A'),
+                  trailing: Wrap(spacing: 8, children: [
+                    OutlinedButton(
+                        onPressed: () =>
+                            onRejectMember(member['_id'] as String),
+                        child: const Text('Reject')),
+                    ElevatedButton(
+                        onPressed: () =>
+                            onApproveMember(member['_id'] as String),
+                        child: const Text('Approve')),
+                  ]),
+                );
+              }).toList(),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+Future<void> _showMembersDialog(
+    BuildContext context, WidgetRef ref, String title, String type) async {
+  showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()));
+  try {
+    List<Map<String, dynamic>> data;
+    switch (type) {
+      case 'eating':
+        data =
+            await ref.read(dashboardStatsProvider.notifier).getMembersEating();
+        break;
+      case 'leave':
+        data =
+            await ref.read(dashboardStatsProvider.notifier).getMembersOnLeave();
+        break;
+      case 'skipped':
+        data =
+            await ref.read(dashboardStatsProvider.notifier).getMembersSkipped();
+        break;
+      default:
+        data = const <Map<String, dynamic>>[];
+    }
+    if (!context.mounted) return;
+    Navigator.pop(context);
+    final members = data.map((item) {
+      final user = item['user'] as Map?;
+      return MemberInfo(
+          name: (user?['name'] ?? 'Unknown').toString(),
+          phone: (user?['phone'] ?? 'N/A').toString());
+    }).toList();
     showDialog(
         context: context,
-        barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()));
-    try {
-      List data;
-      switch (type) {
-        case 'eating':
-          data = await ref
-              .read(dashboardStatsProvider.notifier)
-              .getMembersEating();
-          break;
-        case 'leave':
-          data = await ref
-              .read(dashboardStatsProvider.notifier)
-              .getMembersOnLeave();
-          break;
-        case 'skipped':
-          data = await ref
-              .read(dashboardStatsProvider.notifier)
-              .getMembersSkipped();
-          break;
-        default:
-          data = [];
-      }
-      if (!context.mounted) return;
+        builder: (_) => MemberDetailDialog(title: title, members: members));
+  } catch (e) {
+    if (context.mounted) {
       Navigator.pop(context);
-      final members = data.map((item) {
-        final user = item['user'] as Map<String, dynamic>?;
-        return MemberInfo(
-            name: user?['name'] ?? 'Unknown', phone: user?['phone'] ?? 'N/A');
-      }).toList();
-      showDialog(
-          context: context,
-          builder: (_) => MemberDetailDialog(title: title, members: members));
-    } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to load members: $e')));
-      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Failed to load members: $e')));
     }
   }
 }
@@ -467,126 +536,6 @@ class _SectionHeaderWithAction extends StatelessWidget {
             label: const Text('Edit')),
       ]),
     ]);
-  }
-}
-
-class _ActionCenter extends StatelessWidget {
-  final AsyncValue<List<dynamic>> approvals;
-  final AsyncValue<List<dynamic>> joinRequests;
-  final Future<void> Function(String billId) onApprovePayment;
-  final Future<void> Function(String billId) onRejectPayment;
-  final Future<void> Function(String membershipId) onApproveMember;
-  final Future<void> Function(String membershipId) onRejectMember;
-  final VoidCallback onGenerateBills;
-  final VoidCallback onGoApprovals;
-  final VoidCallback onGoMembers;
-
-  const _ActionCenter({
-    required this.approvals,
-    required this.joinRequests,
-    required this.onApprovePayment,
-    required this.onRejectPayment,
-    required this.onApproveMember,
-    required this.onRejectMember,
-    required this.onGenerateBills,
-    required this.onGoApprovals,
-    required this.onGoMembers,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('Pending Approvals',
-                style: Theme.of(context).textTheme.titleMedium),
-            TextButton(onPressed: onGoApprovals, child: const Text('View All')),
-          ]),
-          approvals.when(
-            loading: () => const LinearProgressIndicator(minHeight: 2),
-            error: (e, st) => Text('Failed to load approvals',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: AppTheme.errorRed)),
-            data: (list) => Column(
-              children: (list.take(3)).map((b) {
-                final bill = b as Map<String, dynamic>;
-                final user = bill['user'] as Map<String, dynamic>?;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading:
-                      const Icon(Icons.payment, color: AppTheme.warningYellow),
-                  title: Text(
-                      '₹${(bill['totalAmount'] ?? 0).toString()} • ${bill['month']}/${bill['year']}'),
-                  subtitle: Text(user?['name'] ?? 'Unknown'),
-                  trailing: Wrap(spacing: 8, children: [
-                    OutlinedButton(
-                        onPressed: () => onRejectPayment(bill['_id'] as String),
-                        child: const Text('Reject')),
-                    ElevatedButton(
-                        onPressed: () =>
-                            onApprovePayment(bill['_id'] as String),
-                        child: const Text('Approve')),
-                  ]),
-                );
-              }).toList(),
-            ),
-          ),
-          const Divider(height: 24),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('Join Requests',
-                style: Theme.of(context).textTheme.titleMedium),
-            TextButton(onPressed: onGoMembers, child: const Text('Manage')),
-          ]),
-          joinRequests.when(
-            loading: () => const LinearProgressIndicator(minHeight: 2),
-            error: (e, st) => Text('Failed to load join requests',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: AppTheme.errorRed)),
-            data: (list) => Column(
-              children: (list.take(3)).map((m) {
-                final member = m as Map<String, dynamic>;
-                final user = member['user'] as Map<String, dynamic>?;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading:
-                      const Icon(Icons.person_add, color: AppTheme.infoBlue),
-                  title: Text(user?['name'] ?? 'Unknown'),
-                  subtitle: Text(user?['phone'] ?? 'N/A'),
-                  trailing: Wrap(spacing: 8, children: [
-                    OutlinedButton(
-                        onPressed: () =>
-                            onRejectMember(member['_id'] as String),
-                        child: const Text('Reject')),
-                    ElevatedButton(
-                        onPressed: () =>
-                            onApproveMember(member['_id'] as String),
-                        child: const Text('Approve')),
-                  ]),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(children: [
-            ElevatedButton.icon(
-                onPressed: onGenerateBills,
-                icon: const Icon(Icons.receipt),
-                label: const Text('Generate Bills')),
-            const SizedBox(width: 12),
-            OutlinedButton.icon(
-                onPressed: onGoApprovals,
-                icon: const Icon(Icons.pending_actions),
-                label: const Text('Approvals')),
-          ]),
-        ]),
-      ),
-    );
   }
 }
 

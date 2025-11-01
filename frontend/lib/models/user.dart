@@ -9,7 +9,8 @@ class Location {
     return Location(
       type: json['type'] as String,
       coordinates: (json['coordinates'] as List)
-          .map((e) => (e as num).toDouble())
+          .map((e) =>
+              e is num ? e.toDouble() : double.tryParse(e.toString()) ?? 0.0)
           .toList(),
     );
   }

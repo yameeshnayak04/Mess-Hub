@@ -8,7 +8,7 @@ import '../providers/manager_members_providers.dart';
 class MembersScreen extends ConsumerStatefulWidget {
   const MembersScreen({super.key});
   @override
-  ConsumerState<MembersScreen> createState() => _MembersScreenState();
+  ConsumerState createState() => _MembersScreenState();
 }
 
 class _MembersScreenState extends ConsumerState<MembersScreen>
@@ -33,8 +33,50 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
     final active = ref.watch(membersByStatusProvider('Active'));
     final inactive = ref.watch(membersByStatusProvider('Inactive'));
 
+    Future<void> _approve(String id) async {
+      try {
+        await ref.read(managerMembersRepositoryProvider).approveMembership(id);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Member approved')),
+        );
+        ref.invalidate(pendingMembersProvider);
+        ref.invalidate(membersByStatusProvider('Active'));
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e')),
+        );
+      }
+    }
+
+    Future<void> _reject(String id) async {
+      try {
+        await ref.read(managerMembersRepositoryProvider).rejectMembership(id);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Member rejected')),
+        );
+        ref.invalidate(pendingMembersProvider);
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e')),
+        );
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
+        leading: BackButton(
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/manager/members');
+            }
+          },
+        ),
         title: const Text('Members'),
         bottom: TabBar(
           controller: _controller,
@@ -44,7 +86,7 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
           tabs: const [
             Tab(text: 'Pending'),
             Tab(text: 'Active'),
-            Tab(text: 'Inactive')
+            Tab(text: 'Inactive'),
           ],
         ),
         actions: [
@@ -64,84 +106,34 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
           // Pending
           pending.when(
             loading: () => const Center(
-                child: CircularProgressIndicator(
-                    valueColor:
-                        AlwaysStoppedAnimation(AppTheme.primaryOrange))),
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(AppTheme.primaryOrange),
+              ),
+            ),
             error: (e, st) => _ErrorRetry(
-                message: 'Failed to load pending members',
-                detail: e.toString(),
-                onRetry: () => ref.refresh(pendingMembersProvider)),
+              message: 'Failed to load pending members',
+              detail: e.toString(),
+              onRetry: () => ref.refresh(pendingMembersProvider),
+            ),
             data: (list) => _PendingList(
               list: list.cast<Map<String, dynamic>>(),
-              onApprove: (id) async {
-                try {
-                  await ref
-                      .read(managerMembersRepositoryProvider)
-                      .approveMembership(id);
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Membership approved'),
-                      backgroundColor: AppTheme.successGreen));
-                  ref.invalidate(pendingMembersProvider);
-                  ref.invalidate(membersByStatusProvider('Active'));
-                } catch (e) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('Failed: $e'),
-                      backgroundColor: AppTheme.errorRed));
-                }
-              },
-              onReject: (id) async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text('Reject Membership'),
-                    content: const Text(
-                        'Are you sure you want to reject this membership?'),
-                    actions: [
-                      TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel')),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: TextButton.styleFrom(
-                            foregroundColor: AppTheme.errorRed),
-                        child: const Text('Reject'),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirm != true) return;
-                try {
-                  await ref
-                      .read(managerMembersRepositoryProvider)
-                      .rejectMembership(id);
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Membership rejected'),
-                      backgroundColor: AppTheme.warningYellow));
-                  ref.invalidate(pendingMembersProvider);
-                  ref.invalidate(membersByStatusProvider('Inactive'));
-                } catch (e) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('Failed: $e'),
-                      backgroundColor: AppTheme.errorRed));
-                }
-              },
+              onApprove: (id) => _approve(id),
+              onReject: (id) => _reject(id),
             ),
           ),
 
           // Active
           active.when(
             loading: () => const Center(
-                child: CircularProgressIndicator(
-                    valueColor:
-                        AlwaysStoppedAnimation(AppTheme.primaryOrange))),
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(AppTheme.primaryOrange),
+              ),
+            ),
             error: (e, st) => _ErrorRetry(
-                message: 'Failed to load active members',
-                detail: e.toString(),
-                onRetry: () => ref.refresh(membersByStatusProvider('Active'))),
+              message: 'Failed to load active members',
+              detail: e.toString(),
+              onRetry: () => ref.refresh(membersByStatusProvider('Active')),
+            ),
             data: (list) => _MemberList(
               list: list.cast<Map<String, dynamic>>(),
               onTap: (m) =>
@@ -152,14 +144,15 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
           // Inactive
           inactive.when(
             loading: () => const Center(
-                child: CircularProgressIndicator(
-                    valueColor:
-                        AlwaysStoppedAnimation(AppTheme.primaryOrange))),
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(AppTheme.primaryOrange),
+              ),
+            ),
             error: (e, st) => _ErrorRetry(
-                message: 'Failed to load inactive members',
-                detail: e.toString(),
-                onRetry: () =>
-                    ref.refresh(membersByStatusProvider('Inactive'))),
+              message: 'Failed to load inactive members',
+              detail: e.toString(),
+              onRetry: () => ref.refresh(membersByStatusProvider('Inactive')),
+            ),
             data: (list) => _MemberList(
               list: list.cast<Map<String, dynamic>>(),
               onTap: (m) =>

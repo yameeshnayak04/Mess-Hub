@@ -162,6 +162,5 @@ class CreateMessNotifier extends StateNotifier<CreateMessState> {
 final createMessProvider =
     StateNotifierProvider<CreateMessNotifier, CreateMessState>((ref) {
   final messRepository = ref.watch(messRepositoryProvider);
-  // Pass ref to the notifier
   return CreateMessNotifier(messRepository, ref);
 });

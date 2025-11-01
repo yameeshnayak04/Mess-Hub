@@ -1,5 +1,6 @@
 // lib/features/manager/create_mess/screens/create_mess_wizard_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
@@ -140,7 +141,9 @@ class _CreateMessWizardScreenState
             (formData['contactPhone'] as String?)?.length == 10 &&
             formData['serviceType'] != null &&
             formData['cuisine'] != null &&
-            formData['basicThaliDetails'] != null; // Added tiffin details
+            formData['basicThaliDetails'] != null &&
+            formData['maxCapacity'] != null &&
+            (formData['maxCapacity'] as num) > 0; // Added tiffin details
       case 1: // Location
         return formData['location'] != null &&
             formData['address'] != null &&
@@ -407,6 +410,7 @@ class _CreateMessWizardScreenState
 
         // Contact Phone
         TextFormField(
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           initialValue: state.formData['contactPhone'] as String?,
           decoration: const InputDecoration(
               labelText: 'Contact Number *', counterText: ""),
@@ -447,6 +451,22 @@ class _CreateMessWizardScreenState
           ],
           onChanged: (value) => notifier.updateFormData('cuisine', value),
           validator: (value) => value == null ? 'Cuisine is required' : null,
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          initialValue: state.formData['maxCapacity']?.toString(),
+          decoration: const InputDecoration(labelText: 'Maximum Members *'),
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          validator: (value) {
+            if (value == null || value.trim().isEmpty)
+              return 'Maximum members is required';
+            final n = int.tryParse(value);
+            if (n == null || n <= 0) return 'Enter a valid number > 0';
+            return null;
+          },
+          onChanged: (value) =>
+              notifier.updateFormData('maxCapacity', int.tryParse(value) ?? 0),
         ),
         const SizedBox(height: 16),
 
