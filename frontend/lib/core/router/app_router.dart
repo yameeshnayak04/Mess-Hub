@@ -2,11 +2,16 @@
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+// Manager profile
+import 'package:mess_management_app/features/manager/profile/screens/mess_profile_screen.dart';
+
+// Auth
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/auth/screens/splash_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 
+// Customer
 import '../../features/customer/customer_shell.dart';
 import '../../features/customer/home/screens/customer_home_screen.dart';
 import '../../features/customer/discover/screens/discover_screen.dart';
@@ -17,6 +22,7 @@ import '../../features/customer/membership/screens/attendance_calendar_screen.da
 import '../../features/customer/membership/screens/apply_leave_screen.dart';
 import '../../features/customer/membership/screens/billing_screen.dart';
 
+// Manager
 import '../../features/manager/manager_shell.dart';
 import '../../features/manager/home/screens/manager_home_screen.dart';
 import '../../features/manager/members/screens/members_screen.dart';
@@ -27,9 +33,10 @@ import '../../features/manager/kiosk/screens/kiosk_mode_screen.dart';
 import '../../features/manager/menu/screens/menu_editor_screen.dart';
 import '../../features/manager/create_mess/screens/create_mess_wizard_screen.dart';
 
+// Routes
 import '../../core/utils/constants.dart';
 
-final appRouterProvider = Provider((ref) {
+final appRouterProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider);
 
   return GoRouter(
@@ -39,30 +46,36 @@ final appRouterProvider = Provider((ref) {
       final user = authState.valueOrNull;
       final isLoading = authState.isLoading && !authState.hasValue;
 
+      // Use matchedLocation for compatibility across go_router versions
       final loc = state.matchedLocation;
+
+      // Auth route checks
       final onSplash = loc == RouteNames.splash;
       final onLogin = loc == RouteNames.login;
       final onRegister = loc == RouteNames.register;
       final onAuth = onLogin || onRegister;
+
+      // Manager create-mess gating
       final onCreateMess = loc == RouteNames.createMessWizard;
 
-      // 1) Initial boot: stay on splash until auth resolves
+      // 1) Initial boot: keep on splash while auth resolves
       if (isLoading) return onSplash ? null : RouteNames.splash;
 
-      // 2) Not authenticated: send to login unless already on auth
-      if (user == null) return onAuth ? null : RouteNames.login;
+      // 2) Not authenticated: allow only login/register
+      if (user == null) {
+        return onAuth ? null : RouteNames.login;
+      }
 
-      // 3) Authenticated manager: ensure mess exists
+      // 3) Authenticated Manager flow with create-mess gating
       if (user.role == 'Manager') {
         if (user.hasMess != true) {
           return onCreateMess ? null : RouteNames.createMessWizard;
         }
-        // If coming from splash/auth/create, push to manager home
         if (onSplash || onAuth || onCreateMess) return RouteNames.managerHome;
         return null;
       }
 
-      // 4) Authenticated customer: if coming from splash/auth, push to home
+      // 4) Authenticated Customer: from splash/auth go to home
       if (user.role == 'Customer') {
         if (onSplash || onAuth) return RouteNames.home;
         return null;
@@ -138,6 +151,9 @@ final appRouterProvider = Provider((ref) {
           GoRoute(
               path: RouteNames.kioskLauncher,
               builder: (_, __) => const KioskLauncherScreen()),
+          GoRoute(
+              path: RouteNames.managerProfile,
+              builder: (_, __) => const MessProfileScreen()),
         ],
       ),
 

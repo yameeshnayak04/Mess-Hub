@@ -82,7 +82,8 @@ const messSchema = new mongoose.Schema(
         return this.serviceType === 'Both Daily & Monthly';
       },
     },
-
+    scheduledUpdates: { type: Object, default: {} }, 
+    scheduledEffectiveFrom: { type: Date }, 
     rules: {
       minLeaveDaysForRebate: { type: Number, required: true, min: 1 },
       rebatePerThali: { type: Number, required: true, min: 0 },

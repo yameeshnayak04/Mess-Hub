@@ -60,6 +60,7 @@ class RouteNames {
   static const String kioskMode = '/manager/kiosk/mode';
   static const String managerMenu = '/manager/menu-editor';
   static const String createMessWizard = '/manager/create-mess';
+  static const managerProfile = '/manager/profile';
 
   // Helper
   static String managerMemberDetails(String membershipId) =>

@@ -1,3 +1,4 @@
+// lib/features/customer/profile/screens/profile_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +7,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/primary_button.dart';
 import '../../../../core/utils/constants.dart';
 import '../../../auth/providers/auth_provider.dart';
+import '../providers/user_profile_providers.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -26,11 +28,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       body: authState.when(
         data: (user) {
           if (user == null) return const SizedBox();
-
           return SingleChildScrollView(
             child: Column(
               children: [
-                // Profile Header
+                // Header
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(24),
@@ -51,7 +52,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         backgroundColor:
                             AppTheme.primaryOrange.withOpacity(0.1),
                         child: Text(
-                          user.name[0].toUpperCase(),
+                          (user.name.isNotEmpty ? user.name[0] : 'U')
+                              .toUpperCase(),
                           style: const TextStyle(
                             fontSize: 40,
                             fontWeight: FontWeight.bold,
@@ -60,10 +62,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        user.name,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
+                      Text(user.name,
+                          style: Theme.of(context).textTheme.headlineSmall),
                       const SizedBox(height: 4),
                       Text(
                         user.phone,
@@ -74,9 +74,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
+                            horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
                           color: AppTheme.lightOrange,
                           borderRadius: BorderRadius.circular(16),
@@ -96,28 +94,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
                 const SizedBox(height: 24),
 
-                // Account Settings
+                // Account
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Account',
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                      ),
+                      Text('Account',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(color: AppTheme.textSecondary)),
                       const SizedBox(height: 12),
-                      _buildSettingCard(
+                      _settingCard(
                         context,
                         icon: Icons.lock_outline,
                         title: 'Kiosk PIN',
-                        subtitle: 'Your Kiosk PIN: ••••',
+                        subtitle: 'Tap to change 4-digit PIN',
                         onTap: () => _showChangePinDialog(context),
                       ),
-                      _buildSettingCard(
+                      _settingCard(
                         context,
                         icon: Icons.person_outline,
                         title: 'Edit Profile',
@@ -130,38 +126,33 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
                 const SizedBox(height: 24),
 
-                // App Settings
+                // App settings (placeholders)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Settings',
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                      ),
+                      Text('Settings',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(color: AppTheme.textSecondary)),
                       const SizedBox(height: 12),
-                      _buildSettingCard(
+                      _settingCard(
                         context,
                         icon: Icons.dark_mode_outlined,
                         title: 'Dark Mode',
                         subtitle: 'Coming soon',
-                        trailing: Switch(
-                          value: false,
-                          onChanged: null,
-                        ),
+                        trailing: const Switch(value: false, onChanged: null),
                       ),
-                      _buildSettingCard(
+                      _settingCard(
                         context,
                         icon: Icons.help_outline,
                         title: 'Help & Support',
                         subtitle: 'Get help with the app',
                         onTap: () {},
                       ),
-                      _buildSettingCard(
+                      _settingCard(
                         context,
                         icon: Icons.info_outline,
                         title: 'About',
@@ -174,7 +165,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
                 const SizedBox(height: 24),
 
-                // Logout Button
+                // Logout
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: PrimaryButton(
@@ -184,19 +175,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     icon: Icons.logout,
                   ),
                 ),
-
                 const SizedBox(height: 24),
               ],
             ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(child: Text('Error: $error')),
+        error: (e, _) => Center(child: Text('Error: $e')),
       ),
     );
   }
 
-  Widget _buildSettingCard(
+  Widget _settingCard(
     BuildContext context, {
     required IconData icon,
     required String title,
@@ -228,7 +218,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   void _showChangePinDialog(BuildContext context) {
     final pinController = TextEditingController();
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -242,27 +231,39 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               controller: pinController,
               length: 4,
               obscureText: true,
+              keyboardType: TextInputType.number,
             ),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
           TextButton(
+            child: const Text('Update'),
             onPressed: () async {
-              if (pinController.text.length == 4) {
-                try {} catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to update PIN: $e')),
-                    );
-                  }
-                }
+              final pin = pinController.text;
+              if (pin.length != 4 || int.tryParse(pin) == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('PIN must be exactly 4 digits')),
+                );
+                return;
+              }
+              try {
+                await ref.read(userProfileUpdaterProvider).call(pin: pin);
+                await ref.read(authProvider.notifier).refreshProfile();
+                if (!mounted) return;
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('PIN updated')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to update PIN: $e')),
+                );
               }
             },
-            child: const Text('Update'),
           ),
         ],
       ),
@@ -271,7 +272,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   void _showEditNameDialog(BuildContext context, String currentName) {
     final nameController = TextEditingController(text: currentName);
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -285,14 +285,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
           TextButton(
-            onPressed: () async {
-              if (nameController.text.isNotEmpty) {}
-            },
             child: const Text('Update'),
+            onPressed: () async {
+              final name = nameController.text.trim();
+              if (name.isEmpty) return;
+              try {
+                await ref.read(userProfileUpdaterProvider).call(name: name);
+                await ref.read(authProvider.notifier).refreshProfile();
+                if (!mounted) return;
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Name updated')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to update name: $e')),
+                );
+              }
+            },
           ),
         ],
       ),
@@ -307,20 +321,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         content: const Text('Are you sure you want to logout?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
           TextButton(
-            onPressed: () async {
-              await ref.read(authProvider.notifier).logout();
-              if (context.mounted) {
-                context.go(RouteNames.login);
-              }
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: AppTheme.errorRed,
-            ),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorRed),
             child: const Text('Logout'),
+            onPressed: () async {
+              // Close the dialog first so we don't act on a soon-to-be-deactivated context
+              if (context.mounted) {
+                Navigator.of(context, rootNavigator: true)
+                    .pop(); // [attached_file:69]
+              }
+              await ref
+                  .read(authProvider.notifier)
+                  .logout(); // triggers router redirect [attached_file:69]
+              // Do NOT call context.go(...) here
+            },
           ),
         ],
       ),

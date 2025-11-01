@@ -75,63 +75,89 @@ exports.createMess = async (req, res, next) => {
 // @desc    Get manager's mess
 // @route   GET /api/mess/my-mess
 // @access  Private (Manager only)
+// controllers/messController.js
 exports.getMyMess = async (req, res, next) => {
   try {
     const mess = await Mess.findOne({ owner: req.user.id });
-
     if (!mess) {
-      return res.status(404).json({
-        success: false,
-        message: 'No mess found for this manager'
-      });
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
     }
 
-    res.status(200).json({
-      success: true,
-      data: mess
-    });
+    // Auto-apply scheduled updates if due
+    if (mess.scheduledEffectiveFrom && new Date() >= mess.scheduledEffectiveFrom) {
+      const updates = mess.scheduledUpdates || {};
+      for (const [k, v] of Object.entries(updates)) mess[k] = v;
+      mess.scheduledUpdates = {};
+      mess.scheduledEffectiveFrom = undefined;
+      await mess.save();
+    }
+
+    return res.status(200).json({ success: true, data: mess });
   } catch (error) {
     next(error);
   }
 };
 
+
 // @desc    Update manager's mess
 // @route   PUT /api/mess/my-mess
 // @access  Private (Manager only)
+// controllers/messController.js
 exports.updateMyMess = async (req, res, next) => {
   try {
     const mess = await Mess.findOne({ owner: req.user.id });
-
     if (!mess) {
-      return res.status(404).json({
-        success: false,
-        message: 'No mess found for this manager'
-      });
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
     }
 
-    // Update fields
+    // Collect only allowed fields for scheduling
     const allowedUpdates = [
       'messName', 'address', 'city', 'contactPhone', 'serviceType',
       'cuisine', 'maxCapacity', 'timings', 'plans', 'dailyThaliRate', 'rules'
     ];
 
-    allowedUpdates.forEach(field => {
-      if (req.body[field] !== undefined) {
-        mess[field] = req.body[field];
+    const updates = {};
+    for (const field of allowedUpdates) {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        updates[field] = req.body[field];
       }
-    });
-
-    // Update image if uploaded
+    }
     if (req.file) {
-      mess.messImage = `/uploads/mess-images/${req.file.filename}`;
+      updates.messImage = `/uploads/mess-images/${req.file.filename}`;
+    }
+
+    // Nothing to schedule
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'No valid fields provided to update' });
+    }
+
+    // Compute first day of next month at 00:00
+    const now = new Date();
+    const nextMonthStart = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth() + 1,
+      1, 0, 0, 0, 0
+    ));
+
+    // Merge with any existing scheduled updates
+    const existing = mess.scheduledUpdates || {};
+    mess.scheduledUpdates = { ...existing, ...updates };
+
+    // If there is no schedule or existing date is before nextMonthStart, set to next month
+    if (!mess.scheduledEffectiveFrom || mess.scheduledEffectiveFrom < nextMonthStart) {
+      mess.scheduledEffectiveFrom = nextMonthStart;
     }
 
     await mess.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      data: mess,
-      message: 'Mess updated successfully. Price changes will apply from next billing cycle.'
+      data: {
+        current: mess,             // current live values
+        scheduledUpdates: mess.scheduledUpdates,
+        scheduledEffectiveFrom: mess.scheduledEffectiveFrom,
+      },
+      message: 'Changes scheduled and will take effect from the next billing cycle (next month).'
     });
   } catch (error) {
     if (error.code === 11000) {
@@ -143,6 +169,7 @@ exports.updateMyMess = async (req, res, next) => {
     next(error);
   }
 };
+
 
 // @desc    Discover messes (sorted by distance)
 // @route   GET /api/mess/discover

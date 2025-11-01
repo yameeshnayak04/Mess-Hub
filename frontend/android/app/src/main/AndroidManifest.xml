@@ -8,6 +8,7 @@
     <application
         android:label="Mess Hub"
         android:icon="@mipmap/ic_launcher"
+        android:enableOnBackInvokedCallback="true"
         >
         <!-- REMOVED: android:name="io.flutter.app.FlutterApplication" -->
         <!-- This line was forcing the old v1 embedding and causing the build to fail. -->
