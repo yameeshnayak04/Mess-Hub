@@ -1,82 +1,133 @@
+const mongoose = require('mongoose'); // Required for transactions
 const Leave = require('../models/Leave');
 const Membership = require('../models/Membership');
 const Mess = require('../models/Mess');
+const Attendance = require('../models/Attendance'); // Required for transaction
+const { startOfDay } = require('../utils/billCalculation'); // Import from billCalculation
 const { calculateDaysDifference } = require('../utils/billCalculation');
 
 // @desc    Apply for leave (with eligibility checks)
 // @route   POST /api/leave/apply/:membershipId
 // @access  Private (Customer only)
 exports.applyForLeave = async (req, res, next) => {
+  const { membershipId } = req.params;
+  const { startDate, endDate } = req.body;
+
+  const session = await mongoose.startSession();
   try {
-    const { membershipId } = req.params;
-    const { startDate, endDate } = req.body;
-
-    // 1. Check membership
-    const m = await Membership.findById(membershipId).populate('mess');
-    if (!m) return res.status(404).json({ success: false, message: 'Membership not found' });
-    if (m.user.toString() !== req.user.id) return res.status(403).json({ success: false, message: 'Not authorized' });
-    if (m.status !== 'Active') return res.status(400).json({ success: false, message: 'Membership is not active' });
-
-    const messRules = m.mess.rules;
-
-    // 2. Validate dates (Rule 3: Next day onwards)
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-
-    if (start < tomorrow) {
-      return res.status(400).json({ success: false, message: 'Start date must be at least tomorrow' });
-    }
-
-    // 3. Validate dates (Rule 1: Within same month)
-    if (start.getMonth() !== end.getMonth() || start.getFullYear() !== end.getFullYear()) {
-      return res.status(400).json({ success: false, message: 'Start and end date must be in the same month' });
-    }
-
-    // 4. Validate duration (Rule 2: Min continuous days)
-    const minDays = messRules.minLeaveDaysForRebate || 1;
-    const leaveDuration = calculateDaysDifference(start, end);
-
-    if (leaveDuration < minDays) {
-      return res.status(400).json({
-        success: false,
-        message: `Leave must be for at least ${minDays} continuous days to be eligible for rebate.`,
-      });
-    }
-
-    // 5. Validate overlap (Rule 4: Other constraints)
-    const overlap = await Leave.findOne({
-      user: req.user.id,
-      mess: m.mess._id,
-      $or: [{ startDate: { $lte: end }, endDate: { $gte: start } }],
-    });
-
-    if (overlap) {
-      return res.status(400).json({ success: false, message: 'This leave request overlaps with an existing leave.' });
-    }
-
-    // All checks passed, create the leave
-    const leave = await Leave.create({
-      user: req.user.id,
-      mess: m.mess._id,
-      startDate: start,
-      endDate: end,
-    });
+    let populatedLeave;
     
-    const populated = await Leave.findById(leave._id).populate('mess', 'messName');
-    
-    return res.status(201).json({
-      success: true,
-      data: populated,
-      message: 'Leave successfully recorded.'
+    await session.withTransaction(async () => {
+      const m = await Membership.findById(membershipId).populate('mess').session(session);
+      if (!m) {
+        return res.status(404).json({ success: false, message: 'Membership not found' });
+      }
+      if (m.user.toString() !== req.user.id) {
+        return res.status(403).json({ success: false, message: 'Not authorized' });
+      }
+      if (m.status !== 'Active') {
+        return res.status(400).json({ success: false, message: 'Membership is not active' });
+      }
+
+      const messRules = m.mess.rules;
+      const start = startOfDay(new Date(startDate));
+      const end = startOfDay(new Date(endDate)); // Use startOfDay for end date too
+      const tomorrow = startOfDay(new Date(Date.now() + 24 * 60 * 60 * 1000));
+
+      if (start < tomorrow) {
+        return res.status(400).json({ success: false, message: 'Start date must be at least tomorrow' });
+      }
+
+      // **LOGIC CHANGE**: Removed same-month check
+
+      const minDays = messRules.minLeaveDaysForRebate || 1;
+      // Calculate duration inclusive
+      const leaveDuration = Math.floor((end - start) / (24 * 3600 * 1000)) + 1;
+      
+      if (leaveDuration < minDays) {
+        return res.status(400).json({ success: false, message: `Leave must be for at least ${minDays} continuous days to be eligible for rebate.` });
+      }
+
+      // Overlap check
+      const overlap = await Leave.findOne({
+        user: req.user.id,
+        mess: m.mess._id,
+        $or: [{ startDate: { $lte: end }, endDate: { $gte: start } }],
+      }).session(session);
+      
+      if (overlap) {
+        return res.status(400).json({ success: false, message: 'This leave request overlaps with an existing leave.' });
+      }
+
+      // --- ATOMIC OPERATION ---
+      // 1. Create Leave record
+      const leave = await Leave.create([{ 
+        user: req.user.id, 
+        mess: m.mess._id, 
+        startDate: start, 
+        endDate: end 
+      }], { session });
+
+      // 2. Create corresponding Attendance records
+      const planName = String(m.planName || '').toLowerCase();
+      const meals = [];
+      if (planName.includes('both') || planName.includes('lunch')) meals.push('Lunch');
+      if (planName.includes('both') || planName.includes('dinner')) meals.push('Dinner');
+
+      const bulkOps = [];
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const day = startOfDay(d);
+        for (const meal of meals) {
+          bulkOps.push({
+            updateOne: {
+              filter: { membership: m._id, date: day, mealType: meal },
+              update: {
+                $setOnInsert: {
+                  user: req.user.id,
+                  membership: m._id,
+                  mess: m.mess._id,
+                  date: day,
+                  mealType: meal,
+                  status: 'Leave', // Set status to Leave
+                  memberType: 'Monthly',
+                  planNameSnapshot: m.planName,
+                  rateSnapshot: m.billingRate,
+                  rebatePerThaliSnapshot: m.mess.rules.rebatePerThali,
+                },
+              },
+              upsert: true,
+            },
+          });
+        }
+      }
+      
+      if (bulkOps.length > 0) {
+        await Attendance.bulkWrite(bulkOps, { session });
+      }
+      // --- END ATOMIC OPERATION ---
+
+      // For sending back the response
+      populatedLeave = await Leave.findById(leave[0]._id).populate('mess', 'messName').session(session);
+    }); // Transaction commits here
+
+    return res.status(201).json({ 
+      success: true, 
+      data: populatedLeave, 
+      message: 'Leave successfully recorded and attendance marked.' 
     });
 
   } catch (error) {
-    next(error);
+    // Handle transaction errors
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'Attendance already marked for one of these dates.' });
+    }
+    console.error("Leave application transaction failed:", error);
+    return next(error);
+  } finally {
+    session.endSession();
   }
 };
+
 
 // @desc    Get customer's own leaves
 // @route   GET /api/leave/my/:membershipId

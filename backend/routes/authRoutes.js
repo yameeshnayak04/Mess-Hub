@@ -4,19 +4,21 @@ const router = express.Router();
 
 const authController = require('../controllers/authController');
 const validate = require('../middleware/validate');
-const { registerSchema, loginSchema } = require('../middleware/schemas');
+// FIX: Import all 3 schemas
+const { registerSchema, loginSchema, kioskLoginSchema } = require('../middleware/schemas');
 const { protect } = require('../middleware/auth');
 
 // Register (Customer or Manager)
-// Removed validation: registerSchema is missing 'password'
-router.post('/register', authController.register);
+// FIX: Added validation
+router.post('/register', validate(registerSchema), authController.register);
 
 // Login with phone + password
-// Removed validation: loginSchema validates 'kioskPin', not 'password'
-router.post('/login', authController.login);
+// FIX: Added validation
+router.post('/login', validate(loginSchema), authController.login);
 
 // Kiosk login with phone + PIN
-router.post('/kiosk-login', validate(loginSchema), authController.kioskLogin);
+// FIX: Use the correct schema name
+router.post('/kiosk-login', validate(kioskLoginSchema), authController.kioskLogin);
 
 // Optional: Logout endpoint
 router.post('/logout', protect, authController.logout);

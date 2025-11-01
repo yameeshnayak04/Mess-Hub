@@ -6,12 +6,14 @@ exports.registerSchema = Joi.object({
   phone: Joi.string().trim().pattern(/^[0-9]{10}$/).required().messages({
     'string.pattern.base': 'Phone number must be 10 digits'
   }),
-  kioskPin: Joi.string().pattern(/^[0-9]{4}$/).when('role', {
+  // FIX: Added password
+  password: Joi.string().min(8).required(), 
+  pin: Joi.string().pattern(/^[0-9]{4}$/).when('role', {
     is: 'Customer',
     then: Joi.required(),
     otherwise: Joi.forbidden()
   }).messages({
-    'string.pattern.base': 'Kiosk PIN must be 4 digits'
+    'string.pattern.base': 'PIN must be 4 digits'
   }),
   role: Joi.string().valid('Customer', 'Manager').required(),
   location: Joi.object({
@@ -24,14 +26,21 @@ exports.registerSchema = Joi.object({
   })
 });
 
+// FIX: This schema is for regular password login
 exports.loginSchema = Joi.object({
+  phone: Joi.string().trim().pattern(/^[0-GET]{10}$/).required(),
+  password: Joi.string().required()
+});
+
+// FIX: Renamed old 'loginSchema' to 'kioskLoginSchema'
+exports.kioskLoginSchema = Joi.object({
   phone: Joi.string().trim().pattern(/^[0-9]{10}$/).required(),
-  kioskPin: Joi.string().pattern(/^[0-9]{4}$/).required()
+  pin: Joi.string().pattern(/^[0-9]{4}$/).required()
 });
 
 exports.updateProfileSchema = Joi.object({
   name: Joi.string().trim().min(2).max(50).optional(),
-  kioskPin: Joi.string().pattern(/^[0-9]{4}$/).optional()
+  pin: Joi.string().pattern(/^[0-9]{4}$/).optional()
 });
 
 // Mess schemas
@@ -47,6 +56,8 @@ exports.createMessSchema = Joi.object({
   serviceType: Joi.string().valid('Monthly Only', 'Both Daily & Monthly').required(),
   cuisine: Joi.string().valid('Veg', 'Non-Veg', 'Both').required(),
   maxCapacity: Joi.number().integer().min(1).optional(),
+  tiffinService: Joi.boolean().required(),
+  basicThaliDetails: Joi.string().trim().min(10).required(),
   timings: Joi.object({
     lunch: Joi.object({
       start: Joi.string().pattern(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
@@ -77,6 +88,7 @@ exports.createMessSchema = Joi.object({
   }).required()
 });
 
+// (updateMessSchema remains the same)
 exports.updateMessSchema = Joi.object({
   messName: Joi.string().trim().min(2).max(100).optional(),
   address: Joi.string().trim().min(5).max(200).optional(),
@@ -85,6 +97,8 @@ exports.updateMessSchema = Joi.object({
   serviceType: Joi.string().valid('Monthly Only', 'Both Daily & Monthly').optional(),
   cuisine: Joi.string().valid('Veg', 'Non-Veg', 'Both').optional(),
   maxCapacity: Joi.number().integer().min(1).optional(),
+  tiffinService: Joi.boolean().optional(),
+  basicThaliDetails: Joi.string().trim().min(10).optional(),
   timings: Joi.object({
     lunch: Joi.object({
       start: Joi.string().pattern(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
@@ -111,6 +125,7 @@ exports.updateMessSchema = Joi.object({
   }).optional()
 });
 
+
 // Membership schemas
 exports.joinMessSchema = Joi.object({
   planName: Joi.string().trim().required()
@@ -136,20 +151,10 @@ exports.kioskMarkDailySchema = Joi.object({
 // Leave schemas
 exports.leaveSchema = Joi.object({
   startDate: Joi.date().iso().greater('now').required(),
-  endDate: Joi.date().iso().required().custom((value, helpers) => {
-    const startDate = helpers.state.ancestors[0].startDate;
-    if (value < startDate) {
-      return helpers.error('any.invalid');
-    }
-    // Check if both dates are in the same month and year
-    const start = new Date(startDate);
-    const end = new Date(value);
-    if (start.getMonth() !== end.getMonth() || start.getFullYear() !== end.getFullYear()) {
-      return helpers.error('date.sameMonth');
-    }
-    return value;
-  }).messages({
-    'date.sameMonth': 'End date must be in the same month as start date'
+  endDate: Joi.date().iso().required().min(Joi.ref('startDate'))
+  // FIX: Removed the .custom() check for same month
+  .messages({
+    'date.min': 'End date must be on or after start date'
   })
 });
 

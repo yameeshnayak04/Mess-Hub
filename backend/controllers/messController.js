@@ -7,10 +7,7 @@ const { checkMealTiming, getStartAndEndOfDay } = require('../utils/billCalculati
 // @desc    Create new mess
 // @route   POST /api/mess
 // @access  Private (Manager only)
-
 exports.createMess = async (req, res, next) => {
-
-
   try {
     let messData = { ...req.body };
 
@@ -22,36 +19,23 @@ exports.createMess = async (req, res, next) => {
           messData[key] = JSON.parse(messData[key]);
         } catch (e) {
           console.error(`!!! Failed to JSON parse field '${key}':`, e);
-          // If parsing fails here, Mongoose validation will fail later due to type mismatch
-           return res.status(400).json({ success: false, message: `Invalid JSON format for field: ${key}` }); // Fail fast
+           return res.status(400).json({ success: false, message: `Invalid JSON format for field: ${key}` });
         }
       }
-       // Add checks for missing required nested fields if needed, although Mongoose will catch them
-       else if (!messData[key] && ['location', 'timings', 'rules', 'plans'].includes(key)) {
-         console.warn(`Required nested field '${key}' might be missing.`);
-       }
     }
 
-    // --- Explicitly Convert Boolean String ---
     if (messData.tiffinService === 'true') {
       messData.tiffinService = true;
     } else if (messData.tiffinService === 'false') {
       messData.tiffinService = false;
-    } else {
-        // Let Mongoose handle the 'required: true' validation if it's missing or invalid
-        console.warn(`tiffinService value before Mongoose: ${messData.tiffinService}`);
     }
-
-     // Log basicThaliDetails (Mongoose will validate 'required: true')
-     console.warn(`basicThaliDetails value before Mongoose: ${messData.basicThaliDetails}`);
-
 
     // --- Add Owner and Image ---
     messData.owner = req.user.id;
     if (req.file) {
       messData.messImage = `/uploads/mess-images/${req.file.filename}`;
     }
-    // --- Create Mess Document (Mongoose handles final validation) ---
+
     const mess = await Mess.create(messData);
 
     res.status(201).json({
@@ -63,19 +47,17 @@ exports.createMess = async (req, res, next) => {
     if (error.name === 'ValidationError') {
       return res.status(400).json({ success: false, message: `Validation failed: ${error.message}`, errors: error.errors });
     }
-    if (error.code === 11000) { /* ... */ }
+    if (error.code === 11000) {
+       return res.status(400).json({ success: false, message: 'A mess with this name and address already exists' });
+    }
     next(error);
   }
 };
 
-// ... (rest of controller)
-
-// ... (rest of controller)
 
 // @desc    Get manager's mess
 // @route   GET /api/mess/my-mess
 // @access  Private (Manager only)
-// controllers/messController.js
 exports.getMyMess = async (req, res, next) => {
   try {
     const mess = await Mess.findOne({ owner: req.user.id });
@@ -102,7 +84,6 @@ exports.getMyMess = async (req, res, next) => {
 // @desc    Update manager's mess
 // @route   PUT /api/mess/my-mess
 // @access  Private (Manager only)
-// controllers/messController.js
 exports.updateMyMess = async (req, res, next) => {
   try {
     const mess = await Mess.findOne({ owner: req.user.id });
@@ -113,7 +94,8 @@ exports.updateMyMess = async (req, res, next) => {
     // Collect only allowed fields for scheduling
     const allowedUpdates = [
       'messName', 'address', 'city', 'contactPhone', 'serviceType',
-      'cuisine', 'maxCapacity', 'timings', 'plans', 'dailyThaliRate', 'rules'
+      'cuisine', 'maxCapacity', 'timings', 'plans', 'dailyThaliRate', 'rules',
+      'tiffinService', 'basicThaliDetails'
     ];
 
     const updates = {};
@@ -122,6 +104,13 @@ exports.updateMyMess = async (req, res, next) => {
         updates[field] = req.body[field];
       }
     }
+    
+    if (req.body.tiffinService === 'true') {
+      updates.tiffinService = true;
+    } else if (req.body.tiffinService === 'false') {
+      updates.tiffinService = false;
+    }
+
     if (req.file) {
       updates.messImage = `/uploads/mess-images/${req.file.filename}`;
     }
@@ -153,7 +142,7 @@ exports.updateMyMess = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       data: {
-        current: mess,             // current live values
+        current: mess,
         scheduledUpdates: mess.scheduledUpdates,
         scheduledEffectiveFrom: mess.scheduledEffectiveFrom,
       },
@@ -178,15 +167,12 @@ exports.discoverMesses = async (req, res, next) => {
   try {
     const { cuisine, serviceType, page = 1, limit = 10 } = req.query;
 
-    // Build match conditions
     const matchConditions = {};
     if (cuisine) matchConditions.cuisine = cuisine;
     if (serviceType) matchConditions.serviceType = serviceType;
 
-    // Get user's location
     const userLocation = req.user.location.coordinates;
 
-    // Perform geospatial query
     const messes = await Mess.aggregate([
       {
         $geoNear: {
@@ -195,7 +181,7 @@ exports.discoverMesses = async (req, res, next) => {
             coordinates: userLocation
           },
           distanceField: 'distance',
-          maxDistance: 500000000, // 50km radius
+          maxDistance: 50000, // 50km radius
           spherical: true
         }
       },
@@ -237,19 +223,6 @@ exports.discoverMesses = async (req, res, next) => {
   }
 };
 
-// new: GET /api/mess/dashboard/members-skipped
-exports.getMembersSkipped = async (req,res,next) => {
-  const mess = await Mess.findOne({ owner: req.user.id });
-  if (!mess) return res.status(404).json({ success:false, message:'No mess found for this manager' });
-  const { currentMeal } = checkMealTiming(mess.timings);
-  if (currentMeal === 'None') return res.status(200).json({ success:true, count:0, data:[] });
-  const { startOfDay, endOfDay } = getStartAndEndOfDay();
-  const skipped = await Attendance.find({
-    mess: mess._id, date: { $gte: startOfDay, $lte: endOfDay }, mealType: currentMeal, status: 'Skipped'
-  }).populate('user','name phone');
-  return res.status(200).json({ success:true, count: skipped.length, data: skipped, meal: currentMeal });
-};
-
 
 // @desc    Get mess by ID
 // @route   GET /api/mess/:messId
@@ -265,7 +238,6 @@ exports.getMessById = async (req, res, next) => {
       });
     }
 
-    // Get average rating
     const Review = require('../models/Review');
     const reviews = await Review.find({ mess: mess._id });
     const averageRating = reviews.length > 0
@@ -273,7 +245,7 @@ exports.getMessById = async (req, res, next) => {
       : 0;
 
     const messData = mess.toObject();
-    messData.averageRating = averageRating;
+    messData.averageRating = averageRating.toFixed(1);
     messData.reviewCount = reviews.length;
 
     res.status(200).json({
@@ -306,7 +278,6 @@ exports.getDashboardStats = async (req, res, next) => {
       memberType: 'Monthly'
     }) : 0;
 
-    // *** FIXED ***: Removed 'status' check.
     const onLeave = await Leave.countDocuments({
       mess: mess._id,
       startDate: { $lte: endOfDay },
@@ -349,7 +320,6 @@ exports.getDashboardStats = async (req, res, next) => {
 // @route   GET /api/mess/dashboard/members-eating
 // @access  Private (Manager only)
 exports.getMembersEating = async (req, res, next) => {
-  // ... (existing code, no changes)
   try {
     const mess = await Mess.findOne({ owner: req.user.id });
     if (!mess) {
@@ -383,7 +353,6 @@ exports.getMembersOnLeave = async (req, res, next) => {
 
     const { startOfDay, endOfDay } = getStartAndEndOfDay();
 
-    // *** FIXED ***: Removed 'status: Approved' check
     const leaveRecords = await Leave.find({
       mess: mess._id,
       startDate: { $lte: endOfDay },
@@ -403,8 +372,8 @@ exports.getMembersOnLeave = async (req, res, next) => {
 // @desc    Get members who skipped current meal (clickable stat details)
 // @route   GET /api/mess/dashboard/members-skipped
 // @access  Private (Manager only)
+// NOTE: This function was duplicated. Removing the first instance.
 exports.getMembersSkipped = async (req, res, next) => {
-  // ... (existing code, no changes)
   try {
     const mess = await Mess.findOne({ owner: req.user.id });
     if (!mess) {

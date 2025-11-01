@@ -13,6 +13,10 @@ dotenv.config();
 // Connect DB
 connectDB();
 
+// --- Load Jobs ---
+require('./jobs/absentJob'); // Marks users absent
+require('./jobs/billingJob'); // Generates monthly bills
+
 const app = express();
 
 // Trust proxy (useful behind reverse proxies/load balancers)

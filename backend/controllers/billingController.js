@@ -5,8 +5,36 @@ const Leave = require('../models/Leave');
 const Attendance = require('../models/Attendance');
 const { calculateDaysDifference, getStartAndEndOfMonth } = require('../utils/billCalculation');
 
+// @desc    Get all bills with 'Due' status for manager's mess
+// @route   GET /api/billing/due-bills
+// @access  Private (Manager only)
+exports.getDueBills = async (req, res, next) => {
+  try {
+    const mess = await Mess.findOne({ owner: req.user.id });
+    if (!mess) {
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
+    }
 
-// List all customer payment submissions awaiting approval for this manager
+    const dueBills = await Bill.find({
+      mess: mess._id,
+      status: 'Due'
+    })
+      .populate('user', 'name phone')
+      .sort({ year: -1, month: -1, updatedAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: dueBills.length,
+      data: dueBills
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    List all customer payment submissions awaiting approval
+// @route   GET /api/billing/pending-approvals
+// @access  Private (Manager only)
 exports.getPendingApprovals = async (req, res, next) => {
   try {
     const mess = await Mess.findOne({ owner: req.user.id });
@@ -20,7 +48,9 @@ exports.getPendingApprovals = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// Show a single payment (bill) details including proof, scoped to this manager’s mess
+// @desc    Show a single payment (bill) details including proof
+// @route   GET /api/billing/payment/:billId
+// @access  Private (Manager only)
 exports.getPaymentDetails = async (req, res, next) => {
   try {
     const mess = await Mess.findOne({ owner: req.user.id });
@@ -34,118 +64,6 @@ exports.getPaymentDetails = async (req, res, next) => {
     }
     return res.status(200).json({ success: true, data: bill });
   } catch (err) { next(err); }
-};
-
-
-// @desc    Generate monthly bills
-// @route   POST /api/billing/generate-bills
-// @access  Private (Manager only)
-// billingController.js
-
-exports.generateMonthlyBills = async (req, res, next) => {
-  try {
-    const { month, year } = req.body;
-
-    // Manager's mess
-    const mess = await Mess.findOne({ owner: req.user.id });
-    if (!mess) {
-      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
-    }
-
-    // Determine billing window
-    const billingMonth = month || new Date().getMonth() + 1;
-    const billingYear = year || new Date().getFullYear();
-    const { startOfMonth, endOfMonth } = getStartAndEndOfMonth(billingMonth, billingYear);
-
-    // Active monthly members
-    const activeMembers = await Membership.find({ mess: mess._id, status: 'Active' });
-    if (activeMembers.length === 0) {
-      return res.status(400).json({ success: false, message: 'No active members to generate bills for' });
-    }
-
-    const generatedBills = [];
-    for (const member of activeMembers) {
-      // Avoid duplicate bill for this user/mess/month/year
-      const exists = await Bill.exists({
-        user: member.user, mess: mess._id, month: billingMonth, year: billingYear
-      });
-      if (exists) continue;
-
-      // Base = membership billingRate snapshot
-      const baseAmount = Number(member.billingRate || 0);
-
-      // Skipped meals in the month (Monthly members only)
-      const skippedMeals = await Attendance.countDocuments({
-        user: member.user,
-        mess: mess._id,
-        memberType: 'Monthly',
-        date: { $gte: startOfMonth, $lte: endOfMonth },
-        status: 'Skipped'
-      });
-
-      // Leaves overlapping the month window (no status field)
-      const leaves = await Leave.find({
-        user: member.user,
-        mess: mess._id,
-        startDate: { $lte: endOfMonth },
-        endDate: { $gte: startOfMonth }
-      });
-
-      // Sum eligible leave days by range; enforce minLeaveDaysForRebate per range
-      let leaveRebateDays = 0;
-      for (const lv of leaves) {
-        const s = lv.startDate < startOfMonth ? startOfMonth : lv.startDate;
-        const e = lv.endDate > endOfMonth ? endOfMonth : lv.endDate;
-        const days = calculateDaysDifference(s, e);
-        if (days >= (mess.rules?.minLeaveDaysForRebate || 0)) {
-          leaveRebateDays += days;
-        }
-      }
-
-      // Rebates
-      const rebatePerThali = Number(mess.rules?.rebatePerThali || 0);
-      const skipAllowancePercent = Number(mess.rules?.skipAllowancePercent || 0);
-      const leaveRebate = leaveRebateDays * rebatePerThali;
-      const skipRebate = skippedMeals * rebatePerThali * (skipAllowancePercent / 100);
-      const rebateAmount = leaveRebate + skipRebate;
-
-      // Total with minMonthlyCharge
-      const minMonthlyCharge = Number(mess.rules?.minMonthlyCharge || 0);
-      let totalAmount = Math.max(0, baseAmount - rebateAmount);
-      if (minMonthlyCharge && totalAmount < minMonthlyCharge) {
-        totalAmount = minMonthlyCharge;
-      }
-
-      // Create bill
-      const bill = await Bill.create({
-        user: member.user,
-        mess: mess._id,
-        month: billingMonth,
-        year: billingYear,
-        baseAmount,
-        rebateAmount,
-        totalAmount,
-        status: 'Due'
-      });
-      generatedBills.push(bill);
-
-      // Update membership rate from current Mess plan for next cycle (by planName)
-      const currentPlan = mess.plans?.find(p => p.name?.toLowerCase() === member.planName?.toLowerCase());
-      if (currentPlan && typeof currentPlan.rate === 'number') {
-        member.billingRate = currentPlan.rate;
-        await member.save();
-      }
-    }
-
-    return res.status(201).json({
-      success: true,
-      count: generatedBills.length,
-      data: generatedBills,
-      message: `Successfully generated ${generatedBills.length} bills for ${billingMonth}/${billingYear}`
-    });
-  } catch (error) {
-    next(error);
-  }
 };
 
 
@@ -186,38 +104,6 @@ exports.submitPaymentProof = async (req, res, next) => {
       success: true,
       data: bill,
       message: 'Payment proof submitted successfully'
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Get pending payment approvals
-// @route   GET /api/billing/pending-approvals
-// @access  Private (Manager only)
-exports.getPendingApprovals = async (req, res, next) => {
-  try {
-    // Find manager's mess
-    const mess = await Mess.findOne({ owner: req.user.id });
-
-    if (!mess) {
-      return res.status(404).json({
-        success: false,
-        message: 'No mess found for this manager'
-      });
-    }
-
-    const pendingBills = await Bill.find({
-      mess: mess._id,
-      status: 'Pending Approval'
-    })
-      .populate('user', 'name phone')
-      .sort({ updatedAt: -1 });
-
-    res.status(200).json({
-      success: true,
-      count: pendingBills.length,
-      data: pendingBills
     });
   } catch (error) {
     next(error);

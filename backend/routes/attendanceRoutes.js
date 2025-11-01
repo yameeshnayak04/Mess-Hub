@@ -5,7 +5,8 @@ const router = express.Router();
 const attendanceController = require('../controllers/attendanceController');
 const { protect, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
-const { skipMealSchema, kioskMarkSchema, kioskDailySchema } = require('../middleware/schemas'); // Removed missing schema
+const { skipMealSchema, kioskMarkSchema, kioskDailySchema } = require('../middleware/schemas'); 
+// Removed missing schema
 
 // Customer
 // Removed validation: myAttendanceSchema is missing

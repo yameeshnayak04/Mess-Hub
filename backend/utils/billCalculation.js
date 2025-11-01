@@ -16,7 +16,7 @@ exports.calculateDaysDifference = (startDate, endDate) => {
  * Check if current time is within meal timing
  * @param {Object} timings - Meal timings from Mess
  * @param {String} mealType - 'Lunch' or 'Dinner'
- * @returns {Object} { isWithin: Boolean, currentMeal: String, liveStatus: String }
+ * @returns {Object} { isWithin: Boolean, isPast: Boolean, currentMeal: String, liveStatus: String }
  */
 exports.checkMealTiming = (timings, mealType = null) => {
   const now = new Date();
@@ -38,30 +38,34 @@ exports.checkMealTiming = (timings, mealType = null) => {
 
   let currentMeal = 'None';
   let liveStatus = 'Service Closed';
+  let isWithin = false;
+  let isPast = false;
 
   // Check if currently in lunch time
   if (currentTimeInMinutes >= lunchStartMinutes && currentTimeInMinutes <= lunchEndMinutes) {
     currentMeal = 'Lunch';
     liveStatus = 'Lunch Ongoing';
+    isWithin = true;
   }
   // Check if currently in dinner time
   else if (currentTimeInMinutes >= dinnerStartMinutes && currentTimeInMinutes <= dinnerEndMinutes) {
     currentMeal = 'Dinner';
     liveStatus = 'Dinner Ongoing';
+    isWithin = true;
   }
 
-  // If mealType is specified, check if current time is within that meal
+  // If mealType is specified, check specifically for that meal
   if (mealType) {
     if (mealType === 'Lunch') {
       return {
-        isWithin: currentTimeInMinutes <= lunchEndMinutes,
+        isWithin: currentTimeInMinutes >= lunchStartMinutes && currentTimeInMinutes <= lunchEndMinutes,
         isPast: currentTimeInMinutes > lunchEndMinutes,
         currentMeal,
         liveStatus
       };
     } else if (mealType === 'Dinner') {
       return {
-        isWithin: currentTimeInMinutes <= dinnerEndMinutes,
+        isWithin: currentTimeInMinutes >= dinnerStartMinutes && currentTimeInMinutes <= dinnerEndMinutes,
         isPast: currentTimeInMinutes > dinnerEndMinutes,
         currentMeal,
         liveStatus
@@ -69,7 +73,10 @@ exports.checkMealTiming = (timings, mealType = null) => {
     }
   }
 
+  // Return general status if no specific mealType was requested
   return {
+    isWithin, // Is any meal active right now?
+    isPast, // This is not well-defined without a mealType, defaults to false
     currentMeal,
     liveStatus
   };
@@ -80,7 +87,7 @@ exports.checkMealTiming = (timings, mealType = null) => {
  * @param {Date} date 
  * @returns {Object} { startOfDay, endOfDay }
  */
-exports.getStartAndEndOfDay = (date = new Date()) => {
+const getStartAndEndOfDay = (date = new Date()) => {
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
   
@@ -89,6 +96,12 @@ exports.getStartAndEndOfDay = (date = new Date()) => {
 
   return { startOfDay, endOfDay };
 };
+exports.getStartAndEndOfDay = getStartAndEndOfDay;
+
+// ADDING CONSOLIDATED FUNCTIONS
+exports.startOfDay = (d = new Date()) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+exports.endOfDay   = (d = new Date()) => { const x = new Date(d); x.setHours(23,59,59,999); return x; };
+
 
 /**
  * Get start and end of month
@@ -97,7 +110,7 @@ exports.getStartAndEndOfDay = (date = new Date()) => {
  * @returns {Object} { startOfMonth, endOfMonth }
  */
 exports.getStartAndEndOfMonth = (month, year) => {
-  const startOfMonth = new Date(year, month - 1, 1);
+  const startOfMonth = new Date(year, month - 1, 1, 0, 0, 0, 0);
   const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
 
   return { startOfMonth, endOfMonth };
