@@ -9,7 +9,6 @@ import 'package:mess_management_app/features/auth/widgets/logout_action.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/mess_profile_providers.dart';
 import 'package:dio/dio.dart';
-import 'package:mess_management_app/core/api/dio_client.dart';
 
 class MessProfileScreen extends ConsumerStatefulWidget {
   const MessProfileScreen({super.key});
@@ -95,7 +94,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen> {
                 child: GestureDetector(
                   onTap: () {
                     final img = _picked?.path ?? imageUrl;
-                    if (img == null || img.isEmpty) return;
+                    if (img.isEmpty) return;
                     showDialog(
                         context: context,
                         builder: (_) => _ImageViewer(imagePathOrUrl: img));
@@ -105,6 +104,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen> {
                     backgroundColor: AppTheme.surfaceColor,
                     backgroundImage:
                         (imageUrl.isNotEmpty) ? NetworkImage(imageUrl) : null,
+                    // ignore: unnecessary_null_comparison
                     child: (imageUrl == null && _picked == null)
                         ? const Icon(Icons.image, color: AppTheme.textSecondary)
                         : null,
@@ -222,16 +222,6 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen> {
       ),
     );
   }
-
-  String _resolveUrl(String path) {
-    // Adjust if you already prepend baseUrl in Dio interceptors
-    return _looksAbsolute(path)
-        ? path
-        : '${Uri.base.scheme}://${Uri.base.host}:${Uri.base.port}$path';
-  }
-
-  bool _looksAbsolute(String s) =>
-      s.startsWith('http://') || s.startsWith('https://');
 
   Widget _field(String label, TextEditingController c,
       {TextInputType keyboard = TextInputType.text}) {
