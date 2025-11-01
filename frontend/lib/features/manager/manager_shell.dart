@@ -30,6 +30,9 @@ class _ManagerShellState extends State<ManagerShell> {
       case 3:
         context.go(RouteNames.kioskLauncher);
         break;
+      case 4:
+        context.go(RouteNames.managerProfile);
+        break;
     }
   }
 
@@ -47,6 +50,8 @@ class _ManagerShellState extends State<ManagerShell> {
     } else if (location.startsWith(RouteNames.kioskLauncher) ||
         location.startsWith(RouteNames.kioskMode)) {
       _currentIndex = 3;
+    } else if (location == RouteNames.managerProfile) {
+      _currentIndex = 4;
     }
 
     return Scaffold(
@@ -75,6 +80,11 @@ class _ManagerShellState extends State<ManagerShell> {
             icon: Icon(Icons.tablet_outlined),
             activeIcon: Icon(Icons.tablet),
             label: 'Kiosk',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.store_outlined),
+            activeIcon: Icon(Icons.store),
+            label: 'Profile',
           ),
         ],
       ),

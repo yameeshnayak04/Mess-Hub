@@ -17,6 +17,22 @@ class DioClient {
     _dio.options.validateStatus = (status) => true;
   }
 
+  void setAuthToken(String token) {
+    _dio.options.headers['Authorization'] = 'Bearer $token';
+  }
+
+  // Call this on logout
+  void clearAuthToken() {
+    _dio.options.headers.remove('Authorization');
+  }
+
+  String resolveServerUrl(String path) {
+    if (path.isEmpty) return path;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    // uploads are served at origin (without /api prefix)
+    return '${ApiConstants.baseUrl}$path';
+  }
+
   // GET request
   Future<Response> get(
     String path, {

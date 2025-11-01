@@ -140,7 +140,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   }
 
   Future<void> logout() async {
-    await _storage.deleteAll();
-    state = const AsyncValue.data(null);
+    try {
+      await _repository.serverLogout();
+    } finally {
+      await _storage.deleteAll();
+      _dioClient.clearAuthToken();
+      state = const AsyncValue.data(null);
+    }
   }
 }

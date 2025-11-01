@@ -130,4 +130,12 @@ class AuthRepository {
       );
     }
   }
+
+  Future<void> serverLogout() async {
+    try {
+      await _dioClient.post('auth/logout'); // Optional backend endpoint
+    } on DioException {
+      // Best-effort; ignore backend failures
+    }
+  }
 }
