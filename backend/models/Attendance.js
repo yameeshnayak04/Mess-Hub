@@ -32,6 +32,5 @@ attendanceSchema.index(
 // Useful lookups
 attendanceSchema.index({ mess: 1, date: 1, mealType: 1, status: 1 });
 attendanceSchema.index({ user: 1, mess: 1, date: 1, mealType: 1 });
-attendanceSchema.index({ membership: 1, date: 1, mealType: 1 });
 
 module.exports = mongoose.model('Attendance', attendanceSchema);

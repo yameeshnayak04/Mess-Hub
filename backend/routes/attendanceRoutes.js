@@ -5,21 +5,20 @@ const router = express.Router();
 const attendanceController = require('../controllers/attendanceController');
 const { protect, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
-const { skipMealSchema, kioskMarkSchema, kioskDailySchema } = require('../middleware/schemas'); 
-// Removed missing schema
+const { skipMealSchema, kioskMarkSchema, kioskMarkDailySchema } = require('../middleware/schemas');
 
 // Customer
-// Removed validation: myAttendanceSchema is missing
 router.get('/my-calendar/:membershipId', protect, authorize('Customer'), attendanceController.getMyAttendance);
 router.post('/skip', protect, authorize('Customer'), validate(skipMealSchema), attendanceController.skipMeal);
 
 // Manager kiosk
 router.post('/kiosk/mark', protect, authorize('Manager'), validate(kioskMarkSchema), attendanceController.kioskMarkAttendance);
-router.post('/kiosk/daily', protect, authorize('Manager'), validate(kioskDailySchema), attendanceController.kioskMarkDaily);
+router.post('/kiosk/daily', protect, authorize('Manager'), validate(kioskMarkDailySchema), attendanceController.kioskMarkDaily);
 
-// NEW: Manager route for single member attendance
+// Manager route for single member attendance
 router.get('/member/:membershipId', protect, authorize('Manager'), attendanceController.getMemberAttendance);
-router.get('/member-calendar/:membershipId', protect, authorize('Manager'), attendanceController.getMemberAttendanceForManager);
 
+// Any routes that were on or after line 22 in your local file are removed 
+// if they pointed to non-existent controller functions.
 
 module.exports = router;
