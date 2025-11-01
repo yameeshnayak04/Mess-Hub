@@ -30,8 +30,21 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController =
-        TabController(length: 3, vsync: this); // Initialize TabController
+    _tabController = TabController(length: 3, vsync: this);
+    // One-off error snackbars
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.listen(messDetailsProvider(widget.messId), (prev, next) {
+        final errors = <Object?>[];
+        next.mess.whenOrNull(error: (e, _) => errors.add(e));
+        next.menu.whenOrNull(error: (e, _) => errors.add(e));
+        next.reviews.whenOrNull(error: (e, _) => errors.add(e));
+        if (errors.isNotEmpty && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(errors.first.toString())),
+          );
+        }
+      });
+    });
   }
 
   @override
@@ -566,8 +579,83 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
 
   // Placeholder for Menu Tab
   Widget _buildMenuTab(Mess mess) {
-    // TODO: Implement menu fetching and display
-    return const Center(child: Text('Menu Tab Content (To be implemented)'));
+    final menuAsync =
+        ref.watch(messDetailsProvider(widget.messId).select((s) => s.menu));
+    return menuAsync.when(
+      loading: () => const Center(
+          child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 48.0),
+              child: CircularProgressIndicator())),
+      error: (e, _) => Center(
+          child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 48.0),
+              child: Text('Could not load menu: $e',
+                  style: const TextStyle(color: AppTheme.errorRed)))),
+      data: (menus) {
+        if (menus.isEmpty) {
+          return const Center(
+              child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 48.0),
+                  child: Text('No menus scheduled for the next 7 days',
+                      style: TextStyle(color: AppTheme.textSecondary))));
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: menus.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final m = menus[index];
+            final date = DateTime.tryParse(m['date']?.toString() ?? '');
+            final lunch =
+                (m['lunchItems'] as List?)?.cast<String>() ?? const <String>[];
+            final dinner =
+                (m['dinnerItems'] as List?)?.cast<String>() ?? const <String>[];
+            return Card(
+              elevation: 1,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      date != null
+                          ? DateFormat('EEE, MMM d').format(date.toLocal())
+                          : 'Scheduled Menu',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      const Icon(Icons.wb_sunny_outlined,
+                          size: 18, color: AppTheme.textSecondary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: Text(lunch.isEmpty
+                              ? 'No lunch items listed'
+                              : lunch.join(', '))),
+                    ]),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      const Icon(Icons.nightlight_outlined,
+                          size: 18, color: AppTheme.textSecondary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: Text(dinner.isEmpty
+                              ? 'No dinner items listed'
+                              : dinner.join(', '))),
+                    ]),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   // *** CORRECTED _buildReviewsTab ***
@@ -582,124 +670,126 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
         child: _buildReviewsSection(context, reviewsAsyncValue));
   }
 
-  // Builds the Reviews Section content
   Widget _buildReviewsSection(
       BuildContext context, AsyncValue<List<Review>> reviewsAsyncValue) {
-    // Add horizontal padding for consistency
+    final notifier = ref.read(messDetailsProvider(widget.messId).notifier);
+    final state = ref.watch(messDetailsProvider(widget.messId));
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // No need for a title here if it's within a tab
-          // _buildSectionTitle(context, 'Reviews'),
-          // const SizedBox(height: 12),
           reviewsAsyncValue.when(
             data: (reviews) {
               if (reviews.isEmpty) {
                 return const Center(
-                    child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 48.0), // More padding
-                  child: Column(
-                    // Use column for icon + text
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.rate_review_outlined,
-                          size: 60, color: AppTheme.textSecondary),
-                      SizedBox(height: 16),
-                      Text('No reviews yet. Be the first!',
-                          style: TextStyle(color: AppTheme.textSecondary)),
-                    ],
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 48.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.rate_review_outlined,
+                            size: 60, color: AppTheme.textSecondary),
+                        SizedBox(height: 16),
+                        Text('No reviews yet. Be the first!',
+                            style: TextStyle(color: AppTheme.textSecondary)),
+                      ],
+                    ),
                   ),
-                ));
+                );
               }
-              // Use ListView.builder for potentially long lists
-              return ListView.builder(
-                shrinkWrap: true,
-                physics:
-                    const NeverScrollableScrollPhysics(), // Important within SingleChildScrollView
-                itemCount: reviews.length, // Show all fetched reviews for now
-                itemBuilder: (context, index) {
-                  final review = reviews[index];
-                  return Card(
-                    elevation: 1,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+              return Column(
+                children: [
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: reviews.length,
+                    itemBuilder: (context, index) {
+                      final review = reviews[index];
+                      return Card(
+                        elevation: 1,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              CircleAvatar(
-                                radius: 16,
-                                backgroundColor: AppTheme.lightOrange,
-                                child: Text(
-                                  (review.userName?.isNotEmpty ?? false)
-                                      ? review.userName![0].toUpperCase()
-                                      : '?',
-                                  style: const TextStyle(
-                                      color: AppTheme.primaryOrange,
-                                      fontWeight: FontWeight.bold),
+                              Row(children: [
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: AppTheme.lightOrange,
+                                  child: Text(
+                                    (review.userName?.isNotEmpty ?? false)
+                                        ? review.userName![0].toUpperCase()
+                                        : '?',
+                                    style: const TextStyle(
+                                        color: AppTheme.primaryOrange,
+                                        fontWeight: FontWeight.bold),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  review.userName ?? 'Anonymous',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(review.userName ?? 'Anonymous',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                              fontWeight: FontWeight.w600)),
                                 ),
-                              ),
-                              // Display rating stars
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: List.generate(
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: List.generate(
                                     5,
                                     (i) => Icon(
-                                          i < review.rating
-                                              ? Icons.star_rounded
-                                              : Icons.star_border_rounded,
-                                          color: Colors.amber,
-                                          size: 18,
-                                        )),
+                                      i < review.rating
+                                          ? Icons.star_rounded
+                                          : Icons.star_border_rounded,
+                                      color: Colors.amber,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ),
+                              ]),
+                              if (review.comment != null &&
+                                  review.comment!.trim().isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(review.comment!,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                            color: AppTheme.textSecondary)),
+                              ],
+                              const SizedBox(height: 8),
+                              Text(
+                                DateFormat.yMMMd().add_jm().format(
+                                    review.createdAt?.toLocal() ??
+                                        DateTime.now()),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                        color: AppTheme.textSecondary
+                                            .withOpacity(0.7)),
                               ),
                             ],
                           ),
-                          // Display comment only if present and not empty
-                          if (review.comment != null &&
-                              review.comment!.trim().isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Text(review.comment!,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(color: AppTheme.textSecondary)),
-                          ],
-                          const SizedBox(height: 8), // Spacing before date
-                          Text(
-                            // Format date nicely (e.g., Oct 29, 2025, 5:15 PM)
-                            DateFormat.yMMMd().add_jm().format(review.createdAt
-                                    ?.toLocal() ??
-                                DateTime
-                                    .now()), // Convert to local time if needed
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                    color: AppTheme.textSecondary
-                                        .withOpacity(0.7)),
-                          ),
-                        ],
+                        ),
+                      );
+                    },
+                  ),
+                  if (state.reviewsHasMore)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: OutlinedButton.icon(
+                        onPressed: () => notifier.loadMoreReviews(),
+                        icon: const Icon(Icons.expand_more),
+                        label: const Text('Load more'),
                       ),
                     ),
-                  );
-                },
-                // No separator needed as cards have margin
+                ],
               );
             },
             loading: () => const Center(
@@ -708,15 +798,14 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
               child: CircularProgressIndicator(),
             )),
             error: (error, stack) => Center(
-                child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 48.0),
-              child: Text('Could not load reviews: $error',
-                  style: const TextStyle(color: AppTheme.errorRed)),
-            )),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 48.0),
+                child: Text('Could not load reviews: $error',
+                    style: const TextStyle(color: AppTheme.errorRed)),
+              ),
+            ),
           ),
-          // TODO: Add "View All Reviews" button if limiting initial display
-          // TODO: Add "Write a Review" button
-          const SizedBox(height: 24), // Padding at the end
+          const SizedBox(height: 24),
         ],
       ),
     );

@@ -5,24 +5,22 @@ class Mess {
   final String id;
   final String messName;
   final String? messImage;
-  final Location
-      location; // GeoJSON: { type: 'Point', coordinates: [lng, lat] }
+  final Location location;
   final String address;
   final String city;
   final String contactPhone;
-  final String serviceType; // 'Monthly Only' | 'Both Daily & Monthly'
-  final String cuisine; // 'Veg' | 'Non-Veg' | 'Both'
+  final String serviceType;
+  final String cuisine;
   final int? maxCapacity;
   final bool tiffinService;
   final String basicThaliDetails;
-  final MessTimings timings; // strings "HH:mm"
-  final List<MessPlan> plans; // strong type
-  final double?
-      dailyThaliRate; // required if serviceType == 'Both Daily & Monthly'
+  final MessTimings timings;
+  final List<MessPlan> plans; // typed
+  final double? dailyThaliRate;
   final MessRules rules;
-  final double? averageRating; // computed/populated
-  final int? reviewCount; // computed/populated
-  final double? distance; // meters from /mess/discover
+  final double? averageRating;
+  final int? reviewCount;
+  final double? distance;
 
   Mess({
     required this.id,
@@ -47,16 +45,15 @@ class Mess {
   });
 
   factory Mess.fromJson(Map<String, dynamic> json) {
-    // Helper to safely parse lists, returning empty list if null
     List<T> _parseList<T>(
         dynamic jsonList, T Function(Map<String, dynamic>) fromJson) {
       if (jsonList is List) {
         return jsonList
-            .where((e) => e is Map<String, dynamic>) // Ensure elements are maps
-            .map((e) => fromJson(e as Map<String, dynamic>))
+            .where((e) => e is Map)
+            .map((e) => fromJson(Map<String, dynamic>.from(e as Map)))
             .toList();
       }
-      return []; // Return empty list if jsonList is null or not a List
+      return <T>[];
     }
 
     return Mess(
@@ -64,8 +61,9 @@ class Mess {
       messName: json['messName'] as String,
       messImage: json['messImage'] as String?,
       location: json['location'] != null
-          ? Location.fromJson(json['location'] as Map<String, dynamic>)
-          : Location(type: 'Point', coordinates: [0, 0]), // Default location
+          ? Location.fromJson(
+              Map<String, dynamic>.from(json['location'] as Map))
+          : Location(type: 'Point', coordinates: [0.0, 0.0]),
       address: json['address'] as String? ?? 'N/A',
       city: json['city'] as String? ?? 'N/A',
       contactPhone: json['contactPhone'] as String? ?? 'N/A',
@@ -75,17 +73,16 @@ class Mess {
       tiffinService: (json['tiffinService'] as bool?) ?? false,
       basicThaliDetails: json['basicThaliDetails'] as String? ?? '',
       timings: json['timings'] != null
-          ? MessTimings.fromJson(json['timings'] as Map<String, dynamic>)
+          ? MessTimings.fromJson(
+              Map<String, dynamic>.from(json['timings'] as Map))
           : MessTimings(
-              // Default timings
               lunch: MealTiming(start: '00:00', end: '00:00'),
               dinner: MealTiming(start: '00:00', end: '00:00')),
-      plans: _parseList(json['plans'], MessPlan.fromJson), // Use safe parser
+      plans: _parseList<MessPlan>(json['plans'], (m) => MessPlan.fromJson(m)),
       dailyThaliRate: (json['dailyThaliRate'] as num?)?.toDouble(),
       rules: json['rules'] != null
-          ? MessRules.fromJson(json['rules'] as Map<String, dynamic>)
+          ? MessRules.fromJson(Map<String, dynamic>.from(json['rules'] as Map))
           : MessRules(
-              // Default rules
               minLeaveDaysForRebate: 99,
               rebatePerThali: 0,
               skipAllowancePercent: 0),
@@ -94,6 +91,7 @@ class Mess {
       distance: (json['distance'] as num?)?.toDouble(),
     );
   }
+  // existing copyWith/toJson stay the same, but plans is List<MessPlan>
 
   // Add copyWith
   Mess copyWith({

@@ -21,11 +21,18 @@ class CustomerHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authProvider);
-    final membershipsState =
-        ref.watch(membershipProvider); // Watch the StateNotifierProvider
+    // One-off error snackbar
+    ref.listen<AsyncValue<List<Membership>>>(membershipProvider, (prev, next) {
+      next.whenOrNull(error: (e, st) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      });
+    });
 
-    // Get user's first name, default to 'Customer'
+    final authState = ref.watch(authProvider);
+    final membershipsState = ref.watch(membershipProvider);
+
     final String userName = authState.maybeWhen(
       data: (u) => u?.name.split(' ').first ?? 'Customer',
       orElse: () => 'Customer',
@@ -35,28 +42,21 @@ class CustomerHomeScreen extends ConsumerWidget {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(140),
         child: Container(
-          // Match screenshot color
-          decoration: const BoxDecoration(
-            color: Color(0xFF1976D2), // Solid blue from screenshot
-          ),
+          decoration: const BoxDecoration(color: Color(0xFF1976D2)),
           padding: EdgeInsets.fromLTRB(
               16, MediaQuery.of(context).padding.top + 16, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Text(
-                '${_greeting()}, $userName',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24, // Match screenshot
-                    fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 6),
-              // Match screenshot format (e.g., Friday, October 31)
-              Text(DateFormat('EEEE, MMMM dd').format(DateTime.now()),
+              Text('${_greeting()}, $userName',
                   style: const TextStyle(
-                      color: Colors.white70, fontSize: 14)), // Match screenshot
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Text(DateFormat('EEEE, MMMM dd').format(DateTime.now()),
+                  style: const TextStyle(color: Colors.white70, fontSize: 14)),
             ],
           ),
         ),
@@ -66,8 +66,7 @@ class CustomerHomeScreen extends ConsumerWidget {
         child: membershipsState.when(
           loading: () =>
               const LoadingAnimation(message: 'Loading memberships...'),
-          error: (e, stack) => Center(
-            // Show error message nicely
+          error: (e, _) => Center(
             child: Padding(
               padding: const EdgeInsets.all(20.0),
               child: Column(
@@ -76,17 +75,13 @@ class CustomerHomeScreen extends ConsumerWidget {
                   const Icon(Icons.error_outline,
                       color: AppTheme.errorRed, size: 50),
                   const SizedBox(height: 16),
-                  Text(
-                    'Failed to load memberships',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                    textAlign: TextAlign.center,
-                  ),
+                  Text('Failed to load memberships',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                      textAlign: TextAlign.center),
                   const SizedBox(height: 8),
-                  Text(
-                    e.toString(), // Display the actual error
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppTheme.textSecondary),
-                  ),
+                  Text(e.toString(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: AppTheme.textSecondary)),
                 ],
               ),
             ),
@@ -94,68 +89,50 @@ class CustomerHomeScreen extends ConsumerWidget {
           data: (memberships) {
             final activeCount =
                 memberships.where((m) => m.status == 'Active').length;
-
-            // Use ListView.custom for empty state + list
             return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(
-                  16, 20, 16, 24), // Match screenshot padding
-              // Add 1 for the header row + 1 for the hint card
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
               itemCount: memberships.length + 2,
               separatorBuilder: (context, index) {
-                // No separator after header
                 if (index == 0) return const SizedBox(height: 16);
-                // No separator before hint card
                 if (index == memberships.length)
                   return const SizedBox(height: 12);
-                // Separator between membership cards (which is just margin)
-                return const SizedBox(height: 0); // Cards have their own margin
+                return const SizedBox(height: 0);
               },
               itemBuilder: (context, index) {
-                // --- HEADER ---
                 if (index == 0) {
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'My Memberships',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 18,
-                            ),
-                      ),
+                      Text('My Memberships',
+                          style:
+                              Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 18,
+                                  )),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: Colors.blue[50],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '$activeCount Active',
-                          style: const TextStyle(
-                            color: Colors.blue,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
+                            color: Colors.blue[50],
+                            borderRadius: BorderRadius.circular(8)),
+                        child: Text('$activeCount Active',
+                            style: const TextStyle(
+                                color: Colors.blue,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12)),
                       ),
                     ],
                   );
                 }
 
-                // --- HINT CARD (at the end) ---
                 if (index == memberships.length + 1) {
                   return _hintCard();
                 }
 
-                // --- EMPTY STATE (if list is empty) ---
                 if (memberships.isEmpty) {
-                  // This is shown at index 1 if count is 0
                   return _buildEmptyState(context);
                 }
 
-                // --- MEMBERSHIP CARD ---
-                // Adjust index to get from list
                 final membership = memberships[index - 1];
                 return _membershipCard(context, membership);
               },
@@ -176,27 +153,21 @@ class CustomerHomeScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(32),
         child: Column(
           children: [
-            Icon(
-              Icons.restaurant_outlined,
-              size: 80,
-              color: AppTheme.textSecondary.withOpacity(0.5),
-            ),
+            Icon(Icons.restaurant_outlined,
+                size: 80, color: AppTheme.textSecondary.withOpacity(0.5)),
             const SizedBox(height: 16),
-            Text(
-              'No Memberships Yet',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
+            Text('No Memberships Yet',
+                style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 8),
-            Text(
-              'Discover and join messes near you to get started',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-              textAlign: TextAlign.center,
-            ),
+            Text('Discover and join messes near you to get started',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: AppTheme.textSecondary),
+                textAlign: TextAlign.center),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () => context.go('/discover'),
+              onPressed: () => context.push('/discover'),
               icon: const Icon(Icons.explore_outlined),
               label: const Text('Discover Messes'),
               style: ElevatedButton.styleFrom(
@@ -210,9 +181,9 @@ class CustomerHomeScreen extends ConsumerWidget {
     );
   }
 
-  // This is the card widget matching the screenshot
+  // in _membershipCard change navigation to push
   Widget _membershipCard(BuildContext context, Membership m) {
-    final mess = m.messObject; // This is an enriched Mess object
+    final mess = m.messObject;
     final joined = m.joinedDate != null
         ? DateFormat('MMM d, y').format(m.joinedDate!)
         : '-';
@@ -220,13 +191,13 @@ class CustomerHomeScreen extends ConsumerWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 1, // Subtle shadow
+      elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        // Navigate to dashboard only if active
-        onTap:
-            isActive ? () => context.go('/membership-dashboard/${m.id}') : null,
+        onTap: isActive
+            ? () => context.push('/membership-dashboard/${m.id}')
+            : null,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 12, 16), // Match padding
           child: Row(

@@ -50,17 +50,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             _passwordController.text,
           );
 
-      final authState = ref.read(authProvider);
       final err = ref.read(authProvider.notifier).errorMessage;
-      if (mounted) {
-        if (authState.value == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(err ?? 'Invalid credentials')),
-          );
-        } else {
-          // Router redirect will take the user to the right home
-          // Leaving explicit navigation out avoids race with redirect
-        }
+      if (mounted && (ref.read(authProvider).value == null)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(err ?? 'Invalid credentials')),
+        );
       }
     } finally {
       if (mounted) {

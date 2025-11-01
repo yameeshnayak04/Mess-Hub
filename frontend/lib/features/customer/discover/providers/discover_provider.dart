@@ -4,9 +4,8 @@ import '../../../../core/api/dio_client_provider.dart';
 import '../../../../models/mess.dart';
 import '../repositories/discover_repository.dart';
 
-final discoverRepositoryProvider = Provider<DiscoverRepository>((ref) {
-  return DiscoverRepository(ref.watch(dioClientProvider));
-});
+final discoverRepositoryProvider =
+    Provider((ref) => DiscoverRepository(ref.watch(dioClientProvider)));
 
 final discoverProvider =
     StateNotifierProvider<DiscoverNotifier, AsyncValue<List<Mess>>>((ref) {
@@ -18,42 +17,43 @@ class DiscoverNotifier extends StateNotifier<AsyncValue<List<Mess>>> {
   String? _currentCuisine;
   String? _currentServiceType;
   String? _currentSearch;
+  int _page = 1;
+  final int _limit = 10;
 
   DiscoverNotifier(this._repository) : super(const AsyncValue.loading()) {
     loadMesses();
   }
 
-  Future<void> loadMesses({
-    String? cuisine,
-    String? serviceType,
-    String? search,
-    int page = 1,
-    int limit = 10,
-  }) async {
-    _currentCuisine = cuisine;
-    _currentServiceType = serviceType;
-    _currentSearch = search;
+  Future<void> loadMesses(
+      {String? cuisine, String? serviceType, String? search, int? page}) async {
+    _currentCuisine = cuisine ?? _currentCuisine;
+    _currentServiceType = serviceType ?? _currentServiceType;
+    _currentSearch = search ?? _currentSearch;
+    _page = page ?? 1;
 
-    state = const AsyncValue.loading();
+    final previous = state;
+    // Show lightweight busy state while keeping previous data
+    state = previous.when(
+      data: (d) => const AsyncValue.loading(),
+      loading: () => const AsyncValue.loading(),
+      error: (e, st) => const AsyncValue.loading(),
+    );
+
     try {
       final messes = await _repository.discoverMesses(
-        cuisine: cuisine,
-        serviceType: serviceType,
-        search: search,
-        page: page,
-        limit: limit,
+        cuisine: _currentCuisine,
+        serviceType: _currentServiceType,
+        search: _currentSearch,
+        page: _page,
+        limit: _limit,
       );
       state = AsyncValue.data(messes);
-    } catch (e, stack) {
-      state = AsyncValue.error(e, stack);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
     }
   }
 
   Future<void> refresh() async {
-    await loadMesses(
-      cuisine: _currentCuisine,
-      serviceType: _currentServiceType,
-      search: _currentSearch,
-    );
+    await loadMesses(page: 1);
   }
 }

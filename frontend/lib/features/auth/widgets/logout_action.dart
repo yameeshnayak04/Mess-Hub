@@ -13,37 +13,37 @@ class LogoutAction extends ConsumerWidget {
       tooltip: 'Logout',
       icon: Icon(Icons.logout, color: iconColor),
       onPressed: () async {
-        final confirm = await showDialog<bool>(
+        await showDialog(
           context: context,
           builder: (_) => AlertDialog(
             title: const Text('Logout'),
             content: const Text('Are you sure you want to logout?'),
             actions: [
               TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel')),
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
               TextButton(
-                  onPressed: () async {
-                    if (context.mounted) {
-                      Navigator.of(context, rootNavigator: true)
-                          .pop(); // close dialog only
-                    }
-                    await ref
-                        .read(authProvider.notifier)
-                        .logout(); // triggers redirect
-                    // no context.go / no page pop
-                  },
-                  child: const Text('Logout')),
+                onPressed: () async {
+                  if (context.mounted) {
+                    Navigator.of(context, rootNavigator: true)
+                        .pop(); // close dialog only
+                  }
+                  await ref
+                      .read(authProvider.notifier)
+                      .logout(); // triggers router redirect
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Logged out')),
+                    );
+                  }
+                },
+                child: const Text('Logout'),
+              ),
             ],
           ),
         );
-        if (confirm == true) {
-          await ref.read(authProvider.notifier).logout();
-          if (context.mounted) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('Logged out')));
-          }
-        }
+        // no second logout here
       },
     );
   }

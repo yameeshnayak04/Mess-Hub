@@ -131,7 +131,7 @@ class BillingScreen extends ConsumerWidget {
                         style: Theme.of(context).textTheme.bodyMedium),
                     const SizedBox(height: 8),
                     Text(
-                      '₹${(bill['totalAmount'] ?? 0).toStringAsFixed(0)}',
+                      '₹${((bill['totalAmount'] as num?)?.toDouble() ?? 0).toStringAsFixed(0)}',
                       style: Theme.of(context).textTheme.displaySmall?.copyWith(
                             color: AppTheme.primaryOrange,
                             fontWeight: FontWeight.bold,
@@ -181,11 +181,10 @@ class BillingScreen extends ConsumerWidget {
               OutlinedButton.icon(
                 onPressed: () async {
                   final picker = ImagePicker();
-                  final img =
+                  final picked =
                       await picker.pickImage(source: ImageSource.gallery);
-                  if (img != null) {
-                    setModalState(() => selectedImage = File(img.path));
-                  }
+                  if (picked == null) return;
+                  setModalState(() => selectedImage = File(picked.path));
                 },
                 icon: const Icon(Icons.upload_file),
                 label: const Text('Upload Payment Proof'),
@@ -193,41 +192,34 @@ class BillingScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               PrimaryButton(
                 text: 'Submit for Approval',
-                onPressed: selectedImage != null
-                    ? () async {
+                onPressed: isUploading || selectedImage == null
+                    ? null
+                    : () async {
                         setModalState(() => isUploading = true);
                         try {
                           await ref
                               .read(billingRepositoryProvider)
                               .submitPaymentProof(
-                                billId: bill['_id'] as String,
-                                file: selectedImage!,
-                              );
+                                  billId: bill['_id'] as String,
+                                  file: selectedImage!);
                           if (context.mounted) {
-                            Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'Payment proof submitted successfully'),
-                                backgroundColor: AppTheme.successGreen,
-                              ),
-                            );
-                            ref.invalidate(myBillsProvider(membershipId));
+                                const SnackBar(
+                                    content: Text('Payment proof submitted'),
+                                    backgroundColor: AppTheme.successGreen));
                           }
+                          if (context.mounted) Navigator.pop(context);
+                          ref.invalidate(myBillsProvider(membershipId));
                         } catch (e) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                                 content: Text('Upload failed: ${e.toString()}'),
-                                backgroundColor: AppTheme.errorRed,
-                              ),
-                            );
+                                backgroundColor: AppTheme.errorRed));
                           }
                         } finally {
                           setModalState(() => isUploading = false);
                         }
-                      }
-                    : null,
+                      },
                 isLoading: isUploading,
                 icon: Icons.check,
               ),

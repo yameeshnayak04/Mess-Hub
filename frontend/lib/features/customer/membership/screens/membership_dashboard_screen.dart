@@ -96,7 +96,9 @@ class MembershipDashboardScreen extends ConsumerWidget {
       await ref.read(attendanceRepositoryProvider).skipMeal(
             membershipId: membershipId,
             mealType: meal,
+            date: DateTime.now(), // explicit for reliability
           );
+      ref.invalidate(membershipDetailsProvider(membershipId));
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

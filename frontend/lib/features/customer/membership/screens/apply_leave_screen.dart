@@ -60,24 +60,10 @@ class _ApplyLeaveScreenState extends ConsumerState<ApplyLeaveScreen> {
     return day.isAfter(today);
   }
 
-  bool _isInSameMonth(DateTime start, DateTime end) {
-    return start.year == end.year && start.month == end.month;
-  }
-
   Future<void> _submitLeave() async {
     if (_rangeStart == null || _rangeEnd == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select leave dates')),
-      );
-      return;
-    }
-
-    if (!_isInSameMonth(_rangeStart!, _rangeEnd!)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Leave dates must be in the same month'),
-          backgroundColor: AppTheme.errorRed,
-        ),
       );
       return;
     }

@@ -25,6 +25,19 @@ class _AttendanceCalendarScreenState
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
+    // Error snackbar
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final p = AttendanceCalendarParams(widget.membershipId,
+          month: _focusedDay.month, year: _focusedDay.year);
+      ref.listen(attendanceCalendarProvider(p), (prev, next) {
+        next.whenOrNull(error: (e, st) {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(e.toString())));
+          }
+        });
+      });
+    });
   }
 
   @override

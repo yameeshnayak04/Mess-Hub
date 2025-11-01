@@ -1,4 +1,5 @@
 // features/auth/providers/auth_provider.dart
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/dio_client_provider.dart';
 import '../../../core/api/dio_client.dart';
@@ -45,7 +46,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
   // Login with phone + password
   Future<void> login(String phone, String password) async {
-    // *** REMOVED: state = const AsyncValue.loading(); ***
     try {
       _errorMessage = null;
       final resp = await _repository.login(phone, password);
@@ -60,41 +60,37 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       await _storage.write(StorageKeys.accessToken, token);
       state = AsyncValue.data(user);
     } catch (e, st) {
-      _errorMessage = e.toString();
+      _errorMessage =
+          e is DioException && e.message != null ? e.message : e.toString();
       state = AsyncValue.error(e, st);
     }
   }
 
-  // Kiosk login (phone + PIN)
   Future<void> kioskLogin(String phone, String pin) async {
-    // *** REMOVED: state = const AsyncValue.loading(); ***
     try {
       _errorMessage = null;
       final resp = await _repository.kioskLogin(phone, pin);
-
       if (resp != null && resp.containsKey('error')) {
         state = const AsyncValue.data(null);
         _errorMessage = resp['error'] as String? ?? 'Invalid credentials';
         return;
       }
-
       if (resp == null) {
         state = const AsyncValue.data(null);
         _errorMessage = 'Invalid credentials';
         return;
       }
-
       final token = resp['token'] as String;
       final user = User.fromJson(resp['data'] as Map<String, dynamic>);
       await _storage.write(StorageKeys.accessToken, token);
       state = AsyncValue.data(user);
     } catch (e, st) {
-      _errorMessage = e.toString();
+      _errorMessage =
+          e is DioException && e.message != null ? e.message : e.toString();
       state = AsyncValue.error(e, st);
     }
   }
 
-  // Register
   Future<void> register({
     required String name,
     required String phone,
@@ -103,7 +99,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     String? pin,
     Location? location,
   }) async {
-    // *** REMOVED: state = const AsyncValue.loading(); ***
     try {
       _errorMessage = null;
       final resp = await _repository.register(
@@ -119,7 +114,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       await _storage.write(StorageKeys.accessToken, token);
       state = AsyncValue.data(user);
     } catch (e, st) {
-      _errorMessage = e.toString();
+      _errorMessage =
+          e is DioException && e.message != null ? e.message : e.toString();
       state = AsyncValue.error(e, st);
     }
   }

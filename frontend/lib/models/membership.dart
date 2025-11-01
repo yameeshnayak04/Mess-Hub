@@ -9,7 +9,7 @@ class Membership {
   final double billingRate;
   final String status; // 'Pending' | 'Active' | 'Inactive'
   final DateTime? joinedDate;
-  final String? paymentStatus; // added by manager list enrichment
+  final String? paymentStatus;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -28,27 +28,26 @@ class Membership {
 
   factory Membership.fromJson(Map<String, dynamic> json) {
     dynamic messData = json['mess'];
-    // Check if messData is a Map (populated) and not null
-    if (messData is Map<String, dynamic>) {
-      messData = Mess.fromJson(messData);
+    if (messData is Map) {
+      messData = Mess.fromJson(Map<String, dynamic>.from(messData));
     }
-    // if it's not a map, it remains as a String ID (or null if backend sent null)
-
     return Membership(
       id: json['_id'] as String,
       user: json['user'] as String,
-      mess: messData, // messData is now a Mess object, String, or null
+      mess: messData,
       planName: json['planName'] as String,
       billingRate: (json['billingRate'] as num).toDouble(),
       status: json['status'] as String,
       joinedDate: json['joinedDate'] != null
-          ? DateTime.parse(json['joinedDate'])
+          ? DateTime.parse(json['joinedDate'] as String)
           : null,
       paymentStatus: json['paymentStatus'] as String?,
-      createdAt:
-          json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
-      updatedAt:
-          json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String)
+          : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'] as String)
+          : null,
     );
   }
 
@@ -65,16 +64,13 @@ class Membership {
         if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
       };
 
-  // Safely get the Mess object if it's populated
   Mess? get messObject => mess is Mess ? mess as Mess : null;
-  // Safely get the messId regardless of population
-  String? get messId {
-    if (mess is Mess) return (mess as Mess).id;
-    if (mess is String) return mess as String;
-    return null;
-  }
+  String? get messId => mess is Mess
+      ? (mess as Mess).id
+      : mess is String
+          ? mess as String
+          : null;
 
-  // *** ADD THIS METHOD ***
   Membership copyWith({
     String? id,
     String? user,

@@ -4,11 +4,11 @@ import '../../../../core/api/dio_client_provider.dart';
 import '../../../../models/membership.dart';
 import '../repositories/membership_repository.dart';
 
-final membershipRepositoryProvider = Provider<MembershipRepository>((ref) {
+final membershipRepositoryProvider = Provider((ref) {
   return MembershipRepository(ref.watch(dioClientProvider));
 });
 
-// Use StateNotifierProvider.autoDispose for better state management
+// Auto-dispose to prevent stale data when customer shell is not visible
 final membershipProvider = StateNotifierProvider.autoDispose<MembershipNotifier,
     AsyncValue<List<Membership>>>((ref) {
   return MembershipNotifier(ref.watch(membershipRepositoryProvider));
@@ -16,6 +16,7 @@ final membershipProvider = StateNotifierProvider.autoDispose<MembershipNotifier,
 
 class MembershipNotifier extends StateNotifier<AsyncValue<List<Membership>>> {
   final MembershipRepository _repository;
+
   MembershipNotifier(this._repository) : super(const AsyncValue.loading()) {
     loadMemberships();
   }
@@ -23,46 +24,34 @@ class MembershipNotifier extends StateNotifier<AsyncValue<List<Membership>>> {
   Future<void> loadMemberships() async {
     state = const AsyncValue.loading();
     try {
-      // 1. Fetch the base list of memberships
-      final memberships = await _repository.getMyMemberships();
+      final base = await _repository.getMyMemberships();
 
-      // 2. Enrich the list with rating data
-      final List<Membership> membershipsWithRatings = [];
-      for (final mem in memberships) {
-        // Only enrich if mess data is populated as an object
-        if (mem.messObject != null) {
-          try {
-            // Fetch rating data for this mess
-            final ratingData =
-                await _repository.getMessRating(mem.messObject!.id);
-
-            // Create a new (cloned) Mess object with the rating data
-            final updatedMess = mem.messObject!.copyWith(
-              averageRating: ratingData['averageRating'] as double?,
-              reviewCount: ratingData['reviewCount'] as int?,
-            );
-
-            // Create a new (cloned) Membership object with the updated Mess
-            membershipsWithRatings.add(mem.copyWith(mess: updatedMess));
-          } catch (e) {
-            // If fetching rating fails, add the membership without rating
-            print("Failed to get rating for ${mem.messObject!.messName}: $e");
-            membershipsWithRatings.add(mem);
-          }
-        } else {
-          // Add as-is if messObject is null (e.g., just a String ID)
-          membershipsWithRatings.add(mem);
+      // Enrich mess ratings in parallel for memberships that have mess populated
+      final futures = base.map((mem) async {
+        if (mem.messObject == null) return mem;
+        try {
+          final rating = await _repository.getMessRating(mem.messObject!.id);
+          final updatedMess = mem.messObject!.copyWith(
+            averageRating: rating['averageRating'] as double?,
+            reviewCount: rating['reviewCount'] as int?,
+          );
+          return mem.copyWith(mess: updatedMess);
+        } catch (_) {
+          return mem; // keep original if rating fetch fails
         }
-      }
+      }).toList();
 
-      // 3. Set the final enriched list as the state
-      state = AsyncValue.data(membershipsWithRatings);
-    } catch (e, stack) {
-      // This will catch errors from getMyMemberships OR the repository fixes
-      state = AsyncValue.error(e, stack);
+      final enriched = await Future.wait(futures);
+      state = AsyncValue.data(enriched);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
     }
   }
 
-  // Refresh simply calls loadMemberships again
   Future<void> refresh() => loadMemberships();
+
+  Future<void> leave(String membershipId) async {
+    await _repository.leaveMembership(membershipId);
+    await loadMemberships();
+  }
 }

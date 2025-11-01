@@ -1,5 +1,6 @@
 // lib/features/customer/profile/screens/profile_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pinput/pinput.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -104,13 +105,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               .titleMedium
                               ?.copyWith(color: AppTheme.textSecondary)),
                       const SizedBox(height: 12),
-                      _settingCard(
-                        context,
-                        icon: Icons.lock_outline,
-                        title: 'Kiosk PIN',
-                        subtitle: 'Tap to change 4-digit PIN',
-                        onTap: () => _showChangePinDialog(context),
-                      ),
+                      if (user.role == 'Customer')
+                        _settingCard(
+                          context,
+                          icon: Icons.lock_outline,
+                          title: 'Kiosk PIN',
+                          subtitle: 'Tap to change 4-digit PIN',
+                          onTap: () => _showChangePinDialog(context),
+                        ),
                       _settingCard(
                         context,
                         icon: Icons.person_outline,
@@ -216,6 +218,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   void _showChangePinDialog(BuildContext context) {
     final pinController = TextEditingController();
+    final confirmController = TextEditingController();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -224,12 +227,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('Enter your new 4-digit Kiosk PIN'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Pinput(
               controller: pinController,
               length: 4,
               obscureText: true,
               keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            const SizedBox(height: 12),
+            const Text('Confirm new PIN'),
+            const SizedBox(height: 12),
+            Pinput(
+              controller: confirmController,
+              length: 4,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
           ],
         ),
@@ -241,10 +255,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: const Text('Update'),
             onPressed: () async {
               final pin = pinController.text;
+              final confirm = confirmController.text;
               if (pin.length != 4 || int.tryParse(pin) == null) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('PIN must be exactly 4 digits')));
+                return;
+              }
+              if (pin != confirm) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('PIN must be exactly 4 digits')),
-                );
+                    const SnackBar(content: Text('PINs do not match')));
                 return;
               }
               try {
@@ -252,14 +271,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 await ref.read(authProvider.notifier).refreshProfile();
                 if (!mounted) return;
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('PIN updated')),
-                );
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('PIN updated')));
               } catch (e) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to update PIN: $e')),
-                );
+                    SnackBar(content: Text('Failed to update PIN: $e')));
               }
             },
           ),
@@ -325,15 +342,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             style: TextButton.styleFrom(foregroundColor: AppTheme.errorRed),
             child: const Text('Logout'),
             onPressed: () async {
-              // Close the dialog first so we don't act on a soon-to-be-deactivated context
-              if (context.mounted) {
+              if (context.mounted)
                 Navigator.of(context, rootNavigator: true)
-                    .pop(); // [attached_file:69]
-              }
+                    .pop(); // close dialog only
               await ref
                   .read(authProvider.notifier)
-                  .logout(); // triggers router redirect [attached_file:69]
-              // Do NOT call context.go(...) here
+                  .logout(); // router redirect will take over
+              // no context.go/pop here
             },
           ),
         ],

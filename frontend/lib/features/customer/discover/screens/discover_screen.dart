@@ -24,15 +24,28 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   Timer? _debounce;
 
+  @override
+  void initState() {
+    super.initState();
+    // One-off snackbar on errors
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.listen<AsyncValue<List<Mess>>>(discoverProvider, (prev, next) {
+        next.whenOrNull(error: (e, st) {
+          final msg = e.toString();
+          if (context.mounted) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(msg)));
+          }
+        });
+      });
+    });
+  }
+
   // Helper to construct full URL (moved from previous example)
   String fullImageUrl(String? path) {
-    if (path == null || path.isEmpty) {
-      return ''; // Let error builder handle
-    }
-    if (path.startsWith('http')) {
-      return path; // Already a full URL
-    }
-    // Prepend base URL
+    if (path == null || path.isEmpty) return '';
+    if (path.startsWith('http')) return path;
+    // ApiConstants.baseUrl must be the origin, e.g., https://api.example.com
     return ApiConstants.baseUrl + path;
   }
 
@@ -253,7 +266,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(
-        onTap: () => context.go('/mess-details/${mess.id}'),
+        onTap: () => context.push('/mess-details/${mess.id}'),
         borderRadius: BorderRadius.circular(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -497,7 +510,8 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () => context.go('/mess-details/${mess.id}'),
+                        onPressed: () =>
+                            context.push('/mess-details/${mess.id}'),
                         child: const Text('View Details'),
                       ),
                     ),

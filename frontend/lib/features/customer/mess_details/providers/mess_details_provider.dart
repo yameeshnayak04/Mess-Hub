@@ -2,106 +2,152 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mess_management_app/core/api/dio_client_provider.dart';
 import '../../../../models/mess.dart';
-import '../../../../models/review.dart'; // Assuming you have a Review model
-import '../repositories/mess_details_repository.dart'; // Create this repository
-import '../../discover/repositories/discover_repository.dart'; // For joinMess
-import '../../discover/providers/discover_provider.dart'; // For discoverRepositoryProvider
+import '../../../../models/review.dart';
+import '../repositories/mess_details_repository.dart';
+import '../../discover/repositories/discover_repository.dart';
+import '../../discover/providers/discover_provider.dart';
 
-// Provider for the new repository
-final messDetailsRepositoryProvider = Provider<MessDetailsRepository>((ref) {
-  // Assuming MessDetailsRepository uses dioClientProvider like others
+final messDetailsRepositoryProvider = Provider((ref) {
   return MessDetailsRepository(ref.watch(dioClientProvider));
 });
 
-// State for Mess Details Screen
 class MessDetailsScreenState {
   final AsyncValue<Mess> mess;
   final AsyncValue<List<Review>> reviews;
-  final bool isJoining; // Loading state for join button
-  final String? joinError; // Error message specifically for join action
+  final AsyncValue<List<Map<String, dynamic>>>
+      menu; // date, lunchItems, dinnerItems
+  final bool isJoining;
+  final String? joinError;
+  final int reviewsPage;
+  final bool reviewsHasMore;
 
   MessDetailsScreenState({
     this.mess = const AsyncValue.loading(),
     this.reviews = const AsyncValue.loading(),
+    this.menu = const AsyncValue.loading(),
     this.isJoining = false,
     this.joinError,
+    this.reviewsPage = 1,
+    this.reviewsHasMore = true,
   });
 
   MessDetailsScreenState copyWith({
     AsyncValue<Mess>? mess,
     AsyncValue<List<Review>>? reviews,
+    AsyncValue<List<Map<String, dynamic>>>? menu,
     bool? isJoining,
     String? joinError,
     bool clearJoinError = false,
+    int? reviewsPage,
+    bool? reviewsHasMore,
   }) {
     return MessDetailsScreenState(
       mess: mess ?? this.mess,
       reviews: reviews ?? this.reviews,
+      menu: menu ?? this.menu,
       isJoining: isJoining ?? this.isJoining,
-      joinError: clearJoinError ? null : joinError ?? this.joinError,
+      joinError: clearJoinError ? null : (joinError ?? this.joinError),
+      reviewsPage: reviewsPage ?? this.reviewsPage,
+      reviewsHasMore: reviewsHasMore ?? this.reviewsHasMore,
     );
   }
 }
 
-// StateNotifier
 class MessDetailsNotifier extends StateNotifier<MessDetailsScreenState> {
   final String messId;
   final MessDetailsRepository _detailsRepository;
-  final DiscoverRepository
-      _discoverRepository; // Use DiscoverRepository for joinMess
+  final DiscoverRepository _discoverRepository;
 
   MessDetailsNotifier(
       this.messId, this._detailsRepository, this._discoverRepository)
       : super(MessDetailsScreenState()) {
-    _fetchDetails();
-    _fetchReviews();
+    refresh();
   }
 
   Future<void> _fetchDetails() async {
     state = state.copyWith(mess: const AsyncValue.loading());
     try {
-      final messData = await _detailsRepository
-          .getMessById(messId); // Use details repo method
+      final messData = await _detailsRepository.getMessById(messId);
       state = state.copyWith(mess: AsyncValue.data(messData));
-    } catch (e, stack) {
-      state = state.copyWith(mess: AsyncValue.error(e, stack));
+    } catch (e, st) {
+      state = state.copyWith(mess: AsyncValue.error(e, st));
     }
   }
 
-  Future<void> _fetchReviews() async {
-    state = state.copyWith(reviews: const AsyncValue.loading());
+  Future<void> _fetchMenu() async {
+    state = state.copyWith(menu: const AsyncValue.loading());
     try {
-      final reviewData = await _detailsRepository
-          .getReviews(messId); // Use details repo method
-      state = state.copyWith(reviews: AsyncValue.data(reviewData));
-    } catch (e, stack) {
-      state = state.copyWith(reviews: AsyncValue.error(e, stack));
+      final now = DateTime.now();
+      final start = DateTime(now.year, now.month, now.day);
+      final end = start.add(const Duration(days: 7)); // next 7 days
+      final menus = await _detailsRepository.getMenu(
+          messId: messId, startDate: start, endDate: end);
+      state = state.copyWith(menu: AsyncValue.data(menus));
+    } catch (e, st) {
+      state = state.copyWith(menu: AsyncValue.error(e, st));
     }
+  }
+
+  Future<void> _fetchReviews(
+      {int page = 1, int limit = 10, bool append = false}) async {
+    if (!append) {
+      state = state.copyWith(
+          reviews: const AsyncValue.loading(),
+          reviewsPage: 1,
+          reviewsHasMore: true);
+    }
+    try {
+      final data =
+          await _detailsRepository.getReviews(messId, page: page, limit: limit);
+      if (append) {
+        final current = state.reviews.value ?? <Review>[];
+        final merged = [...current, ...data];
+        state = state.copyWith(
+          reviews: AsyncValue.data(merged),
+          reviewsPage: page,
+          reviewsHasMore: data.length == limit,
+        );
+      } else {
+        state = state.copyWith(
+          reviews: AsyncValue.data(data),
+          reviewsPage: 1,
+          reviewsHasMore: data.length == limit,
+        );
+      }
+    } catch (e, st) {
+      state = state.copyWith(reviews: AsyncValue.error(e, st));
+    }
+  }
+
+  Future<bool> loadMoreReviews() async {
+    if (!state.reviewsHasMore || state.reviews.isLoading) return false;
+    final next = state.reviewsPage + 1;
+    await _fetchReviews(page: next, limit: 10, append: true);
+    return state.reviewsHasMore;
   }
 
   Future<bool> joinMess(String planName) async {
     state = state.copyWith(isJoining: true, clearJoinError: true);
     try {
-      await _discoverRepository.joinMess(messId, planName); // Call repository
+      await _discoverRepository.joinMess(messId, planName);
       state = state.copyWith(isJoining: false);
-      return true; // Indicate success
+      return true;
     } catch (e) {
       state = state.copyWith(isJoining: false, joinError: e.toString());
-      return false; // Indicate failure
+      return false;
     }
   }
 
   void refresh() {
     _fetchDetails();
-    _fetchReviews();
+    _fetchMenu();
+    _fetchReviews(page: 1, limit: 10, append: false);
   }
 }
 
-// Provider definition
 final messDetailsProvider = StateNotifierProvider.autoDispose
     .family<MessDetailsNotifier, MessDetailsScreenState, String>((ref, messId) {
   final detailsRepository = ref.watch(messDetailsRepositoryProvider);
-  final discoverRepository =
-      ref.watch(discoverRepositoryProvider); // Watch existing provider
+  final discoverRepository = ref.watch(discoverRepositoryProvider);
   return MessDetailsNotifier(messId, detailsRepository, discoverRepository);
 });

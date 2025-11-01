@@ -71,15 +71,14 @@ class User {
     String? role,
     Location? location,
     bool? hasMess,
+    bool clearLocation = false,
   }) {
-    // If location is explicitly passed as null, allow clearing it
-    final bool clearLocation = location == null && this.location != null;
     return User(
       id: id ?? this.id,
       name: name ?? this.name,
       phone: phone ?? this.phone,
       role: role ?? this.role,
-      location: clearLocation ? null : location ?? this.location,
+      location: clearLocation ? null : (location ?? this.location),
       hasMess: hasMess ?? this.hasMess,
     );
   }

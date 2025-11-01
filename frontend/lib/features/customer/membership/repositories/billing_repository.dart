@@ -7,8 +7,17 @@ class BillingRepository {
   final DioClient _dio;
   BillingRepository(this._dio);
 
+  String _msg(Response res) {
+    final d = res.data;
+    if (d is Map &&
+        d['message'] is String &&
+        (d['message'] as String).isNotEmpty) return d['message'];
+    return 'Failed to load billing';
+  }
+
   Future<List<dynamic>> getMyBills(String membershipId) async {
     final res = await _dio.get('/billing/my-bills/$membershipId');
+    if (res.statusCode != 200) throw _msg(res);
     return (res.data['data'] as List);
   }
 
@@ -17,10 +26,11 @@ class BillingRepository {
     required File file,
   }) async {
     final form = FormData.fromMap({
-      'proof': await MultipartFile.fromFile(
-          file.path), // Changed from 'file' to 'proof'
+      'proof': await MultipartFile.fromFile(file.path,
+          filename: file.uri.pathSegments.last),
     });
     final res = await _dio.post('/billing/submit-proof/$billId', data: form);
-    return res.data;
+    if (res.statusCode != 200) throw _msg(res);
+    return res.data as Map<String, dynamic>;
   }
 }

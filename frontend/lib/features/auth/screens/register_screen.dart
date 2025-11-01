@@ -174,7 +174,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go(RouteNames.login),
+          onPressed: () => context.pop(),
         ),
       ),
       body: SafeArea(
