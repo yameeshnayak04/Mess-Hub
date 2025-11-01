@@ -245,7 +245,7 @@ exports.getMessById = async (req, res, next) => {
       : 0;
 
     const messData = mess.toObject();
-    messData.averageRating = averageRating.toFixed(1);
+    messData.averageRating = Number(averageRating.toFixed(1));
     messData.reviewCount = reviews.length;
 
     res.status(200).json({

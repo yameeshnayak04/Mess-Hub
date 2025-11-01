@@ -87,7 +87,7 @@ exports.getReviews = async (req, res, next) => {
       success: true,
       count: reviews.length,
       total,
-      averageRating: averageRating.toFixed(1),
+      averageRating: Number(averageRating.toFixed(1)),
       data: reviews
     });
   } catch (error) {
