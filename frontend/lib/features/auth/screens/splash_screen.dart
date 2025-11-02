@@ -13,14 +13,14 @@ class SplashScreen extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               Icons.restaurant_menu,
               size: 100,
               color: Colors.white,
             ),
             const SizedBox(height: 24),
             Text(
-              'Mess Management',
+              'Mess Hub',
               style: Theme.of(context).textTheme.displayMedium?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
