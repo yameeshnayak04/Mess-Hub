@@ -15,8 +15,11 @@ exports.getMembershipDetails = async (req, res, next) => {
 
     // Load membership with mess and user
     const membership = await Membership.findById(membershipId)
-      .populate('mess', 'messName messImage address city contactPhone serviceType cuisine timings')
-      .populate('user', 'name phone');
+  .populate(
+    'mess',
+    'messName messImage address city contactPhone serviceType cuisine timings plans rules' // add rules here
+  )
+  .populate('user', 'name phone');
 
     if (!membership) {
       return res.status(404).json({ success: false, message: 'Membership not found' });

@@ -1,6 +1,7 @@
 // lib/features/customer/membership/screens/attendance_calendar_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mess_management_app/features/customer/membership/providers/membership_providers.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -40,6 +41,29 @@ class _AttendanceCalendarScreenState
     });
   }
 
+  List<String> _mealsFromPlan(String planName) {
+    final p = planName.toLowerCase();
+    if (p.contains('both')) return const ['Lunch', 'Dinner'];
+    if (p.contains('lunch')) return const ['Lunch'];
+    if (p.contains('dinner')) return const ['Dinner'];
+    return const ['Lunch', 'Dinner'];
+  }
+
+  Color _colorFor(String? status) {
+    switch (status) {
+      case 'Present':
+        return AppTheme.successGreen;
+      case 'Skipped':
+        return AppTheme.warningYellow;
+      case 'Leave':
+        return AppTheme.infoBlue;
+      case 'Absent':
+        return AppTheme.errorRed;
+      default:
+        return AppTheme.textSecondary;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final params = AttendanceCalendarParams(
@@ -48,6 +72,8 @@ class _AttendanceCalendarScreenState
       year: _focusedDay.year,
     );
 
+    final membershipAsync =
+        ref.watch(membershipDetailsProvider(widget.membershipId));
     final asyncEntries = ref.watch(attendanceCalendarProvider(params));
 
     return Scaffold(
@@ -100,17 +126,43 @@ class _AttendanceCalendarScreenState
         },
         data: (list) {
           // Store raw entries by date
-          final entriesByDate = _groupEntriesByDate(list);
-          final counts = _computeCounts(list);
+          final planName = membershipAsync.maybeWhen(
+            data: (d) => (d['membership']?['planName'] as String?) ?? '',
+            orElse: () => '',
+          );
+          final allowedMeals = _mealsFromPlan(planName);
+
+          // Filter entries to plan meals
+          final filtered = list.where((e) {
+            final meal = (e['mealType'] as String?)?.trim();
+            return meal == null || meal.isEmpty || allowedMeals.contains(meal);
+          }).toList();
+
+          final entriesByDate = _groupEntriesByDate(filtered);
+          final counts = _computeCounts(filtered);
 
           return Column(
             children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Chip(
+                    label: Text(
+                      planName.isEmpty ? 'Plan: —' : 'Plan: $planName',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    backgroundColor: AppTheme.surfaceColor,
+                  ),
+                ),
+              ),
               _MonthlySummary(counts: counts),
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
                       TableCalendar(
+                        // existing props...
                         firstDay: DateTime.utc(2020, 1, 1),
                         lastDay: DateTime.utc(2030, 12, 31),
                         focusedDay: _focusedDay,
@@ -155,39 +207,60 @@ class _AttendanceCalendarScreenState
                             if (dayEntries == null || dayEntries.isEmpty)
                               return null;
 
-                            // Build two dots for Lunch & Dinner
-                            final lunchEntry = dayEntries.firstWhere(
+                            // Find meal entries present for the day
+                            final lunch = dayEntries.firstWhere(
                               (e) => e['mealType'] == 'Lunch',
-                              orElse: () => {},
+                              orElse: () => <String, dynamic>{},
                             );
-                            final dinnerEntry = dayEntries.firstWhere(
+                            final dinner = dayEntries.firstWhere(
                               (e) => e['mealType'] == 'Dinner',
-                              orElse: () => {},
+                              orElse: () => <String, dynamic>{},
                             );
 
+                            // Single-meal plan: one centered dot (pick whichever meal exists)
+                            if (allowedMeals.length == 1) {
+                              final chosen = allowedMeals.first == 'Lunch'
+                                  ? lunch
+                                  : dinner;
+                              if (chosen.isEmpty) return null;
+                              return Positioned(
+                                bottom: 4,
+                                child: Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        _colorFor(chosen['status'] as String?),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              );
+                            }
+
+                            // Two-meal plan: left/right dots if present
                             return Positioned(
                               bottom: 4,
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  if (lunchEntry.isNotEmpty)
+                                  if (lunch.isNotEmpty)
                                     Container(
-                                      width: 5,
-                                      height: 5,
+                                      width: 8,
+                                      height: 8,
                                       margin: const EdgeInsets.only(right: 2),
                                       decoration: BoxDecoration(
                                         color: _colorFor(
-                                            lunchEntry['status'] as String?),
+                                            lunch['status'] as String?),
                                         shape: BoxShape.circle,
                                       ),
                                     ),
-                                  if (dinnerEntry.isNotEmpty)
+                                  if (dinner.isNotEmpty)
                                     Container(
-                                      width: 5,
-                                      height: 5,
+                                      width: 6,
+                                      height: 6,
                                       decoration: BoxDecoration(
                                         color: _colorFor(
-                                            dinnerEntry['status'] as String?),
+                                            dinner['status'] as String?),
                                         shape: BoxShape.circle,
                                       ),
                                     ),
@@ -200,7 +273,6 @@ class _AttendanceCalendarScreenState
                       const SizedBox(height: 16),
                       const _Legend(),
                       const SizedBox(height: 16),
-                      // Selected date meal details
                       if (_selectedDay != null)
                         _MealDetailsCard(
                           selectedDate: _selectedDay!,
@@ -210,6 +282,7 @@ class _AttendanceCalendarScreenState
                                 _selectedDay!.day,
                               )] ??
                               [],
+                          allowedMeals: allowedMeals, // NEW: limit rows to plan
                         ),
                       const SizedBox(height: 16),
                     ],
@@ -248,21 +321,6 @@ class _AttendanceCalendarScreenState
       }
     }
     return result;
-  }
-
-  Color _colorFor(String? status) {
-    switch (status) {
-      case 'Present':
-        return AppTheme.successGreen;
-      case 'Skipped':
-        return AppTheme.warningYellow;
-      case 'Leave':
-        return AppTheme.infoBlue;
-      case 'Absent':
-        return AppTheme.errorRed;
-      default:
-        return AppTheme.textSecondary;
-    }
   }
 }
 
@@ -382,10 +440,12 @@ class _Legend extends StatelessWidget {
 class _MealDetailsCard extends StatelessWidget {
   final DateTime selectedDate;
   final List<Map<String, dynamic>> entries;
+  final List<String> allowedMeals;
 
   const _MealDetailsCard({
     required this.selectedDate,
     required this.entries,
+    required this.allowedMeals,
   });
 
   @override
@@ -464,21 +524,13 @@ class _MealDetailsCard extends StatelessWidget {
                 ],
               ),
               const Divider(height: 24),
-              // Lunch
-              _buildMealRow(
-                context,
-                'Lunch',
-                Icons.wb_sunny,
-                lunchEntry['status'] as String?,
-              ),
-              const SizedBox(height: 12),
-              // Dinner
-              _buildMealRow(
-                context,
-                'Dinner',
-                Icons.nightlight,
-                dinnerEntry['status'] as String?,
-              ),
+              if (allowedMeals.contains('Lunch'))
+                _buildMealRow(context, 'Lunch', Icons.wb_sunny,
+                    lunchEntry['status'] as String?),
+              if (allowedMeals.contains('Lunch')) const SizedBox(height: 12),
+              if (allowedMeals.contains('Dinner'))
+                _buildMealRow(context, 'Dinner', Icons.nightlight,
+                    dinnerEntry['status'] as String?),
             ],
           ),
         ),

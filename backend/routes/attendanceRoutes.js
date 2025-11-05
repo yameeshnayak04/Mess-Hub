@@ -20,5 +20,6 @@ router.get('/member/:membershipId', protect, authorize('Manager'), attendanceCon
 
 // Any routes that were on or after line 22 in your local file are removed 
 // if they pointed to non-existent controller functions.
+router.get('/dashboard/meal-stats', protect, authorize('Manager'), attendanceController.getMealDashboardStats);
 
 module.exports = router;

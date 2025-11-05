@@ -22,6 +22,25 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
   DateTime _focused = DateTime.now();
   DateTime _selected = DateTime.now();
 
+  // Add inside _MemberDetailsScreenState (below class fields)
+  List<String> _mealsFromPlan(String planName) {
+    final p = planName.toLowerCase();
+    if (p.contains('both')) return const ['Lunch', 'Dinner'];
+    if (p.contains('lunch')) return const ['Lunch'];
+    if (p.contains('dinner')) return const ['Dinner'];
+    // Default safe fallback
+    return const ['Lunch', 'Dinner'];
+  }
+
+  String? _mergeStatuses(String? a, String? b) {
+    final set = {if (a != null) a, if (b != null) b};
+    if (set.contains('Absent')) return 'Absent';
+    if (set.contains('Leave')) return 'Leave';
+    if (set.contains('Skipped')) return 'Skipped';
+    if (set.contains('Present')) return 'Present';
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final details = ref.watch(memberDetailsProvider(widget.membershipId));
@@ -178,44 +197,80 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
               error: (e, _) => _ErrorCard(
                 title: 'Attendance',
                 detail: e.toString(),
-                onRetry: () => ref.refresh(memberAttendanceProvider(
-                  MemberCalendarParams(
-                      widget.membershipId, _focused.month, _focused.year),
-                )),
+                onRetry: () => ref.refresh(
+                  memberAttendanceProvider(
+                    MemberCalendarParams(
+                        widget.membershipId, _focused.month, _focused.year),
+                  ),
+                ),
               ),
               data: (entries) {
+                // date -> meal -> record
                 final Map<DateTime, Map<String, Map<String, dynamic>>> byDate =
-                    <DateTime, Map<String, Map<String, dynamic>>>{};
+                    {};
 
-                // Build from attendance
+                // Status priority to resolve accidental duplicates
+                const Map<String, int> _prio = {
+                  'Present': 4,
+                  'Leave': 3,
+                  'Skipped': 2,
+                  'Absent': 1,
+                };
+
+                String _statusOf(Map<String, dynamic> rec) =>
+                    ((rec['status'] as String?) ?? '').trim();
+
+                bool _isStronger(
+                    Map<String, dynamic> a, Map<String, dynamic>? b) {
+                  final sa = _statusOf(a);
+                  final sb = b == null ? '' : _statusOf(b);
+                  return (_prio[sa] ?? 0) >= (_prio[sb] ?? 0);
+                }
+
+                // Build from attendance (dedup per day+meal by strongest status)
                 for (final raw in entries) {
                   final e = Map<String, dynamic>.from(raw);
                   final dt = DateTime.parse(e['date'] as String).toLocal();
                   final key = DateTime(dt.year, dt.month, dt.day);
-                  byDate.putIfAbsent(
+                  final meal = ((e['mealType'] as String?) ?? '').trim();
+                  if (meal.isEmpty) continue;
+
+                  final bucket = byDate.putIfAbsent(
                       key, () => <String, Map<String, dynamic>>{});
-                  final meal = (e['mealType'] as String?) ?? '';
-                  if (meal.isNotEmpty) byDate[key]![meal] = e;
+                  final existing = bucket[meal];
+                  if (_isStronger(e, existing)) {
+                    bucket[meal] = e;
+                  }
                 }
 
-                // Overlay leaves if no explicit status
+                // Resolve plan -> allowed meals
+                final planText = details.valueOrNull is Map
+                    ? ((Map.from(details.valueOrNull as Map)['planName'] ??
+                        widget.membership?['planName'] ??
+                        '') as String)
+                    : ((widget.membership?['planName'] ?? '') as String);
+                final allowedMeals = _mealsFromPlan(planText);
+
+                // Overlay leaves only for allowed meals, only if no explicit record exists
                 final leaveList =
                     leaves.valueOrNull ?? <Map<String, dynamic>>[];
                 for (final raw in leaveList) {
                   final l = Map<String, dynamic>.from(raw);
                   final sd = DateTime.parse(l['startDate'] as String).toLocal();
                   final ed = DateTime.parse(l['endDate'] as String).toLocal();
+
                   for (DateTime d = DateTime(sd.year, sd.month, sd.day);
                       !d.isAfter(DateTime(ed.year, ed.month, ed.day));
                       d = d.add(const Duration(days: 1))) {
                     final key = DateTime(d.year, d.month, d.day);
-                    byDate.putIfAbsent(
+                    final bucket = byDate.putIfAbsent(
                         key, () => <String, Map<String, dynamic>>{});
+
                     void putIfFree(String meal) {
-                      final s =
-                          (byDate[key]![meal]?['status'] as String?) ?? '';
-                      if (s.isEmpty) {
-                        byDate[key]![meal] = <String, dynamic>{
+                      final status =
+                          _statusOf(bucket[meal] ?? const <String, dynamic>{});
+                      if (status.isEmpty) {
+                        bucket[meal] = <String, dynamic>{
                           'mealType': meal,
                           'status': 'Leave',
                           'date': d.toIso8601String(),
@@ -223,8 +278,9 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
                       }
                     }
 
-                    putIfFree('Lunch');
-                    putIfFree('Dinner');
+                    for (final meal in allowedMeals) {
+                      putIfFree(meal);
+                    }
                   }
                 }
 
@@ -264,13 +320,41 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
                             ),
                           ),
                           calendarBuilders: CalendarBuilders(
+                            // Inside calendarBuilders: CalendarBuilders(
                             markerBuilder: (context, date, _) {
                               final key =
                                   DateTime(date.year, date.month, date.day);
                               final meals = byDate[key];
                               if (meals == null) return null;
+
+                              final planText = details.valueOrNull is Map
+                                  ? ((Map.from(details.valueOrNull as Map)[
+                                          'planName'] ??
+                                      widget.membership?['planName'] ??
+                                      '') as String)
+                                  : ((widget.membership?['planName'] ?? '')
+                                      as String);
+                              final allowedMeals = _mealsFromPlan(planText);
+
                               final lunch = meals['Lunch'];
                               final dinner = meals['Dinner'];
+
+                              // Single-meal plan: show one centered dot, merging statuses if both exist accidentally
+                              if (allowedMeals.length == 1) {
+                                final mergedStatus = _mergeStatuses(
+                                    lunch?['status'] as String?,
+                                    dinner?['status'] as String?);
+                                if (mergedStatus == null) return null;
+                                return Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(bottom: 2),
+                                    child: _dot(_colorFor(mergedStatus)),
+                                  ),
+                                );
+                              }
+
+                              // Two-meal plans: keep left/right dots per meal
                               final children = <Widget>[];
                               if (lunch != null) {
                                 children.add(Positioned(
