@@ -11,12 +11,13 @@ class DashboardRepository {
     final d = res.data;
     if (d is Map &&
         d['message'] is String &&
-        (d['message'] as String).isNotEmpty) return d['message'];
+        (d['message'] as String).isNotEmpty) return d['message'] as String;
     if (d is Map && d['error'] is String && (d['error'] as String).isNotEmpty)
-      return d['error'];
+      return d['error'] as String;
     return fallback;
   }
 
+  // Meal-aware stats for current window (Lunch/Dinner)
   Future<DashboardStats> getDashboardStats() async {
     final res = await _dioClient.get('/mess/my-mess/dashboard');
     if (res.statusCode == 200 && res.data is Map && res.data['data'] is Map) {
@@ -26,7 +27,25 @@ class DashboardRepository {
     throw _msg(res, 'Failed to load dashboard stats');
   }
 
-  // Drill-downs for live cards
+  Future<List<Map<String, dynamic>>> getMembersRemaining() async {
+    try {
+      final res = await _dioClient.get('/mess/dashboard/members-remaining');
+      if (res.statusCode == 200 &&
+          res.data is Map &&
+          res.data['data'] is List) {
+        return List<Map<String, dynamic>>.from(res.data['data'] as List);
+      }
+      throw _msg(res, 'Failed to load members remaining');
+    } on DioException catch (e) {
+      // Graceful fallback when route isn’t deployed yet
+      if (e.response?.statusCode == 404) {
+        throw 'Members remaining route not found';
+      }
+      rethrow;
+    }
+  }
+
+  // Drill-down lists shown in MemberDetailDialog (server is meal-aware)
   Future<List<Map<String, dynamic>>> getMembersEating() async {
     final res = await _dioClient.get('/mess/dashboard/members-eating');
     if (res.statusCode == 200 && res.data is Map && res.data['data'] is List) {
@@ -60,7 +79,7 @@ class DashboardRepository {
     throw _msg(res, 'Failed to load skipped members');
   }
 
-  // Pending approvals (billing)
+  // Payments (manager)
   Future<List<Map<String, dynamic>>> getPendingApprovals() async {
     final res = await _dioClient.get('/billing/pending-approvals');
     if (res.statusCode == 200 && res.data is Map && res.data['data'] is List) {
@@ -86,7 +105,7 @@ class DashboardRepository {
     throw _msg(res, 'Failed to reject payment');
   }
 
-  // Pending join requests and actions
+  // Membership join approvals (manager)
   Future<List<Map<String, dynamic>>> getPendingJoinRequests() async {
     final res = await _dioClient
         .get('/membership/mess', queryParameters: {'status': 'Pending'});
@@ -113,18 +132,22 @@ class DashboardRepository {
     throw _msg(res, 'Failed to reject membership');
   }
 
-  // Today’s menu for manager’s mess
+  // Today’s menu (manager’s mess)
   Future<Map<String, dynamic>?> getTodaysMenu() async {
     final messRes = await _dioClient.get('/mess/my-mess');
     final messMap = messRes.data['data'];
     final messId = messMap is Map ? messMap['_id'] as String? : null;
     if (messId == null) return null;
+
     final now = DateTime.now();
     final y = now.year.toString().padLeft(4, '0');
     final m = now.month.toString().padLeft(2, '0');
     final d = now.day.toString().padLeft(2, '0');
-    final menuRes = await _dioClient.get('/menu/$messId',
-        queryParameters: {'startDate': '$y-$m-$d', 'endDate': '$y-$m-$d'});
+
+    final menuRes = await _dioClient.get(
+      '/menu/$messId',
+      queryParameters: {'startDate': '$y-$m-$d', 'endDate': '$y-$m-$d'},
+    );
     if (menuRes.statusCode == 200 &&
         menuRes.data is Map &&
         menuRes.data['data'] is List) {
