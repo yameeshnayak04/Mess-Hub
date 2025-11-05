@@ -4,17 +4,14 @@ import '../../../../core/api/dio_client_provider.dart';
 import '../../../../models/dashboard_stats.dart';
 import '../repositories/dashboard_repository.dart';
 
-// Repo
-final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
-  return DashboardRepository(ref.watch(dioClientProvider));
-});
+final dashboardRepositoryProvider = Provider<DashboardRepository>(
+  (ref) => DashboardRepository(ref.watch(dioClientProvider)),
+);
 
-// Stats
 final dashboardStatsProvider =
     StateNotifierProvider<DashboardStatsNotifier, AsyncValue<DashboardStats>>(
-        (ref) {
-  return DashboardStatsNotifier(ref.watch(dashboardRepositoryProvider));
-});
+  (ref) => DashboardStatsNotifier(ref.watch(dashboardRepositoryProvider)),
+);
 
 class DashboardStatsNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
   final DashboardRepository _repository;
@@ -34,22 +31,23 @@ class DashboardStatsNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
 
   Future<void> refresh() async => loadStats();
 
-  // Drill-down helpers
+  // Drill-down
   Future<List<Map<String, dynamic>>> getMembersEating() =>
       _repository.getMembersEating();
   Future<List<Map<String, dynamic>>> getMembersOnLeave() =>
       _repository.getMembersOnLeave();
   Future<List<Map<String, dynamic>>> getMembersSkipped() =>
       _repository.getMembersSkipped();
+  Future<List<Map<String, dynamic>>> getMembersRemaining() =>
+      _repository.getMembersRemaining();
 }
 
-// Pending approvals
+// Lists for action center
 final pendingApprovalsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   return ref.watch(dashboardRepositoryProvider).getPendingApprovals();
 });
 
-// Pending join requests
 final pendingJoinRequestsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   return ref.watch(dashboardRepositoryProvider).getPendingJoinRequests();

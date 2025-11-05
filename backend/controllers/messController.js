@@ -316,6 +316,80 @@ exports.getDashboardStats = async (req, res, next) => {
   }
 };
 
+// @desc    Get members remaining (not eaten, not skipped, not on leave)
+// @route   GET /api/mess/dashboard/members-remaining
+// @access  Private (Manager only)
+exports.getMembersRemaining = async (req, res, next) => {
+  try {
+    const mess = await Mess.findOne({ owner: req.user.id });
+    if (!mess) {
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
+    }
+
+    const { currentMeal } = checkMealTiming(mess.timings);
+    if (currentMeal === 'None') {
+      return res.status(200).json({ success: true, count: 0, data: [], message: 'No active meal at the moment' });
+    }
+
+    const { startOfDay, endOfDay } = getStartAndEndOfDay();
+
+    // 1. Get IDs of users who have taken action
+    const eating = await Attendance.find({
+      mess: mess._id,
+      date: { $gte: startOfDay, $lte: endOfDay },
+      mealType: currentMeal,
+      status: 'Present',
+      memberType: 'Monthly'
+    }).select('user');
+
+    const skipped = await Attendance.find({
+      mess: mess._id,
+      date: { $gte: startOfDay, $lte: endOfDay },
+      mealType: currentMeal,
+      status: 'Skipped'
+    }).select('user');
+
+    const onLeave = await Leave.find({
+      mess: mess._id,
+      startDate: { $lte: endOfDay },
+      endDate: { $gte: startOfDay }
+    }).select('user');
+
+    const actionTakenUserIds = new Set([
+      ...eating.map(a => a.user.toString()),
+      ...skipped.map(a => a.user.toString()),
+      ...onLeave.map(l => l.user.toString())
+    ]);
+
+    // 2. Get all active members
+    const allActiveMembers = await Membership.find({
+      mess: mess._id,
+      status: 'Active'
+    }).populate('user', 'name phone');
+
+    // 3. Filter out those who have taken action
+    const remainingMembers = allActiveMembers.filter(member =>
+      member.user && !actionTakenUserIds.has(member.user._id.toString())
+    );
+
+    // Format data to match other dialogs (user nested)
+    const formattedData = remainingMembers.map(m => ({
+        _id: m._id, // membership ID
+        user: m.user  // populated user object
+    }));
+
+    res.status(200).json({
+      success: true,
+      count: formattedData.length,
+      data: formattedData,
+      meal: currentMeal
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get members eating now (clickable stat details)
 // @route   GET /api/mess/dashboard/members-eating
 // @access  Private (Manager only)

@@ -9,7 +9,8 @@ const {
   getDashboardStats,
   getMembersEating,
   getMembersOnLeave,
-  getMembersSkipped
+  getMembersSkipped,
+  getMembersRemaining // <-- Added
 } = require('../controllers/messController');
 const { protect, authorize } = require('../middleware/auth');
 const { uploadMessImage } = require('../middleware/upload'); // <-- match export name
@@ -41,6 +42,7 @@ router.get('/my-mess/dashboard', protect, authorize('Manager'), getDashboardStat
 router.get('/dashboard/members-eating', protect, authorize('Manager'), getMembersEating);
 router.get('/dashboard/members-on-leave', protect, authorize('Manager'), getMembersOnLeave);
 router.get('/dashboard/members-skipped', protect, authorize('Manager'), getMembersSkipped);
+router.get('/dashboard/members-remaining', protect, authorize('Manager'), getMembersRemaining); // <-- Added
 
 // Discovery endpoints (keep as you prefer: public or customer-protected)
 router.get('/discover', protect, authorize('Customer'), discoverMesses);
