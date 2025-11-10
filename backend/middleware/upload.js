@@ -1,39 +1,29 @@
 const multer = require('multer');
 const path = require('path');
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const cloudinary = require('cloudinary').v2;
-
-// --- 1. CONFIGURE CLOUDINARY ---
-// You MUST set these environment variables in your .env file or on Render
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
-
-// --- 2. CREATE CLOUDINARY STORAGE ENGINES ---
 
 // Storage configuration for mess images
-const messImageStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'mess-images', // Folder in Cloudinary
-    allowed_formats: ['jpg', 'png', 'jpeg'],
-    public_id: (req, file) => `mess-${Date.now()}` // Unique file name
+const messImageStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/mess-images/');
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'mess-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
 
 // Storage configuration for payment proofs
-const paymentProofStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'payment-proofs', // Folder in Cloudinary
-    allowed_formats: ['jpg', 'png', 'jpeg'],
-    public_id: (req, file) => `payment-${Date.now()}` // Unique file name
+const paymentProofStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/payment-proofs/');
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'payment-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
 
-// --- 3. RE-USE YOUR EXISTING IMAGE FILTER ---
+// File filter for images
 const imageFilter = (req, file, cb) => {
   const allowedTypes = /jpeg|jpg|png|gif/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -46,18 +36,16 @@ const imageFilter = (req, file, cb) => {
   }
 };
 
-// --- 4. EXPORT MULTER MIDDLEWARE WITH NEW STORAGE ---
-
 // Upload middleware for mess images
 exports.uploadMessImage = multer({
-  storage: messImageStorage, // <-- UPDATED
+  storage: messImageStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: imageFilter
 });
 
 // Upload middleware for payment proofs
 exports.uploadPaymentProof = multer({
-  storage: paymentProofStorage, // <-- UPDATED
+  storage: paymentProofStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: imageFilter
 });

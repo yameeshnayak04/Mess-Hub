@@ -10,20 +10,45 @@ const connectDB = require('./config/db');
 
 dotenv.config();
 
+// Connect DB
+connectDB();
+
+// --- Load Jobs ---
+require('./jobs/absentJob'); // Marks users absent
+require('./jobs/billingJob'); // Generates monthly bills
+
 const app = express();
 app.set('trust proxy', 1);
 
-// Core middleware
-app.use(helmet());
+// Security headers
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow serving images from /uploads
+  })
+);
+
+// CORS
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
-if ((process.env.NODE_ENV || '').toLowerCase() === 'development') {
-  app.use(morgan('dev'));
-}
+app.use(morgan('dev'));
 
-// Health first (so Render can pass health checks even if DB is cold)
+// Static files for uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Routes
+app.use('/api/auth', require('./routes/authRoutes'));               // register/login/logout
+app.use('/api/users', require('./routes/userRoutes'));              // get/update my profile
+app.use('/api/mess', require('./routes/messRoutes'));               // discover, mess details, manager CRUD, dashboard
+app.use('/api/membership', require('./routes/membershipRoutes'));   // join/leave/approve/reject/details
+app.use('/api/attendance', require('./routes/attendanceRoutes'));   // skip meal, kiosk mark, calendars
+app.use('/api/leave', require('./routes/leaveRoutes'));             // apply + history (no status workflow)
+app.use('/api/billing', require('./routes/billingRoutes'));         // generate bills, approvals, customer bills
+app.use('/api/menu', require('./routes/menuRoutes'));               // set/get menu
+app.use('/api/reviews', require('./routes/reviewRoutes'));          // get/add reviews
+
+// Health check
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
 });
@@ -73,25 +98,14 @@ app.use((err, req, res, next) => {
   res.status(err.statusCode || 500).json({
     success: false,
     message: err.message || 'Server Error',
-    ...((process.env.NODE_ENV || '') === 'development' && { stack: err.stack }),
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 });
 
 // 404 fallback
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
 
-// Start server first so /health is live during cold starts
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
-
-// Connect DB in background; do not crash the process on first failure
-(async () => {
-  try {
-    await connectDB();
-    console.log('MongoDB connected');
-  } catch (e) {
-    console.error('Initial DB connect failed:', e.message);
-  }
-})();

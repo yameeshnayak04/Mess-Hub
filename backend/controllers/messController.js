@@ -33,10 +33,7 @@ exports.createMess = async (req, res, next) => {
     // --- Add Owner and Image ---
     messData.owner = req.user.id;
     if (req.file) {
-      // --- THIS IS THE CHANGE ---
-      // req.file.path is now the full URL from Cloudinary
-      messData.messImage = req.file.path;
-      // --- END OF CHANGE ---
+      messData.messImage = `/uploads/mess-images/${req.file.filename}`;
     }
 
     const mess = await Mess.create(messData);
@@ -115,10 +112,7 @@ exports.updateMyMess = async (req, res, next) => {
     }
 
     if (req.file) {
-      // --- THIS IS THE CHANGE ---
-      // req.file.path is now the full URL from Cloudinary
-      updates.messImage = req.file.path;
-      // --- END OF CHANGE ---
+      updates.messImage = `/uploads/mess-images/${req.file.filename}`;
     }
 
     // Nothing to schedule
