@@ -1,5 +1,4 @@
 // jobs/absentJob.js
-const cron = require('node-cron');
 const Attendance = require('../models/Attendance');
 const Membership = require('../models/Membership');
 const Mess = require('../models/Mess');
@@ -48,6 +47,7 @@ async function markAbsentForMeal(mealType) {
           rateSnapshot: m.billingRate,
           rebatePerThaliSnapshot: mess.rules.rebatePerThali,
         });
+        console.log('--- Absent Job Completed ---');
       } catch (e) { 
         if (e.code === 11000) {
           // Rare race condition, ignore duplicate key error

@@ -1,6 +1,6 @@
 class ApiConstants {
   static const String baseUrl =
-      'http://10.121.118.41:3000'; // Change to your backend URL
+      'https://mess-app-backend.onrender.com'; // Change to your backend URL
   static const String apiPrefix = '/api';
 
   // Timeout
