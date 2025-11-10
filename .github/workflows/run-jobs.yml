@@ -1,0 +1,33 @@
+name: Run Mess Hub Jobs
+
+on:
+  schedule:
+    # 1. Runs the 'absent-job' at 15:30 and 23:30 UTC every day
+    # (This is 9:00 PM and 5:00 AM India Standard Time)
+    # (GitHub Actions uses UTC, which is 5.5 hours behind IST)
+    - cron: '30 15,23 * * *'
+    
+    # 2. Runs the 'billing-job' at 00:01 on the 1st of every month
+    - cron: '1 0 1 * *'
+
+jobs:
+  run-scheduled-jobs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Absent Job
+        if: github.event.schedule == '30 15,23 * * *'
+        run: |
+          curl -X POST \
+          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+          -H "X-Job-Secret: ${{ secrets.JOB_SECRET_KEY }}" \
+          -H "Content-Type: application/json" \
+          "https://mess-hub-backend.onrender.com/api/jobs/run-absent"
+          
+      - name: Trigger Billing Job
+        if: github.event.schedule == '1 0 1 * *'
+        run: |
+          curl -X POST \
+          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+          -H "X-Job-Secret: ${{ secrets.JOB_SECRET_KEY }}" \
+          -H "Content-Type: application/json" \
+          "https://mess-hub-backend.onrender.com/api/jobs/run-billing"

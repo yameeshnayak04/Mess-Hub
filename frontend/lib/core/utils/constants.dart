@@ -1,11 +1,8 @@
 class ApiConstants {
-  static const String baseUrl =
-      'http://10.121.118.41:3000'; // Change to your backend URL
+  static const String baseUrl = 'https://mess-hub-backend.onrender.com';
   static const String apiPrefix = '/api';
-
-  // Timeout
-  static const Duration connectionTimeout = Duration(seconds: 30);
-  static const Duration receiveTimeout = Duration(seconds: 30);
+  static const Duration connectionTimeout = Duration(seconds: 60);
+  static const Duration receiveTimeout = Duration(seconds: 60);
 
   static String fullImageUrl(String? path) {
     if (path == null || path.isEmpty) {
@@ -14,7 +11,7 @@ class ApiConstants {
       return '';
     }
     if (path.startsWith('http')) {
-      return path; // Already a full URL
+      return path; // Already a full URL (from Cloudinary)
     }
     // Prepend base URL (ensure no double slash if path starts with /)
     final separator =

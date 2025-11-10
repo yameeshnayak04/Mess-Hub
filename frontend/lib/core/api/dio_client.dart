@@ -14,7 +14,8 @@ class DioClient {
         'Accept': 'application/json',
       };
     // Do not throw on non-2xx; handle in repositories/providers
-    _dio.options.validateStatus = (status) => true;
+    _dio.options.validateStatus =
+        (code) => code != null && code >= 200 && code < 600;
   }
 
   get baseUrl => null;
