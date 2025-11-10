@@ -11,76 +11,86 @@ exports.calculateDaysDifference = (startDate, endDate) => {
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end date
   return diffDays;
 };
+// utils/billCalculation.js (replace checkMealTiming with this version and add helpers)
+
+// Default to IST (+5:30 = 330 minutes); override per env if needed
+const DEFAULT_TZ_OFFSET_MIN = parseInt(process.env.TZ_OFFSET_MINUTES || '330', 10);
+
+// Get “local” minutes since midnight using UTC clock + offset, stable across servers
+const getLocalMinutes = (now = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) => {
+  const utcMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const norm = ((offsetMin % 1440) + 1440) % 1440; // normalize offset
+  return (utcMin + norm) % 1440;
+};
+
+const parseHHMM = (str) => {
+  const [h, m] = String(str || '').split(':');
+  const hh = parseInt(h, 10);
+  const mm = parseInt(m, 10);
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return null;
+  return hh * 60 + mm;
+};
+
+// Check if minutes-within-window, supporting windows that wrap past midnight
+const inWindow = (min, start, end) => {
+  if (start == null || end == null) return false;
+  return start <= end ? (min >= start && min <= end) : (min >= start || min <= end);
+};
+
+// For a specific window, determine if current time is past its end (wrap-aware)
+const isWindowPast = (min, start, end) => {
+  if (start == null || end == null) return false;
+  return start <= end ? (min > end) : (min > end && min < start);
+};
 
 /**
- * Check if current time is within meal timing
- * @param {Object} timings - Meal timings from Mess
- * @param {String} mealType - 'Lunch' or 'Dinner'
- * @returns {Object} { isWithin: Boolean, isPast: Boolean, currentMeal: String, liveStatus: String }
+ * Timezone-aware meal timing check
+ * @param {Object} timings { lunch: {start:'HH:MM', end:'HH:MM'}, dinner: {...} }
+ * @param {('Lunch'|'Dinner'|null)} mealType
+ * @param {number} tzOffsetMin minutes offset from UTC (default from env)
+ * @returns {{ isWithin: boolean, isPast: boolean, currentMeal: string, liveStatus: string }}
  */
-exports.checkMealTiming = (timings, mealType = null) => {
-  const now = new Date();
-  const currentHour = now.getHours();
-  const currentMinute = now.getMinutes();
-  const currentTimeInMinutes = currentHour * 60 + currentMinute;
+exports.checkMealTiming = (timings, mealType = null, tzOffsetMin = DEFAULT_TZ_OFFSET_MIN) => {
+  const nowMin = getLocalMinutes(new Date(), tzOffsetMin);
 
-  const parseLunchStart = timings.lunch.start.split(':');
-  const lunchStartMinutes = parseInt(parseLunchStart[0]) * 60 + parseInt(parseLunchStart[1]);
-  
-  const parseLunchEnd = timings.lunch.end.split(':');
-  const lunchEndMinutes = parseInt(parseLunchEnd[0]) * 60 + parseInt(parseLunchEnd[1]);
+  const Ls = parseHHMM(timings?.lunch?.start);
+  const Le = parseHHMM(timings?.lunch?.end);
+  const Ds = parseHHMM(timings?.dinner?.start);
+  const De = parseHHMM(timings?.dinner?.end);
 
-  const parseDinnerStart = timings.dinner.start.split(':');
-  const dinnerStartMinutes = parseInt(parseDinnerStart[0]) * 60 + parseInt(parseDinnerStart[1]);
-  
-  const parseDinnerEnd = timings.dinner.end.split(':');
-  const dinnerEndMinutes = parseInt(parseDinnerEnd[0]) * 60 + parseInt(parseDinnerEnd[1]);
+  const lunchNow = inWindow(nowMin, Ls, Le);
+  const dinnerNow = inWindow(nowMin, Ds, De);
 
   let currentMeal = 'None';
   let liveStatus = 'Service Closed';
-  let isWithin = false;
-  let isPast = false;
+  if (lunchNow) { currentMeal = 'Lunch'; liveStatus = 'Lunch Ongoing'; }
+  else if (dinnerNow) { currentMeal = 'Dinner'; liveStatus = 'Dinner Ongoing'; }
 
-  // Check if currently in lunch time
-  if (currentTimeInMinutes >= lunchStartMinutes && currentTimeInMinutes <= lunchEndMinutes) {
-    currentMeal = 'Lunch';
-    liveStatus = 'Lunch Ongoing';
-    isWithin = true;
-  }
-  // Check if currently in dinner time
-  else if (currentTimeInMinutes >= dinnerStartMinutes && currentTimeInMinutes <= dinnerEndMinutes) {
-    currentMeal = 'Dinner';
-    liveStatus = 'Dinner Ongoing';
-    isWithin = true;
-  }
-
-  // If mealType is specified, check specifically for that meal
-  if (mealType) {
-    if (mealType === 'Lunch') {
-      return {
-        isWithin: currentTimeInMinutes >= lunchStartMinutes && currentTimeInMinutes <= lunchEndMinutes,
-        isPast: currentTimeInMinutes > lunchEndMinutes,
-        currentMeal,
-        liveStatus
-      };
-    } else if (mealType === 'Dinner') {
-      return {
-        isWithin: currentTimeInMinutes >= dinnerStartMinutes && currentTimeInMinutes <= dinnerEndMinutes,
-        isPast: currentTimeInMinutes > dinnerEndMinutes,
-        currentMeal,
-        liveStatus
-      };
-    }
+  if (mealType === 'Lunch') {
+    return {
+      isWithin: lunchNow,
+      isPast: isWindowPast(nowMin, Ls, Le),
+      currentMeal,
+      liveStatus
+    };
+  } else if (mealType === 'Dinner') {
+    return {
+      isWithin: dinnerNow,
+      isPast: isWindowPast(nowMin, Ds, De),
+      currentMeal,
+      liveStatus
+    };
   }
 
-  // Return general status if no specific mealType was requested
+  // Generic summary
   return {
-    isWithin, // Is any meal active right now?
-    isPast, // This is not well-defined without a mealType, defaults to false
+    isWithin: lunchNow || dinnerNow,
+    isPast: false,
     currentMeal,
     liveStatus
   };
 };
+
 
 /**
  * Get start and end of day

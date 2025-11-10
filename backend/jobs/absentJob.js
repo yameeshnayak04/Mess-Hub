@@ -5,6 +5,7 @@ const Membership = require('../models/Membership');
 const Mess = require('../models/Mess');
 const Leave = require('../models/Leave');
 const { startOfDay, endOfDay, checkMealTiming } = require('../utils/billCalculation');
+const TZ_OFFSET_MINUTES = parseInt(process.env.TZ_OFFSET_MINUTES || '330', 10);
 
 async function markAbsentForMeal(mealType) {
   const today = new Date();
@@ -13,8 +14,8 @@ async function markAbsentForMeal(mealType) {
 
   const messes = await Mess.find({});
   for (const mess of messes) {
-    const timing = checkMealTiming(mess.timings, mealType);
-    if (!timing.isPast) continue;
+    const timing = checkMealTiming(mess.timings, mealType, TZ_OFFSET_MINUTES);
+    if (!timing.isPast) return;
 
     const memberships = await Membership.find({ mess: mess._id, status: 'Active' });
     for (const m of memberships) {
