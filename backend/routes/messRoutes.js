@@ -19,23 +19,46 @@ const { createMessSchema, updateMessSchema } = require('../middleware/schemas');
 
 const router = express.Router();
 
-router.post(
-  '/',
-  protect,
-  authorize('Manager'),
-  uploadMessImage, // was uploadMessImage.single('messImage')
-  validate(createMessSchema),
-  createMess
-);
+// routes/messRoutes.js
+const normalizeCuisine = (raw) => {
+  if (typeof raw !== 'string') return raw;
+  const v = raw.trim().toLowerCase().replace(/\s+/g, '');
+  if (v == 'veg' || v == 'vegetarian') return 'Veg';
+  if (v == 'nonveg' || v == 'non-veg' || v == 'nonvegetarian' || v == 'non-vegetarian') return 'Non-Veg';
+  if (v == 'both' || v == 'mixed') return 'Both';
+  return raw; // Joi/Mongoose will flag invalid values
+};
 
-router.put(
-  '/my-mess',
-  protect,
-  authorize('Manager'),
-  uploadMessImage, // was uploadMessImage.single('messImage')
-  validate(updateMessSchema),
-  updateMyMess
-);
+const parseMessPayload = (req, res, next) => {
+  try {
+    // Only parse actual JSON fields
+    for (const key of ['location', 'timings', 'rules', 'plans']) {
+      const val = req.body[key];
+      if (typeof val === 'string' && val.trim().length) {
+        try { req.body[key] = JSON.parse(val); }
+        catch { return res.status(400).json({ success: false, message: `Invalid JSON format for field: ${key}` }); }
+      }
+    }
+    // Booleans that arrive as strings
+    if (typeof req.body.tiffinService === 'string') {
+      req.body.tiffinService = req.body.tiffinService.toLowerCase() === 'true';
+    }
+    // Normalize cuisine (do NOT JSON.parse)
+    if (typeof req.body.cuisine === 'string') {
+      req.body.cuisine = normalizeCuisine(req.body.cuisine);
+    }
+    // Ensure GeoJSON shape if client sent only coordinates array
+    if (req.body.location && !req.body.location.type && Array.isArray(req.body.location.coordinates)) {
+      req.body.location = { type: 'Point', coordinates: req.body.location.coordinates.map(Number) };
+    }
+    next();
+  } catch (err) { next(err); }
+};
+
+// Use it before validation and controller
+router.post('/', protect, authorize('Manager'), uploadMessImage, parseMessPayload, validate(createMessSchema), createMess);
+router.put('/my-mess', protect, authorize('Manager'), uploadMessImage, parseMessPayload, validate(updateMessSchema), updateMyMess);
+
 
 router.get('/my-mess', protect, authorize('Manager'), getMyMess);
 
