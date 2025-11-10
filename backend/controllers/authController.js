@@ -3,6 +3,24 @@ const jwt = require('jsonwebtoken');
 const Mess = require('../models/Mess');
 const bcrypt = require('bcryptjs'); // <-- 1. IMPORT BCRYPT
 
+// authController.js (add near top)
+const withTimeout = (p, ms = 10000) =>
+  Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('Timed out')), ms))]);
+
+// exports.register = async (req, res) => { ... }  Replace the DB calls:
+const existingUser = await withTimeout(
+  User.findOne({ phone }).lean().exec(),
+  10000
+);
+if (existingUser) {
+  return res.status(400).json({
+    success: false,
+    message: 'User with this phone number already exists',
+  });
+}
+
+const user = await withTimeout(User.create(userData), 10000);
+
 // --- 2. ADD A "BULLETPROOF" ERROR HELPER ---
 // This ensures we ALWAYS send a JSON response and never crash.
 const sendError = (res, e, message, statusCode = 500) => {

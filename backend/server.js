@@ -1,91 +1,97 @@
+// server.js
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const path = require('path');
 const compression = require('compression');
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 
-// Load env
 dotenv.config();
 
-// Connect DB
-connectDB();
-
-/*
-// --- JOBS REMOVED ---
-// These are now handled by GitHub Actions
-// require('./jobs/absentJob'); 
-// require('./jobs/billingJob'); 
-*/
-
 const app = express();
-app.set('trust proxy', 1); 
+app.set('trust proxy', 1);
 
-// Security headers
-app.use(helmet()); 
-
-// CORS (This is already perfect)
+// Core middleware
+app.use(helmet());
 app.use(cors());
-
-// Parsers
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
-
-// Compression and logging
 app.use(compression());
-// Only use morgan in development to avoid logging noise in production
-if (process.env.NODE_ENV === 'development') {
+if ((process.env.NODE_ENV || '').toLowerCase() === 'development') {
   app.use(morgan('dev'));
 }
 
-/*
-// --- STATIC PATH REMOVED ---
-// This is not needed because we are using Cloudinary for images.
-// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-*/
-
-// Routes
-app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/users', require('./routes/userRoutes'));
-app.use('/api/mess', require('./routes/messRoutes'));
-app.use('/api/membership', require('./routes/membershipRoutes'));
-app.use('/api/attendance', require('./routes/attendanceRoutes'));
-app.use('/api/leave', require('./routes/leaveRoutes'));
-app.use('/api/billing', require('./routes/billingRoutes'));
-app.use('/api/menu', require('./routes/menuRoutes'));
-app.use('/api/reviews', require('./routes/reviewRoutes'));
-
-// --- THIS IS THE NEW, IMPORTANT LINE ---
-app.use('/api/jobs', require('./routes/jobRoutes')); // <-- ADD THIS
-
-// Health check
+// Health first (so Render can pass health checks even if DB is cold)
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
 });
+
+// DB readiness guard (fail fast instead of hanging)
+const requireDb = (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res
+      .status(503)
+      .json({ success: false, message: 'Database is not connected. Please retry.' });
+  }
+  next();
+};
+
+// Safe require so missing routes don’t crash startup
+const safeRequire = (p) => {
+  try { return require(p); } catch (e) {
+    console.warn(`[routes] Skipping ${p}: ${e.message}`);
+    return null;
+  }
+};
+const mount = (path, modPath, needsDb = true) => {
+  const r = safeRequire(modPath);
+  if (r) needsDb ? app.use(path, requireDb, r) : app.use(path, r);
+};
+
+// Mount only routes that exist in deploy
+mount('/api/auth', './routes/authRoutes');        // DB-backed
+mount('/api/mess', './routes/messRoutes');        // DB-backed
+mount('/api/jobs', './routes/jobRoutes', false);  // fire-and-forget endpoints
+
+// (Add others only if they exist in your Render build)
+// mount('/api/users', './routes/userRoutes');
+// mount('/api/membership', './routes/membershipRoutes');
+// mount('/api/attendance', './routes/attendanceRoutes');
+// mount('/api/leave', './routes/leaveRoutes');
+// mount('/api/billing', './routes/billingRoutes');
+// mount('/api/menu', './routes/menuRoutes');
+// mount('/api/reviews', './routes/reviewRoutes');
 
 // Central error handler
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && 'body' in err) {
     return res.status(400).json({ success: false, message: 'Invalid JSON payload' });
   }
-  console.error(err.stack); 
-  
+  console.error(err.stack);
   res.status(err.statusCode || 500).json({
     success: false,
     message: err.message || 'Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    ...((process.env.NODE_ENV || '') === 'development' && { stack: err.stack }),
   });
 });
 
 // 404 fallback
-app.use((req, res) => {
-  res.status(404).json({ success: false, message: 'Route not found' });
-});
+app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
 
-// This port logic is perfect for both local and production
+// Start server first so /health is live during cold starts
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  console.log(`Server listening on port ${PORT}`);
 });
+
+// Connect DB in background; do not crash the process on first failure
+(async () => {
+  try {
+    await connectDB();
+    console.log('MongoDB connected');
+  } catch (e) {
+    console.error('Initial DB connect failed:', e.message);
+  }
+})();
