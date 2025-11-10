@@ -1,51 +1,58 @@
+// upload.js (replace entire file)
+
+// Dependencies
 const multer = require('multer');
-const path = require('path');
+const { v2: cloudinary } = require('cloudinary');
 
-// Storage configuration for mess images
-const messImageStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/mess-images/');
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'mess-' + uniqueSuffix + path.extname(file.originalname));
-  }
+// Configure Cloudinary via env (Render -> Environment)
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Storage configuration for payment proofs
-const paymentProofStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/payment-proofs/');
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'payment-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// Use in-memory storage; we’ll stream to Cloudinary
+const memoryStorage = multer.memoryStorage();
 
-// File filter for images
+// Basic image filter
 const imageFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|gif/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedTypes.test(file.mimetype);
-
-  if (mimetype && extname) {
-    return cb(null, true);
-  } else {
-    cb(new Error('Only image files are allowed (jpeg, jpg, png, gif)'));
-  }
+  const allowed = /jpeg|jpg|png|gif/;
+  const extOK = allowed.test((file.originalname || '').toLowerCase());
+  const mimeOK = allowed.test(file.mimetype || '');
+  if (extOK && mimeOK) return cb(null, true);
+  cb(new Error('Only image files are allowed (jpeg, jpg, png, gif)'));
 };
 
-// Upload middleware for mess images
-exports.uploadMessImage = multer({
-  storage: messImageStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-  fileFilter: imageFilter
-});
+// Helper to stream to Cloudinary
+const uploadToCloudinary = (buffer, folder) =>
+  new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder, resource_type: 'image' },
+      (err, result) => (err ? reject(err) : resolve(result))
+    );
+    stream.end(buffer);
+  });
 
-// Upload middleware for payment proofs
-exports.uploadPaymentProof = multer({
-  storage: paymentProofStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-  fileFilter: imageFilter
-});
+// Middleware factory: multer single + Cloudinary
+const makeUploader = (folder) => [
+  multer({
+    storage: memoryStorage,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: imageFilter
+  }).single('file'), // expect field name 'file'
+  async (req, res, next) => {
+    try {
+      if (!req.file) return next();
+      const result = await uploadToCloudinary(req.file.buffer, folder);
+      // expose Cloudinary URL(s) to controllers
+      req.file.cloudinaryUrl = result.secure_url;
+      req.file.publicId = result.public_id;
+      next();
+    } catch (e) {
+      next(e);
+    }
+  }
+];
+
+exports.uploadMessImage = makeUploader('mess-images');
+exports.uploadPaymentProof = makeUploader('payment-proofs');

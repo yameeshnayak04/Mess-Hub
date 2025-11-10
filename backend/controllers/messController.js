@@ -4,53 +4,99 @@ const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
 const { checkMealTiming, getStartAndEndOfDay } = require('../utils/billCalculation');
 
-// @desc    Create new mess
-// @route   POST /api/mess
-// @access  Private (Manager only)
+// @desc Create new mess
+// @route POST /api/mess
+// @access Private (Manager only)
 exports.createMess = async (req, res, next) => {
   try {
     let messData = { ...req.body };
 
-    // --- Manually Parse Nested Fields (Crucial Now) ---
+    // manually parse nested fields if they arrive as JSON strings
     const fieldsToParse = ['location', 'timings', 'rules', 'plans'];
     for (const key of fieldsToParse) {
       if (messData[key] && typeof messData[key] === 'string') {
-        try {
-          messData[key] = JSON.parse(messData[key]);
-        } catch (e) {
-          console.error(`!!! Failed to JSON parse field '${key}':`, e);
-           return res.status(400).json({ success: false, message: `Invalid JSON format for field: ${key}` });
+        try { messData[key] = JSON.parse(messData[key]); }
+        catch (e) {
+          return res.status(400).json({ success: false, message: `Invalid JSON format for field: ${key}` });
         }
       }
     }
+    if (messData.tiffinService === 'true') messData.tiffinService = true;
+    else if (messData.tiffinService === 'false') messData.tiffinService = false;
 
-    if (messData.tiffinService === 'true') {
-      messData.tiffinService = true;
-    } else if (messData.tiffinService === 'false') {
-      messData.tiffinService = false;
-    }
-
-    // --- Add Owner and Image ---
     messData.owner = req.user.id;
-    if (req.file) {
-      messData.messImage = `/uploads/mess-images/${req.file.filename}`;
+
+    // Use Cloudinary URL if a file was uploaded
+    if (req.file && req.file.cloudinaryUrl) {
+      messData.messImage = req.file.cloudinaryUrl;
     }
 
     const mess = await Mess.create(messData);
-
-    res.status(201).json({
-      success: true,
-      data: mess
-    });
+    return res.status(201).json({ success: true, data: mess });
   } catch (error) {
-    console.error("Error during Mess.create or data processing:", error);
     if (error.name === 'ValidationError') {
       return res.status(400).json({ success: false, message: `Validation failed: ${error.message}`, errors: error.errors });
     }
     if (error.code === 11000) {
-       return res.status(400).json({ success: false, message: 'A mess with this name and address already exists' });
+      return res.status(400).json({ success: false, message: 'A mess with this name and address already exists' });
     }
-    next(error);
+    return next(error);
+  }
+};
+
+// @desc Update manager's mess
+// @route PUT /api/mess/my-mess
+// @access Private (Manager only)
+exports.updateMyMess = async (req, res, next) => {
+  try {
+    const mess = await Mess.findOne({ owner: req.user.id });
+    if (!mess) return res.status(404).json({ success: false, message: 'No mess found for this manager' });
+
+    const allowedUpdates = [
+      'messName', 'address', 'city', 'contactPhone', 'serviceType',
+      'cuisine', 'maxCapacity', 'timings', 'plans', 'dailyThaliRate', 'rules',
+      'tiffinService', 'basicThaliDetails'
+    ];
+    const updates = {};
+    for (const field of allowedUpdates) {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) updates[field] = req.body[field];
+    }
+    if (req.body.tiffinService === 'true') updates.tiffinService = true;
+    else if (req.body.tiffinService === 'false') updates.tiffinService = false;
+
+    // Use Cloudinary URL if a file was uploaded
+    if (req.file && req.file.cloudinaryUrl) {
+      updates.messImage = req.file.cloudinaryUrl;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'No valid fields provided to update' });
+    }
+
+    // Schedule changes for next month as in your original logic
+    const now = new Date();
+    const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+    const existing = mess.scheduledUpdates || {};
+    mess.scheduledUpdates = { ...existing, ...updates };
+    if (!mess.scheduledEffectiveFrom || mess.scheduledEffectiveFrom < nextMonthStart) {
+      mess.scheduledEffectiveFrom = nextMonthStart;
+    }
+    await mess.save();
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        current: mess,
+        scheduledUpdates: mess.scheduledUpdates,
+        scheduledEffectiveFrom: mess.scheduledEffectiveFrom,
+      },
+      message: 'Changes scheduled and will take effect from the next billing cycle (next month).'
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'A mess with this name and address already exists' });
+    }
+    return next(error);
   }
 };
 
@@ -80,84 +126,6 @@ exports.getMyMess = async (req, res, next) => {
   }
 };
 
-
-// @desc    Update manager's mess
-// @route   PUT /api/mess/my-mess
-// @access  Private (Manager only)
-exports.updateMyMess = async (req, res, next) => {
-  try {
-    const mess = await Mess.findOne({ owner: req.user.id });
-    if (!mess) {
-      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
-    }
-
-    // Collect only allowed fields for scheduling
-    const allowedUpdates = [
-      'messName', 'address', 'city', 'contactPhone', 'serviceType',
-      'cuisine', 'maxCapacity', 'timings', 'plans', 'dailyThaliRate', 'rules',
-      'tiffinService', 'basicThaliDetails'
-    ];
-
-    const updates = {};
-    for (const field of allowedUpdates) {
-      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
-        updates[field] = req.body[field];
-      }
-    }
-    
-    if (req.body.tiffinService === 'true') {
-      updates.tiffinService = true;
-    } else if (req.body.tiffinService === 'false') {
-      updates.tiffinService = false;
-    }
-
-    if (req.file) {
-      updates.messImage = `/uploads/mess-images/${req.file.filename}`;
-    }
-
-    // Nothing to schedule
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ success: false, message: 'No valid fields provided to update' });
-    }
-
-    // Compute first day of next month at 00:00
-    const now = new Date();
-    const nextMonthStart = new Date(Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth() + 1,
-      1, 0, 0, 0, 0
-    ));
-
-    // Merge with any existing scheduled updates
-    const existing = mess.scheduledUpdates || {};
-    mess.scheduledUpdates = { ...existing, ...updates };
-
-    // If there is no schedule or existing date is before nextMonthStart, set to next month
-    if (!mess.scheduledEffectiveFrom || mess.scheduledEffectiveFrom < nextMonthStart) {
-      mess.scheduledEffectiveFrom = nextMonthStart;
-    }
-
-    await mess.save();
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        current: mess,
-        scheduledUpdates: mess.scheduledUpdates,
-        scheduledEffectiveFrom: mess.scheduledEffectiveFrom,
-      },
-      message: 'Changes scheduled and will take effect from the next billing cycle (next month).'
-    });
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'A mess with this name and address already exists'
-      });
-    }
-    next(error);
-  }
-};
 
 
 // @desc    Discover messes (sorted by distance)

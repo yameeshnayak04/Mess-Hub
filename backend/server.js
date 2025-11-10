@@ -1,3 +1,4 @@
+// server.js (replace entire file)
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
@@ -14,45 +15,45 @@ dotenv.config();
 connectDB();
 
 // --- Load Jobs ---
-require('./jobs/absentJob'); // Marks users absent
-require('./jobs/billingJob'); // Generates monthly bills
+require('./jobs/absentJob'); // schedules every 5 min internally
+const { scheduleBillingJob } = require('./jobs/billingJob');
+scheduleBillingJob(); // ensure monthly billing is scheduled
 
 const app = express();
 
-// Trust proxy (useful behind reverse proxies/load balancers)
+// Trust proxy (Render)
 app.set('trust proxy', 1);
 
 // Security headers
-app.use(
-  helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow serving images from /uploads
-  })
-);
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 // CORS
 app.use(cors());
 
 // Parsers
-app.use(express.json({ limit: '1mb' })); // keep modest default to protect API
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Compression and logging
 app.use(compression());
 app.use(morgan('dev'));
 
-// Static files for uploads
+// Static files (optional legacy local uploads)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
-app.use('/api/auth', require('./routes/authRoutes'));               // register/login/logout
-app.use('/api/users', require('./routes/userRoutes'));              // get/update my profile
-app.use('/api/mess', require('./routes/messRoutes'));               // discover, mess details, manager CRUD, dashboard
-app.use('/api/membership', require('./routes/membershipRoutes'));   // join/leave/approve/reject/details
-app.use('/api/attendance', require('./routes/attendanceRoutes'));   // skip meal, kiosk mark, calendars
-app.use('/api/leave', require('./routes/leaveRoutes'));             // apply + history (no status workflow)
-app.use('/api/billing', require('./routes/billingRoutes'));         // generate bills, approvals, customer bills
-app.use('/api/menu', require('./routes/menuRoutes'));               // set/get menu
-app.use('/api/reviews', require('./routes/reviewRoutes'));          // get/add reviews
+app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/mess', require('./routes/messRoutes'));
+app.use('/api/membership', require('./routes/membershipRoutes'));
+app.use('/api/attendance', require('./routes/attendanceRoutes'));
+app.use('/api/leave', require('./routes/leaveRoutes'));
+app.use('/api/billing', require('./routes/billingRoutes'));
+app.use('/api/menu', require('./routes/menuRoutes'));
+app.use('/api/reviews', require('./routes/reviewRoutes'));
+
+// Internal cron trigger routes
+app.use('/api/cron', require('./routes/cronRoutes'));
 
 // Health check
 app.get('/health', (req, res) => {
@@ -61,7 +62,6 @@ app.get('/health', (req, res) => {
 
 // Central error handler
 app.use((err, req, res, next) => {
-  // Malformed JSON guard
   if (err instanceof SyntaxError && 'body' in err) {
     return res.status(400).json({ success: false, message: 'Invalid JSON payload' });
   }
@@ -79,6 +79,4 @@ app.use((req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

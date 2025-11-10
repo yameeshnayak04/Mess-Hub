@@ -1,0 +1,27 @@
+# .github/workflows/cron.yml
+name: Cron Triggers
+
+on:
+  schedule:
+    # Every 15 minutes to cover end-of-meal windows (adjust lower if desired)
+    - cron: "*/15 * * * *"
+    # Midnight IST (00:00 on 1st) = 18:30 UTC on the last day; also run 18:30 UTC on 1st as a safety
+    - cron: "30 18 1 * *"
+  workflow_dispatch:
+
+jobs:
+  run-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger absent job
+        run: |
+          curl -sS -X POST "$CRON_BASE_URL/api/cron/absent/run" \
+            -H "x-cron-secret: $CRON_SECRET"
+      - name: Trigger monthly billing (idempotent)
+        if: ${{ github.event.schedule == '30 18 1 * *' }}
+        run: |
+          curl -sS -X POST "$CRON_BASE_URL/api/cron/billing/run" \
+            -H "x-cron-secret: $CRON_SECRET"
+    env:
+      CRON_BASE_URL: ${{ secrets.CRON_BASE_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
