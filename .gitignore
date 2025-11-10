@@ -67,8 +67,7 @@ yarn-debug.log*
 yarn-error.log*
 package-lock.json
 .env
-uploads/mess-images/*
-uploads/payment-proofs/*
+uploads/
 !uploads/mess-images/.gitkeep
 !uploads/payment-proofs/.gitkeep
 *.log

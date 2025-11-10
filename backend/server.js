@@ -13,9 +13,13 @@ dotenv.config();
 // Connect DB
 connectDB();
 
-// --- Load Jobs ---
+/*
+// --- CRITICAL: Load Jobs ---
+// These MUST be moved to a "Cron Job" service on Render.
+// They will not run reliably here on a free Web Service.
 require('./jobs/absentJob'); // Marks users absent
 require('./jobs/billingJob'); // Generates monthly bills
+*/
 
 const app = express();
 
@@ -25,11 +29,12 @@ app.set('trust proxy', 1);
 // Security headers
 app.use(
   helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow serving images from /uploads
+    // This is no longer needed after removing the local '/uploads' static path
+    // crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );
 
-// CORS
+// CORS - This is perfect. Allows all origins (localhost + production)
 app.use(cors());
 
 // Parsers
@@ -38,10 +43,17 @@ app.use(express.urlencoded({ extended: true }));
 
 // Compression and logging
 app.use(compression());
-app.use(morgan('dev'));
+// Only use morgan in development to avoid logging noise in production
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+}
 
-// Static files for uploads
+/*
+// --- CRITICAL: Static files for uploads ---
+// This line will NOT work on Render's ephemeral file system.
+// It must be removed. All images should be served from Cloudinary.
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+*/
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));               // register/login/logout
@@ -65,10 +77,12 @@ app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && 'body' in err) {
     return res.status(400).json({ success: false, message: 'Invalid JSON payload' });
   }
-  console.error(err.stack);
+  console.error(err.stack); // Always log the error
+  
   res.status(err.statusCode || 500).json({
     success: false,
     message: err.message || 'Server Error',
+    // Only show stack trace in development
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 });
@@ -78,7 +92,8 @@ app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
 
+// This port logic is perfect for both local and production
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
 });
