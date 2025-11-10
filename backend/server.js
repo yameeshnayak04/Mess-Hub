@@ -6,6 +6,9 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const path = require('path');
+const { scheduleBillingJob } = require('./jobs/billingJob.js');
+const { scheduleAbsentJob } = require('./jobs/absentJob.js');
+
 
 // Load env before using any env vars
 dotenv.config();
@@ -13,9 +16,6 @@ dotenv.config();
 // DB connection
 const connectDB = require('./config/db.js');
 
-// Jobs
-const { scheduleBillingJob } = require('./jobs/billingJob.js');
-require('./jobs/absentJob'); // schedules internal cron when the app is running
 
 // Connect DB
 connectDB();
@@ -71,8 +71,8 @@ app.use((err, req, res, next) => {
 // 404 fallback (last)
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
 
-// Start cron scheduler(s) after app is fully configured
-scheduleBillingJob();
+if (typeof scheduleBillingJob === 'function') scheduleBillingJob();
+if (typeof scheduleAbsentJob === 'function') scheduleAbsentJob();
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

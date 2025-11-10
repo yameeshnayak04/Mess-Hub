@@ -23,20 +23,21 @@ router.post(
   '/',
   protect,
   authorize('Manager'),
-  uploadMessImage.single('messImage'),          // <-- use uploadMessImage
+  uploadMessImage, // was uploadMessImage.single('messImage')
+  validate(createMessSchema),
   createMess
 );
-
-router.get('/my-mess', protect, authorize('Manager'), getMyMess);
 
 router.put(
   '/my-mess',
   protect,
   authorize('Manager'),
-  uploadMessImage.single('messImage'),          // <-- use uploadMessImage
+  uploadMessImage, // was uploadMessImage.single('messImage')
   validate(updateMessSchema),
   updateMyMess
 );
+
+router.get('/my-mess', protect, authorize('Manager'), getMyMess);
 
 router.get('/my-mess/dashboard', protect, authorize('Manager'), getDashboardStats);
 router.get('/dashboard/members-eating', protect, authorize('Manager'), getMembersEating);

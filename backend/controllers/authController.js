@@ -1,38 +1,8 @@
+// backend/controllers/authController.js
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const Mess = require('../models/Mess');
-const bcrypt = require('bcryptjs'); // <-- 1. IMPORT BCRYPT
 
-// authController.js (add near top)
-const withTimeout = (p, ms = 10000) =>
-  Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('Timed out')), ms))]);
-
-// exports.register = async (req, res) => { ... }  Replace the DB calls:
-const existingUser = await withTimeout(
-  User.findOne({ phone }).lean().exec(),
-  10000
-);
-if (existingUser) {
-  return res.status(400).json({
-    success: false,
-    message: 'User with this phone number already exists',
-  });
-}
-
-const user = await withTimeout(User.create(userData), 10000);
-
-// --- 2. ADD A "BULLETPROOF" ERROR HELPER ---
-// This ensures we ALWAYS send a JSON response and never crash.
-const sendError = (res, e, message, statusCode = 500) => {
-  console.error(`[authController Error] ${message}:`, e.message);
-  // Send a generic error to the user
-  res.status(statusCode).json({
-    success: false,
-    message: 'An error occurred. Please try again.',
-  });
-};
-
-// --- (Your helper functions are fine) ---
 const buildUserPayload = async (user) => {
   const payload = {
     _id: user._id,
@@ -40,6 +10,7 @@ const buildUserPayload = async (user) => {
     phone: user.phone,
     role: user.role,
   };
+
   if (
     user.location &&
     user.location.type &&
@@ -51,26 +22,25 @@ const buildUserPayload = async (user) => {
 
   if (user.role === 'Manager') {
     const mess = await Mess.exists({ owner: user._id });
-    payload.hasMess = !!mess; // Sets true if mess exists, false otherwise
+    payload.hasMess = !!mess;
   }
+
   return payload;
 };
 
-// Generate JWT Token
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+const generateToken = (id) =>
+  jwt.sign({ id }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '30d',
   });
-};
 
-// @desc    Register a new user
-// @route   POST /api/auth/register
-// @access  Public
+// @desc Register a new user
+// @route POST /api/auth/register
+// @access Public
 exports.register = async (req, res) => {
   try {
     const { name, phone, password, role, pin, location } = req.body;
 
-    // Validation
+    // Basic validation
     if (!name || !phone || !password || !role) {
       return res.status(400).json({
         success: false,
@@ -78,7 +48,7 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Check if user exists
+    // Unique phone
     const existingUser = await User.findOne({ phone });
     if (existingUser) {
       return res.status(400).json({
@@ -87,7 +57,7 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Role-specific validation
+    // Role-specific requirements
     if (role === 'Customer') {
       if (!pin) {
         return res.status(400).json({
@@ -103,84 +73,70 @@ exports.register = async (req, res) => {
       }
     }
 
-    // Create user data
-    const userData = {
-      name,
-      phone,
-      password,
-      role,
-    };
-
-    // Add optional fields based on role
+    // Assemble create payload
+    const userData = { name, phone, password, role };
     if (role === 'Customer') {
       userData.pin = pin;
       userData.location = location;
     }
 
-    // Create user
-    // (This assumes your User model's 'pre-save' hook hashes the password)
+    // Create
     const user = await User.create(userData);
 
-    // Generate token
+    // Token + payload
     const token = generateToken(user._id);
-    const userPayload = await buildUserPayload(user); // <-- Use payload builder
+    const payload = await buildUserPayload(user);
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: 'User registered successfully',
       token,
-      data: userPayload, // <-- Send payload
+      data: payload,
     });
   } catch (error) {
-    // --- 3. USE THE BULLETPROOF HELPER ---
-    sendError(res, error, 'Server error during registration');
+    console.error('Register error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error during registration',
+      error: error.message,
+    });
   }
 };
 
-// @desc    Login user with phone and password
-// @route   POST /api/auth/login
-// @access  Public
+// @desc Login user with phone and password
+// @route POST /api/auth/login
+// @access Public
 exports.login = async (req, res, next) => {
   try {
     const { phone, password } = req.body;
+
     const user = await User.findOne({ phone }).select('+password');
-
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials (user not found)' });
+      return res
+        .status(401)
+        .json({ success: false, message: 'Invalid credentials (user not found)' });
     }
-    
-    // --- 4. THIS IS THE CRITICAL FIX ---
-    // We use bcrypt.compare directly on the user.password field.
-    // This will safely handle plain-text passwords (like 'Yameesh@123')
-    // from your Atlas database without crashing the server.
-    const isMatch = await bcrypt.compare(password, user.password);
 
+    const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      // This is now safe. It won't crash, it will just be 'false'.
-      return res.status(401).json({ success: false, message: 'Invalid credentials (password mismatch)' });
+      return res
+        .status(401)
+        .json({ success: false, message: 'Invalid credentials (password mismatch)' });
     }
 
     const token = generateToken(user._id);
-    const userPayload = await buildUserPayload(user);
+    const payload = await buildUserPayload(user);
 
-    return res.json({
-      success: true,
-      token,
-      data: userPayload
-    });
-
+    return res.json({ success: true, token, data: payload });
   } catch (error) {
-    // --- 5. USE THE BULLETPROOF HELPER ---
-    // This 'catch' will now only catch server errors,
-    // not bcrypt crashes. It sends a JSON response instead of hanging.
-    sendError(res, error, 'Server error during login');
+    console.error('Login error:', error);
+    return next(error);
   }
 };
 
-
-// @desc    Kiosk login with phone and PIN (for customers only)
-// @route   POST /api/auth/kiosk-login
-// @access  Public
+// @desc Kiosk login with phone and PIN (customers only)
+// @route POST /api/auth/kiosk-login
+// @access Public
 exports.kioskLogin = async (req, res) => {
   try {
     const { phone, pin } = req.body;
@@ -192,17 +148,12 @@ exports.kioskLogin = async (req, res) => {
       });
     }
 
-    // Find user and include pin
+    // Include PIN field
     const user = await User.findOne({ phone }).select('+pin');
-    
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials',
-      });
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // Only customers can use PIN login
     if (user.role !== 'Customer') {
       return res.status(403).json({
         success: false,
@@ -210,27 +161,31 @@ exports.kioskLogin = async (req, res) => {
       });
     }
 
-    // Verify PIN
     if (user.pin !== pin) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials',
-      });
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // Generate token
     const token = generateToken(user._id);
-    const userPayload = await buildUserPayload(user); // <-- Use payload builder
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Login successful',
       token,
-      data: userPayload, // <-- Send payload
+      data: {
+        _id: user._id,
+        name: user.name,
+        phone: user.phone,
+        role: user.role,
+        location: user.location,
+      },
     });
   } catch (error) {
-    // --- 6. USE THE BULLETPROOF HELPER ---
-    sendError(res, error, 'Server error during kiosk login');
+    console.error('Kiosk login error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error during login',
+      error: error.message,
+    });
   }
 };
 

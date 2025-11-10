@@ -1,17 +1,15 @@
-// upload.js (replace entire file)
-
-// Dependencies
+// backend/middleware/upload.js
 const multer = require('multer');
 const { v2: cloudinary } = require('cloudinary');
 
-// Configure Cloudinary via env (Render -> Environment)
+// Configure Cloudinary via env
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key:    process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Use in-memory storage; we’ll stream to Cloudinary
+// In-memory storage; we'll stream to Cloudinary
 const memoryStorage = multer.memoryStorage();
 
 // Basic image filter
@@ -33,18 +31,17 @@ const uploadToCloudinary = (buffer, folder) =>
     stream.end(buffer);
   });
 
-// Middleware factory: multer single + Cloudinary
-const makeUploader = (folder) => [
+// Factory creates [multer.single(field), cloudinary step]
+const makeUploader = (folder, fieldName = 'file') => [
   multer({
     storage: memoryStorage,
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: imageFilter
-  }).single('file'), // expect field name 'file'
+  }).single(fieldName),
   async (req, res, next) => {
     try {
       if (!req.file) return next();
       const result = await uploadToCloudinary(req.file.buffer, folder);
-      // expose Cloudinary URL(s) to controllers
       req.file.cloudinaryUrl = result.secure_url;
       req.file.publicId = result.public_id;
       next();
@@ -54,5 +51,6 @@ const makeUploader = (folder) => [
   }
 ];
 
-exports.uploadMessImage = makeUploader('mess-images');
-exports.uploadPaymentProof = makeUploader('payment-proofs');
+// Export ready-to-use middlewares
+exports.uploadMessImage = makeUploader('mess-images', 'messImage');
+exports.uploadPaymentProof = makeUploader('payment-proofs', 'paymentProof');

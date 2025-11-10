@@ -11,7 +11,7 @@ router.get('/my-bills/:membershipId', protect, authorize('Customer'), billingCon
 router.post('/submit-proof/:billId',
   protect,
   authorize('Customer'),
-  uploadPaymentProof.single('proof'),
+  uploadPaymentProof,
   billingController.submitPaymentProof
 );
 
