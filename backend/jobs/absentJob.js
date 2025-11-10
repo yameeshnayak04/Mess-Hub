@@ -3,24 +3,48 @@ const Attendance = require('../models/Attendance');
 const Membership = require('../models/Membership');
 const Mess = require('../models/Mess');
 const Leave = require('../models/Leave');
-// FIX: Import from consolidated utility
 const { startOfDay, endOfDay, checkMealTiming } = require('../utils/billCalculation');
+// The main server.js process already handles the DB connection.
 
+/**
+ * This is the main function triggered by the API route.
+ * It does NOT schedule itself.
+ */
+async function runAbsentJob() {
+  console.log('--- JOB: Running Absent Job (Triggered by API) ---');
+
+  try {
+    // Run for both meals. The function will internally check if it's time.
+    await markAbsentForMeal('Lunch');
+    await markAbsentForMeal('Dinner');
+    console.log('--- JOB: Absent Job Completed ---');
+  } catch (err) {
+    console.error('--- JOB ERROR (Absent):', err);
+  }
+}
+
+/**
+ * Your existing logic to mark a single meal type as absent.
+ * This logic is perfectly fine.
+ */
 async function markAbsentForMeal(mealType) {
   const today = new Date();
   const dayStart = startOfDay(today);
   const dayEnd = endOfDay(today);
 
-  // For each mess where meal time has passed
   const messes = await Mess.find({});
   for (const mess of messes) {
+    // Check if the meal window for this mess is over
     const timing = checkMealTiming(mess.timings, mealType);
-    if (!timing.isPast) continue; // Only run if mealtime is over
+    if (!timing.isPast) {
+      // console.log(`Skipping ${mealType} for ${mess.messName}, meal not over.`);
+      continue; // Only run if mealtime is over
+    }
 
-    // Active memberships in this mess
     const memberships = await Membership.find({ mess: mess._id, status: 'Active' });
     for (const m of memberships) {
       const plan = String(m.planName || '').toLowerCase();
+      
       // Skip if plan doesn't cover this meal
       if (mealType === 'Lunch' && !(plan.includes('lunch') || plan.includes('both'))) continue;
       if (mealType === 'Dinner' && !(plan.includes('dinner') || plan.includes('both'))) continue;
@@ -47,11 +71,8 @@ async function markAbsentForMeal(mealType) {
           rateSnapshot: m.billingRate,
           rebatePerThaliSnapshot: mess.rules.rebatePerThali,
         });
-        console.log('--- Absent Job Completed ---');
       } catch (e) { 
-        if (e.code === 11000) {
-          // Rare race condition, ignore duplicate key error
-        } else {
+        if (e.code !== 11000) { // Ignore duplicate key errors (rare race condition)
           console.error("Error creating Absent record:", e);
         }
       }
@@ -59,13 +80,7 @@ async function markAbsentForMeal(mealType) {
   }
 }
 
-// run every 5 minutes to check
-cron.schedule('*/5 * * * *', async () => {
-  // console.log('Checking for meals to mark absent...');
-  await markAbsentForMeal('Lunch');
-  await markAbsentForMeal('Dinner');
-});
+// --- ALL 'cron.schedule' CODE IS REMOVED ---
 
-console.log('Absentee Job scheduled to run every 5 minutes.');
-
-module.exports = { markAbsentForMeal };
+// Export the main function so 'jobRoutes.js' can import it
+module.exports = { runAbsentJob };

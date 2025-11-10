@@ -14,31 +14,23 @@ dotenv.config();
 connectDB();
 
 /*
-// --- CRITICAL: Load Jobs ---
-// These MUST be moved to a "Cron Job" service on Render.
-// They will not run reliably here on a free Web Service.
-require('./jobs/absentJob'); // Marks users absent
-require('./jobs/billingJob'); // Generates monthly bills
+// --- JOBS REMOVED ---
+// These are now handled by GitHub Actions
+// require('./jobs/absentJob'); 
+// require('./jobs/billingJob'); 
 */
 
 const app = express();
-
-// Trust proxy (useful behind reverse proxies/load balancers)
-app.set('trust proxy', 1);
+app.set('trust proxy', 1); 
 
 // Security headers
-app.use(
-  helmet({
-    // This is no longer needed after removing the local '/uploads' static path
-    // crossOriginResourcePolicy: { policy: 'cross-origin' },
-  })
-);
+app.use(helmet()); 
 
-// CORS - This is perfect. Allows all origins (localhost + production)
+// CORS (This is already perfect)
 app.use(cors());
 
 // Parsers
-app.use(express.json({ limit: '1mb' })); // keep modest default to protect API
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Compression and logging
@@ -49,22 +41,24 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 /*
-// --- CRITICAL: Static files for uploads ---
-// This line will NOT work on Render's ephemeral file system.
-// It must be removed. All images should be served from Cloudinary.
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// --- STATIC PATH REMOVED ---
+// This is not needed because we are using Cloudinary for images.
+// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 */
 
 // Routes
-app.use('/api/auth', require('./routes/authRoutes'));               // register/login/logout
-app.use('/api/users', require('./routes/userRoutes'));              // get/update my profile
-app.use('/api/mess', require('./routes/messRoutes'));               // discover, mess details, manager CRUD, dashboard
-app.use('/api/membership', require('./routes/membershipRoutes'));   // join/leave/approve/reject/details
-app.use('/api/attendance', require('./routes/attendanceRoutes'));   // skip meal, kiosk mark, calendars
-app.use('/api/leave', require('./routes/leaveRoutes'));             // apply + history (no status workflow)
-app.use('/api/billing', require('./routes/billingRoutes'));         // generate bills, approvals, customer bills
-app.use('/api/menu', require('./routes/menuRoutes'));               // set/get menu
-app.use('/api/reviews', require('./routes/reviewRoutes'));          // get/add reviews
+app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/mess', require('./routes/messRoutes'));
+app.use('/api/membership', require('./routes/membershipRoutes'));
+app.use('/api/attendance', require('./routes/attendanceRoutes'));
+app.use('/api/leave', require('./routes/leaveRoutes'));
+app.use('/api/billing', require('./routes/billingRoutes'));
+app.use('/api/menu', require('./routes/menuRoutes'));
+app.use('/api/reviews', require('./routes/reviewRoutes'));
+
+// --- THIS IS THE NEW, IMPORTANT LINE ---
+app.use('/api/jobs', require('./routes/jobRoutes')); // <-- ADD THIS
 
 // Health check
 app.get('/health', (req, res) => {
@@ -73,16 +67,14 @@ app.get('/health', (req, res) => {
 
 // Central error handler
 app.use((err, req, res, next) => {
-  // Malformed JSON guard
   if (err instanceof SyntaxError && 'body' in err) {
     return res.status(400).json({ success: false, message: 'Invalid JSON payload' });
   }
-  console.error(err.stack); // Always log the error
+  console.error(err.stack); 
   
   res.status(err.statusCode || 500).json({
     success: false,
     message: err.message || 'Server Error',
-    // Only show stack trace in development
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 });
