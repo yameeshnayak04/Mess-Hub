@@ -1,4 +1,4 @@
-// server.js (replace entire file)
+// backend/server.js
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
@@ -6,17 +6,19 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const path = require('path');
-const connectDB = require('./config/db');
 
+// Load env before using any env vars
 dotenv.config();
+
+// DB connection
+const connectDB = require('./config/db.js');
+
+// Jobs
+const { scheduleBillingJob } = require('./jobs/billingJob.js');
+require('./jobs/absentJob'); // schedules internal cron when the app is running
 
 // Connect DB
 connectDB();
-
-// --- Load Jobs ---
-require('./jobs/absentJob'); // schedules every 5 min internally
-const { scheduleBillingJob } = require('./jobs/billingJob');
-scheduleBillingJob(); // ensure monthly billing is scheduled
 
 const app = express();
 
@@ -27,10 +29,7 @@ app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 // Core middleware
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors());
-
-// Parsers
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 if ((process.env.NODE_ENV || '').toLowerCase() === 'development') {
@@ -38,27 +37,25 @@ if ((process.env.NODE_ENV || '').toLowerCase() === 'development') {
 }
 app.use(compression());
 
-// Static files (optional legacy local uploads)
+// Static files (legacy local uploads if any)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Health check
+app.get('/health', (req, res) => res.status(200).json({ status: 'OK' }));
+
 // Routes
-app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/users', require('./routes/userRoutes'));
-app.use('/api/mess', require('./routes/messRoutes'));
-app.use('/api/membership', require('./routes/membershipRoutes'));
-app.use('/api/attendance', require('./routes/attendanceRoutes'));
-app.use('/api/leave', require('./routes/leaveRoutes'));
-app.use('/api/billing', require('./routes/billingRoutes'));
-app.use('/api/menu', require('./routes/menuRoutes'));
-app.use('/api/reviews', require('./routes/reviewRoutes'));
+app.use('/api/auth', require('./routes/authRoutes.js'));
+app.use('/api/users', require('./routes/userRoutes.js'));
+app.use('/api/mess', require('./routes/messRoutes.js'));
+app.use('/api/membership', require('./routes/membershipRoutes.js'));
+app.use('/api/attendance', require('./routes/attendanceRoutes.js'));
+app.use('/api/leave', require('./routes/leaveRoutes.js'));
+app.use('/api/billing', require('./routes/billingRoutes.js'));
+app.use('/api/menu', require('./routes/menuRoutes.js'));
+app.use('/api/reviews', require('./routes/reviewRoutes.js'));
+app.use('/api/cron', require('./routes/cronRoutes.js')); // make sure routes/cronRoutes.js exists
 
-// Internal cron trigger routes
-app.use('/api/cron', require('./routes/cronRoutes'));
-
-// 404 fallback (keep last)
-app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
-
-// Central error handler
+// Error handler (after routes)
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && 'body' in err) {
     return res.status(400).json({ success: false, message: 'Invalid JSON payload' });
@@ -71,10 +68,11 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 fallback
-app.use((req, res) => {
-  res.status(404).json({ success: false, message: 'Route not found' });
-});
+// 404 fallback (last)
+app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
+
+// Start cron scheduler(s) after app is fully configured
+scheduleBillingJob();
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
