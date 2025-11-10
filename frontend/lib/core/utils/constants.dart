@@ -14,7 +14,7 @@ class ApiConstants {
       return '';
     }
     if (path.startsWith('http')) {
-      return path; // Already a full URL
+      return path; // Already a full URL (from Cloudinary)
     }
     // Prepend base URL (ensure no double slash if path starts with /)
     final separator =
