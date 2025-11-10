@@ -67,48 +67,44 @@ exports.getPaymentDetails = async (req, res, next) => {
 };
 
 
-// @desc    Submit payment proof
-// @route   POST /api/billing/submit-proof/:billId
-// @access  Private (Customer only)
 exports.submitPaymentProof = async (req, res, next) => {
   try {
     const bill = await Bill.findById(req.params.billId);
-
     if (!bill) {
-      return res.status(404).json({
-        success: false,
-        message: 'Bill not found'
-      });
+      return res.status(404).json({ success: false, message: 'Bill not found' });
     }
 
-    // Verify bill belongs to user
+    // Ensure the bill belongs to the authenticated user
     if (bill.user.toString() !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized'
-      });
+      return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please upload payment proof'
-      });
+      return res.status(400).json({ success: false, message: 'Please upload payment proof' });
     }
 
-    bill.paymentProofUrl = `/uploads/payment-proofs/${req.file.filename}`;
+    // Prefer Cloudinary URL if upload middleware provided it; otherwise use legacy disk path
+    const cloudUrl = req.file.cloudinaryUrl;
+    const diskUrl = req.file.filename ? `/uploads/payment-proofs/${req.file.filename}` : null;
+    bill.paymentProofUrl = cloudUrl || diskUrl;
+
+    if (!bill.paymentProofUrl) {
+      return res.status(400).json({ success: false, message: 'Upload failed: no proof URL available' });
+    }
+
     bill.status = 'Pending Approval';
     await bill.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: bill,
       message: 'Payment proof submitted successfully'
     });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };
+
 
 // @desc    Approve payment
 // @route   PUT /api/billing/approve-payment/:billId

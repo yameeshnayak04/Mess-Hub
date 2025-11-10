@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
-const bcryptjs = require('bcryptjs')
+const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema(
   {
@@ -84,29 +83,14 @@ userSchema.pre('validate', function (next) {
   next();
 });
 
-userSchema.methods.comparePassword = async function (enteredPassword) {
-   // 'this.password' refers to the hashed password stored in the document
-   // Need to make sure 'this.password' is selected when fetching the user if it was excluded by default
-  return await bcrypt.compare(enteredPassword, this.password);
+userSchema.methods.comparePassword = function (enteredPassword) {
+  return bcrypt.compare(enteredPassword, this.password);
 };
-
 userSchema.pre('save', async function (next) {
-  // Only hash the password if it has been modified (or is new)
-  if (!this.isModified('password')) {
-    return next();
-  }
-
-  try {
-    // Generate a salt
-    const salt = await bcrypt.genSalt(10); // 10 rounds is generally recommended
-    // Hash the password using the salt
-    this.password = await bcrypt.hash(this.password, salt);
-
-    next(); // Proceed to save
-  } catch (error) {
-     console.error('Error during password hashing:', error);
-    next(error); // Pass error to Mongoose error handling
-  }
+  if (!this.isModified('password')) return next();
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
 });
 
 // 2dsphere index for geospatial queries
