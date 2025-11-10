@@ -9,27 +9,52 @@ const { checkMealTiming, getStartAndEndOfDay } = require('../utils/billCalculati
 // @access Private (Manager only)
 exports.createMess = async (req, res, next) => {
   try {
-    let messData = { ...req.body };
-
-    // manually parse nested fields if they arrive as JSON strings
-    const fieldsToParse = ['location', 'timings', 'rules', 'plans'];
-    for (const key of fieldsToParse) {
-      if (messData[key] && typeof messData[key] === 'string') {
-        try { messData[key] = JSON.parse(messData[key]); }
-        catch (e) {
-          return res.status(400).json({ success: false, message: `Invalid JSON format for field: ${key}` });
-        }
-      }
-    }
-    if (messData.tiffinService === 'true') messData.tiffinService = true;
-    else if (messData.tiffinService === 'false') messData.tiffinService = false;
-
-    messData.owner = req.user.id;
-
-    // Use Cloudinary URL if a file was uploaded
+    // controllers/messController.js — inside createMess before Mess.create
+    let messData = { ...req.body, owner: req.user.id };
+      
+    // If upload middleware provided a Cloudinary URL
     if (req.file && req.file.cloudinaryUrl) {
       messData.messImage = req.file.cloudinaryUrl;
     }
+    
+    // Validate/normalize GeoJSON location shape
+    if (!messData.location || messData.location.type !== 'Point' || !Array.isArray(messData.location.coordinates)) {
+      return res.status(400).json({ success: false, message: 'location must be GeoJSON Point with coordinates [lng, lat]' });
+    }
+    messData.location.coordinates = messData.location.coordinates.map(Number);
+    
+    // Basic required strings
+    ['messName','address','city','contactPhone'].forEach(f => {
+      if (typeof messData[f] !== 'string' || !messData[f].trim()) {
+        return res.status(400).json({ success: false, message: `Field '${f}' is required` });
+      }
+    });
+    
+    // Coerce tiffinService boolean
+    if (typeof messData.tiffinService !== 'boolean') {
+      if (typeof messData.tiffinService === 'string') {
+        messData.tiffinService = messData.tiffinService.toLowerCase() === 'true';
+      } else {
+        messData.tiffinService = false;
+      }
+    }
+    
+    // Enforce HH:MM for timings if present
+    const hhmm = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    const checkSlot = (slot) => slot && hhmm.test(slot.start) && hhmm.test(slot.end);
+    if (messData.timings) {
+      const { lunch, dinner } = messData.timings;
+      if ((lunch && !checkSlot(lunch)) || (dinner && !checkSlot(dinner))) {
+        return res.status(400).json({ success: false, message: 'timings must use HH:MM format (e.g., 12:30)' });
+      }
+    }
+    
+    // Ensure plans array shape and numeric rate
+    if (!Array.isArray(messData.plans) || messData.plans.length === 0) {
+      return res.status(400).json({ success: false, message: 'At least one plan is required' });
+    }
+    messData.plans = messData.plans.map(p => ({ name: String(p.name || '').trim(), rate: Number(p.rate || 0) }));
+
 
     const mess = await Mess.create(messData);
     return res.status(201).json({ success: true, data: mess });
