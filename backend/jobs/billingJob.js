@@ -1,5 +1,6 @@
 // jobs/billingJob.js
 const mongoose = require('mongoose');
+const cron = require('node-cron');
 const Bill = require('../models/Bill');
 const Membership = require('../models/Membership');
 const Mess = require('../models/Mess');
@@ -138,4 +139,13 @@ async function runBillingJob() {
   return results;
 }
 
-module.exports = { runBillingJob };
+// new: 12:01 AM on the 1st, Asia/Kolkata
+function scheduleBillingJob() {
+  if (process.env.ENABLE_INTERNAL_CRON !== 'true') return;
+  cron.schedule('1 0 1 * *', async () => { try { await runBillingJob(); } catch (e) {} }, {
+    timezone: 'Asia/Kolkata'
+  });
+  console.log('[Billing Job] Scheduled 00:01 on 1st (Asia/Kolkata)');
+}
+
+module.exports = { runBillingJob, scheduleBillingJob };

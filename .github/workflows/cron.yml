@@ -2,8 +2,8 @@ name: Cron Triggers
 
 on:
   schedule:
-    - cron: '*/30 * * * *'        # every 30 min: Absent
-    - cron: '1 0 1 * *'         # 00:01 UTC on the 1st of every month: Billing
+    - cron: '*/30 * * * *'     # Absent job every 30 minutes (UTC schedule)
+    - cron: '31 18 * * *'      # Fire once daily near 00:01 IST; guarded below
   workflow_dispatch: {}
 
 jobs:
@@ -42,7 +42,17 @@ jobs:
             sleep 5
           done
           echo "Service not ready"; exit 1
+      - name: "Guard: only at 00:01 Asia/Kolkata on day 1"
+        run: |
+          d=$(TZ=Asia/Kolkata date +%d)
+          hm=$(TZ=Asia/Kolkata date +%H:%M)
+          if [ "$d" = "01" ] && [ "$hm" = "00:01" ]; then
+            echo "OK to run"
+          else
+            echo "Skip run (local=$d $hm)"; exit 78
+          fi
       - name: Trigger Billing Job
+        if: ${{ success() }}
         env:
           BASE_URL: ${{ secrets.RENDER_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}

@@ -56,15 +56,13 @@ async function runAbsentJob() {
   }
 }
 
-// Optional internal scheduler for both meals checkpoints, enable with ENABLE_INTERNAL_CRON=true
+// new: every 30 minutes, Asia/Kolkata
 function scheduleAbsentJob() {
-  if (process.env.ENABLE_INTERNAL_CRON === 'true') {
-    // Example: every 30 minutes to catch window end; adjust to your exact timings
-    cron.schedule('*/30 * * * *', async () => { try { await runAbsentJob(); } catch {} });
-    console.log('[Absent Job] Internal cron scheduled every 30 minutes');
-  } else {
-    console.log('[Absent Job] Internal cron disabled (ENABLE_INTERNAL_CRON != true)');
-  }
+  if (process.env.ENABLE_INTERNAL_CRON !== 'true') return;
+  cron.schedule('*/30 * * * *', async () => { try { await runAbsentJob(); } catch (e) {} }, {
+    timezone: 'Asia/Kolkata'
+  });
+  console.log('[Absent Job] Scheduled */30 * * * * (Asia/Kolkata)');
 }
 
 module.exports = { runAbsentJob, scheduleAbsentJob, markAbsentForMeal };
