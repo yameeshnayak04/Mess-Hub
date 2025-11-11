@@ -4,6 +4,7 @@ name: Cron Triggers
 on:
   schedule:
     # Absent every 30 minutes (UTC)
+    # Absent Job (unchanged): every 30 minutes
     - cron: '*/30 * * * *'
     # Billing window: 18:30 UTC on days 28–31
     - cron: '30 18 28-31 * *'
@@ -45,6 +46,7 @@ jobs:
           BASE_URL: ${{ secrets.RENDER_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
+          echo "Triggering Billing Job..."
           echo "Triggering Billing Job..."
           curl -fsS -X POST "$BASE_URL/api/cron/billing/run" \
             -H "x-cron-secret: $CRON_SECRET" -H "Accept: application/json"
