@@ -4,7 +4,7 @@ const { runAbsentJob } = require('../jobs/absentJob.js');
 const { runBillingJob } = require('../jobs/billingJob.js');
 
 router.use((req, res, next) => {
-  const key = req.header('X-Job-Secret');
+  const key = req.header('X-Job-Secret'); // jobsRoutes
   if (!key || key !== process.env.CRON_SECRET) {
     return res.status(401).json({ success: false, message: 'Unauthorized' });
   }

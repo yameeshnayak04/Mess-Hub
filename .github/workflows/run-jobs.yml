@@ -24,8 +24,9 @@ jobs:
         id: guard
         run: |
           d=$(TZ=Asia/Kolkata date +%d)
-          hm=$(TZ=Asia/Kolkata date +%H:%M)
-          if [ "$d" = "01" ] && [ "$hm" = "00:00" ]; then
+          m=$(TZ=Asia/Kolkata date +%M)
+          h=$(TZ=Asia/Kolkata date +%H)
+          if [ "$d" = "01" ] && [ "$h" = "00" ] && [ "$m" -ge 0 ] && [ "$m" -le 4 ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"

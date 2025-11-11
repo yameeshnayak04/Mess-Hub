@@ -15,7 +15,7 @@ async function markAbsentForMeal(mealType) {
   const messes = await Mess.find({});
   for (const mess of messes) {
     const timing = checkMealTiming(mess.timings, mealType, TZ_OFFSET_MINUTES);
-    if (!timing.isPast) return;
+    if (!timing.isPast) continue;
 
     const memberships = await Membership.find({ mess: mess._id, status: 'Active' });
     for (const m of memberships) {
