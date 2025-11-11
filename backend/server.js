@@ -37,7 +37,7 @@ if ((process.env.NODE_ENV || '').toLowerCase() === 'development') {
 }
 app.use(compression());
 
-// Static files (legacy local uploads if any)
+// Static files (This is for Cloudinary, but /uploads is fine to keep for legacy)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health check
