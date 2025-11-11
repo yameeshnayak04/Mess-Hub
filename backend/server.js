@@ -6,18 +6,10 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const path = require('path');
-// const { scheduleBillingJob } = require('./jobs/billingJob.js');   // <-- DELETED
-// const { scheduleAbsentJob } = require('./jobs/absentJob.js');     // <-- DELETED
 
-
-// Load env before using any env vars
 dotenv.config();
 
-// DB connection
 const connectDB = require('./config/db.js');
-
-
-// Connect DB
 connectDB();
 
 const app = express();
@@ -25,22 +17,22 @@ const app = express();
 // Trust proxy (Render)
 app.set('trust proxy', 1);
 
-// Security headers
+// Security and core middleware
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-
-// Core middleware
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Logging only in development
 if ((process.env.NODE_ENV || '').toLowerCase() === 'development') {
   app.use(morgan('dev'));
 }
+
+// Enable compression in all envs
 app.use(compression());
 
-// Static files (This is for Cloudinary, but /uploads is fine to keep for legacy)
+// Static and health
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Health check
 app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
 
 // Routes
@@ -53,17 +45,17 @@ app.use('/api/leave', require('./routes/leaveRoutes.js'));
 app.use('/api/billing', require('./routes/billingRoutes.js'));
 app.use('/api/menu', require('./routes/menuRoutes.js'));
 app.use('/api/reviews', require('./routes/reviewRoutes.js'));
-// This is now the ONLY route for jobs
+
+// Cron endpoints (always mounted)
 app.use('/api/cron', require('./routes/cronRoutes.js'));
-// app.use('/api/jobs', require('./routes/jobsRoutes.js')); // <-- DELETED
 
 // Error handler (after routes)
-app.use((err, req, res, next) => {
-  if (err instanceof SyntaxError && 'body' in err) {
+app.use((err, req, res, _next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
     return res.status(400).json({ success: false, message: 'Invalid JSON payload' });
   }
   console.error(err.stack);
-  res.status(err.statusCode || 500).json({
+  return res.status(err.statusCode || 500).json({
     success: false,
     message: err.message || 'Server Error',
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
@@ -72,8 +64,6 @@ app.use((err, req, res, next) => {
 
 // 404 fallback (last)
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
-
-// --- DELETED 'schedule' function calls ---
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
