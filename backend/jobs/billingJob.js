@@ -1,20 +1,14 @@
 // jobs/billingJob.js
 const mongoose = require('mongoose');
-const cron = require('node-cron');
+// const cron = require('node-cron'); // <--- DELETED
 const Bill = require('../models/Bill');
 const Membership = require('../models/Membership');
 const Mess = require('../models/Mess');
 const Attendance = require('../models/Attendance');
+const connectDB = require('../config/db'); // <-- ADDED
+const { getStartAndEndOfMonth } = require('../utils/billCalculation'); // <-- ADDED
 
-// Helper: start/end of a specific month in UTC
-function getStartAndEndOfMonth(month, year) {
-  // month: 1-12
-  const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
-  const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
-  return { startOfMonth: start, endOfMonth: end };
-}
-
-// Helper: derive plan meals from planName
+// Helper: derive plan meals from planName (from your file)
 function mealsInPlan(planName) {
   const p = String(planName || '').toLowerCase();
   if (p.includes('both')) return ['Lunch', 'Dinner'];
@@ -32,7 +26,6 @@ async function processMessForPeriod(mess, billingMonth, billingYear, startOfMont
       const activeMembers = await Membership.find({ mess: mess._id, status: 'Active' }).session(session);
 
       for (const member of activeMembers) {
-        // Guard against duplicates (unique index exists on Bill: user+mess+month+year)
         const exists = await Bill.exists({
           user: member.user,
           mess: mess._id,
@@ -42,7 +35,6 @@ async function processMessForPeriod(mess, billingMonth, billingYear, startOfMont
 
         if (exists) continue;
 
-        // Count attendance impacts for meals included by plan
         const includedMeals = mealsInPlan(member.planName);
         const skippedMeals = await Attendance.countDocuments({
           membership: member._id,
@@ -60,11 +52,10 @@ async function processMessForPeriod(mess, billingMonth, billingYear, startOfMont
           status: 'Leave'
         }).session(session);
 
-        // Base rates and rules
         const baseAmount = Number(member.billingRate || 0);
         const rules = mess.rules || {};
         const rebatePerThali = Number(rules.rebatePerThali || 0);
-        const skipAllowancePercent = Number(rules.skipAllowancePercent || 50); // cap % for skipped
+        const skipAllowancePercent = Number(rules.skipAllowancePercent || 50);
         const minMonthlyCharge = Number(rules.minMonthlyCharge || 0);
 
         const skipRebate = skippedMeals * rebatePerThali * (skipAllowancePercent / 100);
@@ -73,7 +64,6 @@ async function processMessForPeriod(mess, billingMonth, billingYear, startOfMont
 
         let totalAmount = Math.max(minMonthlyCharge, Math.round((baseAmount - rebateAmount) * 100) / 100);
 
-        // Create bill
         await Bill.create([{
           user: member.user,
           mess: mess._id,
@@ -87,7 +77,6 @@ async function processMessForPeriod(mess, billingMonth, billingYear, startOfMont
 
         billsCreatedCount++;
 
-        // Update membership rate from Mess.plans[].rate when a matching plan exists
         const planKey = String(member.planName || '').toLowerCase();
         const matchedPlan = Array.isArray(mess.plans)
           ? mess.plans.find(p => String(p.name || '').toLowerCase() === planKey)
@@ -114,12 +103,12 @@ async function processMessForPeriod(mess, billingMonth, billingYear, startOfMont
  * Generate bills for the previous month across all messes
  */
 async function runBillingJob() {
+  await connectDB(); // <-- ADDED: Must connect to DB
   console.log('--- JOB: Running Monthly Billing Job ---');
 
   const now = new Date();
-  // prevMonthDate = last day of previous month
   const prevMonthDate = new Date(now.getFullYear(), now.getMonth(), 0);
-  const billingMonth = prevMonthDate.getMonth() + 1; // 1-12
+  const billingMonth = prevMonthDate.getMonth() + 1;
   const billingYear = prevMonthDate.getFullYear();
   const { startOfMonth, endOfMonth } = getStartAndEndOfMonth(billingMonth, billingYear);
 
@@ -139,13 +128,6 @@ async function runBillingJob() {
   return results;
 }
 
-// new: 12:01 AM on the 1st, Asia/Kolkata
-function scheduleBillingJob() {
-  if (process.env.ENABLE_INTERNAL_CRON !== 'true') return;
-  cron.schedule('1 0 1 * *', async () => { try { await runBillingJob(); } catch (e) {} }, {
-    timezone: 'Asia/Kolkata'
-  });
-  console.log('[Billing Job] Scheduled 00:01 on 1st (Asia/Kolkata)');
-}
+// --- DELETED 'scheduleBillingJob' function ---
 
-module.exports = { runBillingJob, scheduleBillingJob };
+module.exports = { runBillingJob }; // <-- CLEANED EXPORT

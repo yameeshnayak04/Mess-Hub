@@ -1,12 +1,20 @@
+# .github/workflows/cron.yml
 name: Cron Triggers
+
 on:
   schedule:
-    - cron: '*/30 * * * *'      # Absent every 30 min
-    - cron: '30 18 * * *'       # Daily near 00:00 IST; guard below
+    # 1. Runs every 30 minutes (for Absent Job)
+    - cron: '*/30 * * * *'
+    # 2. Runs daily at 18:31 UTC (which is 00:01 AM IST)
+    - cron: '31 18 * * *'
+  # This 'workflow_dispatch' allows you to run it manually
   workflow_dispatch: {}
 
 jobs:
+  # JOB 1: Absent Job (runs every 30 minutes OR on manual trigger)
   absent:
+    # This 'if' condition runs for the 30-min schedule OR a manual run
+    if: github.event.schedule == '*/30 * * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Absent Job
@@ -14,27 +22,43 @@ jobs:
           BASE_URL: ${{ secrets.RENDER_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
+          echo "Triggering Absent Job..."
           curl -fsS -X POST "$BASE_URL/api/cron/absent/run" \
             -H "x-cron-secret: $CRON_SECRET" -H "Accept: application/json"
 
+  # JOB 2: Billing Job (runs at 00:01 IST on the 1st OR on manual trigger)
   billing:
+    # This 'if' condition runs for the daily 00:01 IST schedule OR a manual run
+    if: github.event.schedule == '31 18 * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - id: guard
-        name: "Guard: 00:00 Asia/Kolkata on day 1"
+        name: "Guard: Check if it is the 1st of the month in India (or manual run)"
         run: |
-          d=$(TZ=Asia/Kolkata date +%d)
-          hm=$(TZ=Asia/Kolkata date +%H:%M)
-          if [ "$d" = "01" ] && [ "$hm" = "00:00" ]; then
+          # This checks the current date in Kolkata.
+          # If it's "01", it sets the output 'run' to true.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual run detected, forcing job to run."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ "$(TZ=Asia/Kolkata date +%d)" = "01" ]; then
+            echo "It is the 1st of the month in India. Setting run=true."
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
+            echo "It is not the 1st of the month. Setting run=false."
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Trigger Billing Job
+        # This step only runs if the guard output 'run' was true
         if: ${{ steps.guard.outputs.run == 'true' }}
         env:
           BASE_URL: ${{ secrets.RENDER_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
+          echo "Guard passed. Running billing job..."
           curl -fsS -X POST "$BASE_URL/api/cron/billing/run" \
             -H "x-cron-secret: $CRON_SECRET" -H "Accept: application/json"
+      - name: Skip Billing Job
+        # This step runs if the guard was false
+        if: ${{ steps.guard.outputs.run == 'false' }}
+        run: |
+          echo "Guard failed. Skipping billing job."

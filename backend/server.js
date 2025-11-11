@@ -6,8 +6,8 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const path = require('path');
-const { scheduleBillingJob } = require('./jobs/billingJob.js');
-const { scheduleAbsentJob } = require('./jobs/absentJob.js');
+// const { scheduleBillingJob } = require('./jobs/billingJob.js');   // <-- DELETED
+// const { scheduleAbsentJob } = require('./jobs/absentJob.js');     // <-- DELETED
 
 
 // Load env before using any env vars
@@ -53,9 +53,9 @@ app.use('/api/leave', require('./routes/leaveRoutes.js'));
 app.use('/api/billing', require('./routes/billingRoutes.js'));
 app.use('/api/menu', require('./routes/menuRoutes.js'));
 app.use('/api/reviews', require('./routes/reviewRoutes.js'));
-// New + existing mounts
-app.use('/api/cron', require('./routes/cronRoutes.js'));   // secured by x-cron-secret
-app.use('/api/jobs', require('./routes/jobsRoutes.js'));
+// This is now the ONLY route for jobs
+app.use('/api/cron', require('./routes/cronRoutes.js'));
+// app.use('/api/jobs', require('./routes/jobsRoutes.js')); // <-- DELETED
 
 // Error handler (after routes)
 app.use((err, req, res, next) => {
@@ -73,8 +73,7 @@ app.use((err, req, res, next) => {
 // 404 fallback (last)
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
 
-if (typeof scheduleBillingJob === 'function') scheduleBillingJob();
-if (typeof scheduleAbsentJob === 'function') scheduleAbsentJob();
+// --- DELETED 'schedule' function calls ---
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
