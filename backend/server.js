@@ -41,7 +41,7 @@ app.use(compression());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health check
-app.get('/health', (req, res) => res.status(200).json({ status: 'OK' }));
+app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes.js'));
@@ -53,7 +53,9 @@ app.use('/api/leave', require('./routes/leaveRoutes.js'));
 app.use('/api/billing', require('./routes/billingRoutes.js'));
 app.use('/api/menu', require('./routes/menuRoutes.js'));
 app.use('/api/reviews', require('./routes/reviewRoutes.js'));
-app.use('/api/cron', require('./routes/cronRoutes.js')); // make sure routes/cronRoutes.js exists
+// New + existing mounts
+app.use('/api/cron', require('./routes/cronRoutes.js'));   // secured by x-cron-secret
+app.use('/api/jobs', require('./routes/jobsRoutes.js'));
 
 // Error handler (after routes)
 app.use((err, req, res, next) => {

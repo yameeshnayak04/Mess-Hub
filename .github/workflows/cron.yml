@@ -1,50 +1,27 @@
 name: Cron Triggers
-
 on:
   schedule:
-    - cron: '*/30 * * * *'      # Absent job every 30 minutes (UTC) => every 30 min IST too
-    - cron: '30 18 * * *'       # Fires at 18:30 UTC daily == 00:00 IST next day; guarded below
+    - cron: '*/30 * * * *'      # Absent every 30 min
+    - cron: '30 18 * * *'       # Daily near 00:00 IST; guard below
   workflow_dispatch: {}
 
 jobs:
   absent:
     runs-on: ubuntu-latest
     steps:
-      - name: Warm up service
-        env:
-          BASE_URL: ${{ secrets.RENDER_BASE_URL }}
-        run: |
-          for i in {1..20}; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/health" || true)
-            if [ "$code" = "200" ]; then exit 0; fi
-            sleep 5
-          done
-          echo "Service not ready"; exit 1
       - name: Trigger Absent Job
         env:
           BASE_URL: ${{ secrets.RENDER_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           curl -fsS -X POST "$BASE_URL/api/cron/absent/run" \
-            -H "x-cron-secret: $CRON_SECRET" \
-            -H "Accept: application/json"
+            -H "x-cron-secret: $CRON_SECRET" -H "Accept: application/json"
 
   billing:
     runs-on: ubuntu-latest
     steps:
-      - name: Warm up service
-        env:
-          BASE_URL: ${{ secrets.RENDER_BASE_URL }}
-        run: |
-          for i in {1..20}; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/health" || true)
-            if [ "$code" = "200" ]; then exit 0; fi
-            sleep 5
-          done
-          echo "Service not ready"; exit 1
-
       - id: guard
-        name: "Guard: only at 00:00 Asia/Kolkata on day 1"
+        name: "Guard: 00:00 Asia/Kolkata on day 1"
         run: |
           d=$(TZ=Asia/Kolkata date +%d)
           hm=$(TZ=Asia/Kolkata date +%H:%M)
@@ -53,7 +30,6 @@ jobs:
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
-
       - name: Trigger Billing Job
         if: ${{ steps.guard.outputs.run == 'true' }}
         env:
@@ -61,5 +37,4 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           curl -fsS -X POST "$BASE_URL/api/cron/billing/run" \
-            -H "x-cron-secret: $CRON_SECRET" \
-            -H "Accept: application/json"
+            -H "x-cron-secret: $CRON_SECRET" -H "Accept: application/json"

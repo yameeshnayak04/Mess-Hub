@@ -1,4 +1,4 @@
-// backend/routes/cronRoutes.js
+// routes/cronRoutes.js (keep as is, summarized)
 const router = require('express').Router();
 const { runBillingJob } = require('../jobs/billingJob.js');
 const { runAbsentJob } = require('../jobs/absentJob.js');
@@ -11,18 +11,14 @@ router.use((req, res, next) => {
   next();
 });
 
-router.post('/absent/run', async (req, res, next) => {
-  try {
-    await runAbsentJob();
-    res.json({ success: true, message: 'Absent job executed' });
-  } catch (e) { next(e); }
+router.post('/absent/run', async (_req, res, next) => {
+  try { await runAbsentJob(); res.json({ success: true, message: 'Absent job executed' }); }
+  catch (e) { next(e); }
 });
 
-router.post('/billing/run', async (req, res, next) => {
-  try {
-    await runBillingJob();
-    res.json({ success: true, message: 'Monthly billing job executed' });
-  } catch (e) { next(e); }
+router.post('/billing/run', async (_req, res, next) => {
+  try { await runBillingJob(); res.json({ success: true, message: 'Monthly billing job executed' }); }
+  catch (e) { next(e); }
 });
 
 module.exports = router;
