@@ -2,8 +2,8 @@ name: Cron Triggers
 
 on:
   schedule:
-    - cron: '*/30 * * * *'     # Absent job every 30 minutes (UTC schedule)
-    - cron: '31 18 * * *'      # Fire once daily near 00:01 IST; guarded below
+    - cron: '*/30 * * * *'      # Absent job every 30 minutes (UTC) => every 30 min IST too
+    - cron: '30 18 * * *'       # Fires at 18:30 UTC daily == 00:00 IST next day; guarded below
   workflow_dispatch: {}
 
 jobs:
@@ -42,17 +42,20 @@ jobs:
             sleep 5
           done
           echo "Service not ready"; exit 1
-      - name: "Guard: only at 00:01 Asia/Kolkata on day 1"
+
+      - id: guard
+        name: "Guard: only at 00:00 Asia/Kolkata on day 1"
         run: |
           d=$(TZ=Asia/Kolkata date +%d)
           hm=$(TZ=Asia/Kolkata date +%H:%M)
-          if [ "$d" = "01" ] && [ "$hm" = "00:01" ]; then
-            echo "OK to run"
+          if [ "$d" = "01" ] && [ "$hm" = "00:00" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Skip run (local=$d $hm)"; exit 78
+            echo "run=false" >> "$GITHUB_OUTPUT"
           fi
+
       - name: Trigger Billing Job
-        if: ${{ success() }}
+        if: ${{ steps.guard.outputs.run == 'true' }}
         env:
           BASE_URL: ${{ secrets.RENDER_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
