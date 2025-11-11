@@ -1,10 +1,10 @@
 // backend/jobs/absentJob.js
-const cron = require('node-cron');
 const Attendance = require('../models/Attendance');
 const Membership = require('../models/Membership');
 const Mess = require('../models/Mess');
 const Leave = require('../models/Leave');
 const { startOfDay, endOfDay, checkMealTiming } = require('../utils/billCalculation');
+const connectDB = require('../config/db'); // <-- 1. IMPORT connectDB
 const TZ_OFFSET_MINUTES = parseInt(process.env.TZ_OFFSET_MINUTES || '330', 10);
 
 async function markAbsentForMeal(mealType) {
@@ -46,6 +46,7 @@ async function markAbsentForMeal(mealType) {
 }
 
 async function runAbsentJob() {
+  await connectDB(); // <-- 2. ADDED: Must connect to DB on its own
   console.log('--- JOB: Running Absent Job (Triggered) ---');
   try {
     await markAbsentForMeal('Lunch');
@@ -56,13 +57,6 @@ async function runAbsentJob() {
   }
 }
 
-// new: every 30 minutes, Asia/Kolkata
-function scheduleAbsentJob() {
-  if (process.env.ENABLE_INTERNAL_CRON !== 'true') return;
-  cron.schedule('*/30 * * * *', async () => { try { await runAbsentJob(); } catch (e) {} }, {
-    timezone: 'Asia/Kolkata'
-  });
-  console.log('[Absent Job] Scheduled */30 * * * * (Asia/Kolkata)');
-}
+// --- 3. DELETED the entire 'scheduleAbsentJob' function and 'node-cron' require ---
 
-module.exports = { runAbsentJob, scheduleAbsentJob, markAbsentForMeal };
+module.exports = { runAbsentJob, markAbsentForMeal }; // <-- 4. CLEANED EXPORT
