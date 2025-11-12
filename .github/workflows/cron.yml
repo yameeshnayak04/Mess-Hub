@@ -2,8 +2,8 @@ name: Cron Triggers
 
 on:
   schedule:
-    - cron: '*/30 * * * *'        # Absent every 30 minutes (UTC)
-    - cron: '30 18 28-31 * *'     # Monthly window (maps to 00:00 IST on the 1st)
+    - cron: '*/30 * * * *'        # Absent (UTC)
+    - cron: '30 18 28-31 * *'     # Window that maps to 00:00 IST on the 1st
   workflow_dispatch: {}
 
 jobs:
@@ -42,8 +42,4 @@ jobs:
       - name: Skip (not the 1st IST)
         if: steps.guard.outputs.run == 'false'
         run: |
-          "echo Skipping: not the 1st in IST."
-
-concurrency:
-  group: cron-${{ github.workflow }}-${{ github.job }}
-  cancel-in-progress: false
+           "echo Skipping: not the 1st in IST."

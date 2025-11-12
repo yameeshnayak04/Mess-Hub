@@ -1,20 +1,24 @@
 // utils/billCalculation.js
-// NOTE: Exported function names stay the same to avoid breaking imports.
+// All exported function names/signatures are unchanged to maintain compatibility across controllers, jobs, and routes.
 
-const DEFAULT_TZ_OFFSET_MIN = parseInt(process.env.TZ_OFFSET_MINUTES || '330', 10);
+const DEFAULT_TZ_OFFSET_MIN = parseInt(process.env.TZ_OFFSET_MINUTES || '330', 10); // IST by default
 
-// Internal: minutes since local midnight for a fixed offset from UTC
+// Internal: normalize offset into [0, 1439] minutes
+const normOffset = (min) => ((min % 1440) + 1440) % 1440;
+
+// Internal: minutes since local (offset) midnight from a Date
 const getLocalMinutes = (now = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) => {
   const utcMin = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const norm = ((offsetMin % 1440) + 1440) % 1440;
-  return (utcMin + norm) % 1440;
+  return (utcMin + normOffset(offsetMin)) % 1440;
 };
 
-// Exported: startOfDay/endOfDay using offset timezone (inclusive range)
+// Exported: startOfDay/endOfDay — compute the local (IST) day bounds as UTC instants.
+// These return Date objects that represent the exact start and end instants of the given local day.
 function startOfDay(date = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) {
   const d = new Date(date);
-  // Construct UTC midnight of the given day, then shift by offset to get “local” midnight in UTC
+  // 1) Construct the UTC midnight for the calendar day of 'd'
   const utcMidnight = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  // 2) Shift that instant backward by the offset to get the local midnight as a UTC instant
   return new Date(utcMidnight - offsetMin * 60 * 1000);
 }
 
@@ -23,69 +27,71 @@ function endOfDay(date = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) {
   return new Date(s.getTime() + 24 * 60 * 60 * 1000 - 1);
 }
 
-// Exported: getStartAndEndOfDay (wrapper preserved)
+// Exported: getStartAndEndOfDay — wrapper returning { startOfDay, endOfDay } with same naming
 function getStartAndEndOfDay(date = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) {
   return { startOfDay: startOfDay(date, offsetMin), endOfDay: endOfDay(date, offsetMin) };
 }
 
-// Internal: inclusive date diff by whole days
+// Internal: strip time for inclusive day arithmetic
 const stripTime = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-function daysInclusive(a, b) {
-  const dayMs = 24 * 60 * 60 * 1000;
-  return Math.max(0, Math.floor((stripTime(b) - stripTime(a)) / dayMs) + 1);
+const dayMs = 24 * 60 * 60 * 1000;
+
+// Exported: calculateDaysDifference — inclusive whole-day count
+function calculateDaysDifference(startDate, endDate) {
+  const s = stripTime(new Date(startDate));
+  const e = stripTime(new Date(endDate));
+  if (e < s) return 0;
+  return Math.floor((e - s) / dayMs) + 1;
 }
 
-// Exported: getStartAndEndOfMonth (1..12), inclusive in offset timezone
+// Exported: getStartAndEndOfMonth — inclusive local (IST) month bounds as UTC instants.
+// month is 1..12; returns Dates suitable for querying with $gte/$lte on UTC timestamps.
 function getStartAndEndOfMonth(month, year, offsetMin = DEFAULT_TZ_OFFSET_MIN) {
-  // month is 1..12
   const m0 = month - 1;
-  // Local month start in UTC: first day UTC midnight shifted by offset
+  // Local first-of-month midnight as a UTC instant
   const startUTC = Date.UTC(year, m0, 1);
   const startOfMonth = new Date(startUTC - offsetMin * 60 * 1000);
 
-  // Local month end: last local millisecond of the last day
+  // Local last millisecond of month:
+  // Take local first-of-next-month midnight and subtract 1 millisecond.
   const nextMonthUTC = Date.UTC(year, m0 + 1, 1);
-  // Last UTC millisecond of month:
-  const lastUtcMs = nextMonthUTC - 1;
-  // Convert to local by subtracting offset on the start, but the “inclusive” last ms is universal
-  const endOfMonth = new Date(lastUtcMs - offsetMin * 60 * 1000 + offsetMin * 60 * 1000);
+  const startOfNextLocal = new Date(nextMonthUTC - offsetMin * 60 * 1000);
+  const endOfMonth = new Date(startOfNextLocal.getTime() - 1);
 
   return { startOfMonth, endOfMonth };
 }
 
-// Exported: calculateDaysDifference (kept signature and behavior: inclusive)
-function calculateDaysDifference(startDate, endDate) {
-  const s = new Date(startDate);
-  const e = new Date(endDate);
-  return daysInclusive(s, e);
-}
-
-// Exported: checkMealTiming (kept signature and behavior, improved robustness)
-// timings example: { lunch: { start: '12:00', end: '14:00' }, dinner: { start: '20:00', end: '22:00' } }
+// Exported: checkMealTiming — evaluates HH:MM windows in IST (or configured offset).
+// timings: { lunch: { start: '12:00', end: '14:00' }, dinner: { start: '20:00', end: '22:00' } }
 function checkMealTiming(timings, mealType, offsetMin = DEFAULT_TZ_OFFSET_MIN, now = new Date()) {
   const t = timings || {};
   const key = String(mealType || '').toLowerCase() === 'lunch' ? 'lunch' : 'dinner';
   const slot = t[key] || {};
+
   const parseHM = (s) => {
     if (!s || typeof s !== 'string') return null;
-    const [hh, mm] = s.split(':').map((x) => parseInt(x, 10));
+    const parts = s.split(':');
+    if (parts.length < 2) return null;
+    const hh = parseInt(parts[0], 10);
+    const mm = parseInt(parts[1], 10);
     if (Number.isNaN(hh) || Number.isNaN(mm)) return null;
     return (hh % 24) * 60 + (mm % 60);
   };
+
   const startMin = parseHM(slot.start);
   const endMin = parseHM(slot.end);
-  const nowMin = getLocalMinutes(now, offsetMin);
+  const localNow = getLocalMinutes(now, offsetMin);
 
   const hasWindow = Number.isInteger(startMin) && Number.isInteger(endMin);
-  const isWithin = hasWindow && nowMin >= startMin && nowMin <= endMin;
-  const isPast = hasWindow && nowMin > endMin;
+  const isWithin = hasWindow && localNow >= startMin && localNow <= endMin;
+  const isPast = hasWindow && localNow > endMin;
 
-  return { hasWindow, isWithin, isPast, startMin, endMin, nowMin };
+  return { hasWindow, isWithin, isPast, startMin, endMin, nowMin: localNow };
 }
 
-// Optional internal helpers your jobs may use without changing imports:
+// Compatible helpers already referenced in code (names preserved)
 
-// Compute the active window of a membership within a billing month for proration
+// Limit a membership’s active window to the billing month for proration.
 function getActiveWindowForMonth(membership, startOfMonth, endOfMonth) {
   const memberStart = membership?.startDate ? new Date(membership.startDate) : startOfMonth;
   const memberEnd = membership?.endDate ? new Date(membership.endDate) : endOfMonth;
@@ -94,17 +100,17 @@ function getActiveWindowForMonth(membership, startOfMonth, endOfMonth) {
   const activeEnd = memberEnd < endOfMonth ? memberEnd : endOfMonth;
 
   if (activeEnd < activeStart) {
-    return { activeStart: null, activeEnd: null, activeDays: 0, monthDays: daysInclusive(startOfMonth, endOfMonth) };
+    return { activeStart: null, activeEnd: null, activeDays: 0, monthDays: calculateDaysDifference(startOfMonth, endOfMonth) };
   }
   return {
     activeStart,
     activeEnd,
-    activeDays: daysInclusive(activeStart, activeEnd),
-    monthDays: daysInclusive(startOfMonth, endOfMonth),
+    activeDays: calculateDaysDifference(activeStart, activeEnd),
+    monthDays: calculateDaysDifference(startOfMonth, endOfMonth),
   };
 }
 
-// Derive meals covered by a plan (kept here to avoid renames elsewhere)
+// Meals covered by a plan string
 function getMealsFromPlan(planName) {
   const p = String(planName || '').toLowerCase();
   if (p.includes('both')) return ['Lunch', 'Dinner'];
@@ -113,21 +119,19 @@ function getMealsFromPlan(planName) {
   return [];
 }
 
-// Keep original exports intact
 module.exports = {
+  // Original exports (unchanged names)
   checkMealTiming,
   getStartAndEndOfDay,
   getStartAndEndOfMonth,
   startOfDay,
   endOfDay,
-
-  // Also export helpers already referenced elsewhere in your codebase
   calculateDaysDifference,
 
-  // Non-breaking additional helpers (safe to import where needed)
+  // Also exported previously/used elsewhere
   getActiveWindowForMonth,
   getMealsFromPlan,
 
-  // Expose default offset for reference
+  // Expose default offset for consumers that need it
   DEFAULT_TZ_OFFSET_MIN,
 };
