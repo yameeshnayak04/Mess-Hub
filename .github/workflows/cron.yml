@@ -42,4 +42,4 @@ jobs:
       - name: Skip (not the 1st IST)
         if: steps.guard.outputs.run == 'false'
         run: |
-           "echo Skipping: not the 1st in IST."
+          echo "Skipping: not the 1st in IST."
