@@ -2,15 +2,12 @@ name: Cron Triggers
 
 on:
   schedule:
-    # Absent Job: every 30 minutes (UTC)
-    - cron: '*/30 * * * *'
-    # Billing window: 18:30 UTC on days 28–31 (00:00 IST on the 1st)
-    - cron: '30 18 28-31 * *'
+    - cron: '*/30 * * * *'        # Absent every 30 minutes (UTC)
+    - cron: '30 18 28-31 * *'     # Monthly window (maps to 00:00 IST on the 1st)
   workflow_dispatch: {}
 
 jobs:
   absent:
-    # Run only for the */30 schedule (not during the monthly window)
     if: github.event_name == 'schedule' && github.event.schedule == '*/30 * * * *'
     runs-on: ubuntu-latest
     steps:
@@ -19,12 +16,10 @@ jobs:
           BASE_URL: ${{ secrets.RENDER_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          echo "Triggering Absent Job..."
           curl -fsS -X POST "$BASE_URL/api/cron/absent/run" \
             -H "x-cron-secret: $CRON_SECRET" -H "Accept: application/json"
 
   billing:
-    # Only evaluate during the monthly window schedule
     if: github.event_name == 'schedule' && startsWith(github.event.schedule, '30 18')
     runs-on: ubuntu-latest
     steps:
@@ -42,15 +37,13 @@ jobs:
           BASE_URL: ${{ secrets.RENDER_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          echo "Triggering Billing Job..."
           curl -fsS -X POST "$BASE_URL/api/cron/billing/run" \
             -H "x-cron-secret: $CRON_SECRET" -H "Accept: application/json"
-      - name: Skip (not the 1st in IST)
+      - name: Skip (not the 1st IST)
         if: steps.guard.outputs.run == 'false'
         run: |
-          echo 'Skipping: not the 1st in IST.'
+          "echo Skipping: not the 1st in IST."
 
-# Optional: prevent overlapping invocations of the same job
 concurrency:
   group: cron-${{ github.workflow }}-${{ github.job }}
   cancel-in-progress: false
