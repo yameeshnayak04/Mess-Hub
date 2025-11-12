@@ -1,127 +1,112 @@
-/**
- * Calculate the number of days in a date range
- * @param {Date} startDate 
- * @param {Date} endDate 
- * @returns {Number} Number of days
- */
-exports.calculateDaysDifference = (startDate, endDate) => {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const diffTime = Math.abs(end - start);
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end date
-  return diffDays;
-};
-// utils/billCalculation.js (replace checkMealTiming with this version and add helpers)
+// utils/billCalculation.js
 
-// Default to IST (+5:30 = 330 minutes); override per env if needed
+// Timezone offset in minutes (default IST: +5:30 = 330). Can be overridden via env.
 const DEFAULT_TZ_OFFSET_MIN = parseInt(process.env.TZ_OFFSET_MINUTES || '330', 10);
 
-// Get “local” minutes since midnight using UTC clock + offset, stable across servers
+// Convert a Date to “local clock” minutes since midnight for a fixed offset.
+// Works consistently across servers regardless of host timezone.
 const getLocalMinutes = (now = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) => {
   const utcMin = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const norm = ((offsetMin % 1440) + 1440) % 1440; // normalize offset
+  const norm = ((offsetMin % 1440) + 1440) % 1440;
   return (utcMin + norm) % 1440;
 };
 
-const parseHHMM = (str) => {
-  const [h, m] = String(str || '').split(':');
-  const hh = parseInt(h, 10);
-  const mm = parseInt(m, 10);
-  if (Number.isNaN(hh) || Number.isNaN(mm)) return null;
-  return hh * 60 + mm;
+// Start/end of day using offset timezone (inclusive range).
+const startOfDay = (date = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) => {
+  const d = new Date(date);
+  const utc = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  // Shift to local midnight by subtracting offset from UTC midnight
+  return new Date(utc - offsetMin * 60 * 1000);
 };
 
-// Check if minutes-within-window, supporting windows that wrap past midnight
-const inWindow = (min, start, end) => {
-  if (start == null || end == null) return false;
-  return start <= end ? (min >= start && min <= end) : (min >= start || min <= end);
+const endOfDay = (date = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) => {
+  const s = startOfDay(date, offsetMin);
+  return new Date(s.getTime() + 24 * 60 * 60 * 1000 - 1);
 };
 
-// For a specific window, determine if current time is past its end (wrap-aware)
-const isWindowPast = (min, start, end) => {
-  if (start == null || end == null) return false;
-  return start <= end ? (min > end) : (min > end && min < start);
+// Start/end of a calendar month (1..12) in offset timezone (inclusive).
+const getStartAndEndOfMonth = (month, year, offsetMin = DEFAULT_TZ_OFFSET_MIN) => {
+  // month is 1..12
+  const m0 = month - 1;
+  // Start: first day local midnight => convert by subtracting offset from UTC midnight
+  const startUTC = Date.UTC(year, m0, 1);
+  const startOfMonth = new Date(startUTC - offsetMin * 60 * 1000);
+  // End: day 0 of next month is last day of current month
+  const endUTC = Date.UTC(year, m0 + 1, 1) - 1;
+  const endOfMonth = new Date(endUTC - offsetMin * 60 * 1000 + offsetMin * 60 * 1000); // cancel previous shift then apply inclusive
+  return { startOfMonth, endOfMonth };
 };
 
-/**
- * Timezone-aware meal timing check
- * @param {Object} timings { lunch: {start:'HH:MM', end:'HH:MM'}, dinner: {...} }
- * @param {('Lunch'|'Dinner'|null)} mealType
- * @param {number} tzOffsetMin minutes offset from UTC (default from env)
- * @returns {{ isWithin: boolean, isPast: boolean, currentMeal: string, liveStatus: string }}
- */
-exports.checkMealTiming = (timings, mealType = null, tzOffsetMin = DEFAULT_TZ_OFFSET_MIN) => {
-  const nowMin = getLocalMinutes(new Date(), tzOffsetMin);
+// Days difference inclusive between two dates (00:00 to 23:59:59.999 boundaries respected).
+const calculateDaysDifference = (startDate, endDate) => {
+  const s = new Date(startDate);
+  const e = new Date(endDate);
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.max(0, Math.floor((stripTime(e) - stripTime(s)) / dayMs) + 1);
+};
 
-  const Ls = parseHHMM(timings?.lunch?.start);
-  const Le = parseHHMM(timings?.lunch?.end);
-  const Ds = parseHHMM(timings?.dinner?.start);
-  const De = parseHHMM(timings?.dinner?.end);
+const stripTime = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
-  const lunchNow = inWindow(nowMin, Ls, Le);
-  const dinnerNow = inWindow(nowMin, Ds, De);
+// Check whether the current local time is within or past a configured meal window.
+// timings example per mess:
+// { lunch: { start: '12:00', end: '14:00' }, dinner: { start: '20:00', end: '22:00' } }
+const checkMealTiming = (timings, mealType, offsetMin = DEFAULT_TZ_OFFSET_MIN, now = new Date()) => {
+  const t = timings || {};
+  const key = String(mealType || '').toLowerCase() === 'lunch' ? 'lunch' : 'dinner';
+  const slot = t[key] || {};
+  const parseHM = (s) => {
+    if (!s || typeof s !== 'string') return null;
+    const [hh, mm] = s.split(':').map((x) => parseInt(x, 10));
+    if (Number.isNaN(hh) || Number.isNaN(mm)) return null;
+    return (hh % 24) * 60 + (mm % 60);
+  };
+  const startMin = parseHM(slot.start);
+  const endMin = parseHM(slot.end);
+  const nowMin = getLocalMinutes(now, offsetMin);
 
-  let currentMeal = 'None';
-  let liveStatus = 'Service Closed';
-  if (lunchNow) { currentMeal = 'Lunch'; liveStatus = 'Lunch Ongoing'; }
-  else if (dinnerNow) { currentMeal = 'Dinner'; liveStatus = 'Dinner Ongoing'; }
+  const hasWindow = Number.isInteger(startMin) && Number.isInteger(endMin);
+  const isWithin =
+    hasWindow && (nowMin >= startMin && nowMin <= endMin);
+  const isPast = hasWindow && nowMin > endMin;
 
-  if (mealType === 'Lunch') {
-    return {
-      isWithin: lunchNow,
-      isPast: isWindowPast(nowMin, Ls, Le),
-      currentMeal,
-      liveStatus
-    };
-  } else if (mealType === 'Dinner') {
-    return {
-      isWithin: dinnerNow,
-      isPast: isWindowPast(nowMin, Ds, De),
-      currentMeal,
-      liveStatus
-    };
+  return { hasWindow, isWithin, isPast, startMin, endMin, nowMin };
+};
+
+// Compute the member’s active window within a billing month,
+// given optional membership.startDate and membership.endDate.
+const getActiveWindowForMonth = (membership, startOfMonth, endOfMonth) => {
+  const memberStart = membership?.startDate ? new Date(membership.startDate) : startOfMonth;
+  const memberEnd = membership?.endDate ? new Date(membership.endDate) : endOfMonth;
+
+  const activeStart = memberStart > startOfMonth ? memberStart : startOfMonth;
+  const activeEnd = memberEnd < endOfMonth ? memberEnd : endOfMonth;
+
+  if (activeEnd < activeStart) {
+    return { activeStart: null, activeEnd: null, activeDays: 0, monthDays: calculateDaysDifference(startOfMonth, endOfMonth) };
   }
 
-  // Generic summary
-  return {
-    isWithin: lunchNow || dinnerNow,
-    isPast: false,
-    currentMeal,
-    liveStatus
-  };
+  const activeDays = calculateDaysDifference(activeStart, activeEnd);
+  const monthDays = calculateDaysDifference(startOfMonth, endOfMonth);
+  return { activeStart, activeEnd, activeDays, monthDays };
 };
 
-
-/**
- * Get start and end of day
- * @param {Date} date 
- * @returns {Object} { startOfDay, endOfDay }
- */
-const getStartAndEndOfDay = (date = new Date()) => {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
-
-  return { startOfDay, endOfDay };
+// Helper: meals included per plan name
+const getMealsFromPlan = (planName) => {
+  const p = String(planName || '').toLowerCase();
+  if (p.includes('both')) return ['Lunch', 'Dinner'];
+  if (p.includes('lunch')) return ['Lunch'];
+  if (p.includes('dinner')) return ['Dinner'];
+  return [];
 };
-exports.getStartAndEndOfDay = getStartAndEndOfDay;
 
-// ADDING CONSOLIDATED FUNCTIONS
-exports.startOfDay = (d = new Date()) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
-exports.endOfDay   = (d = new Date()) => { const x = new Date(d); x.setHours(23,59,59,999); return x; };
-
-
-/**
- * Get start and end of month
- * @param {Number} month 
- * @param {Number} year 
- * @returns {Object} { startOfMonth, endOfMonth }
- */
-exports.getStartAndEndOfMonth = (month, year) => {
-  const startOfMonth = new Date(year, month - 1, 1, 0, 0, 0, 0);
-  const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
-
-  return { startOfMonth, endOfMonth };
+module.exports = {
+  DEFAULT_TZ_OFFSET_MIN,
+  getLocalMinutes,
+  startOfDay,
+  endOfDay,
+  getStartAndEndOfMonth,
+  calculateDaysDifference,
+  checkMealTiming,
+  getActiveWindowForMonth,
+  getMealsFromPlan
 };

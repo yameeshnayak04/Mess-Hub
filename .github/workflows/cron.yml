@@ -1,19 +1,17 @@
-# .github/workflows/cron.yml
 name: Cron Triggers
 
 on:
   schedule:
-    # Absent every 30 minutes (UTC)
-    # Absent Job (unchanged): every 30 minutes
+    # Absent Job: every 30 minutes (UTC)
     - cron: '*/30 * * * *'
-    # Billing window: 18:30 UTC on days 28–31
+    # Billing window: 18:30 UTC on days 28–31 (00:00 IST on the 1st)
     - cron: '30 18 28-31 * *'
   workflow_dispatch: {}
 
 jobs:
   absent:
-    # Run only for the */30 schedule or on manual dispatch
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/30 * * * *'
+    # Run only for the */30 schedule (not during the monthly window)
+    if: github.event_name == 'schedule' && github.event.schedule == '*/30 * * * *'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Absent Job
@@ -26,16 +24,14 @@ jobs:
             -H "x-cron-secret: $CRON_SECRET" -H "Accept: application/json"
 
   billing:
-    # Run only for schedule or manual dispatch; date guard controls the actual execution
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # Only evaluate during the monthly window schedule
+    if: github.event_name == 'schedule' && startsWith(github.event.schedule, '30 18')
     runs-on: ubuntu-latest
     steps:
       - id: guard
-        name: Run only when tomorrow in IST is 01
+        name: Run only when tomorrow in IST is the 1st
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif [ "$(TZ=Asia/Kolkata date -d 'tomorrow' +%d)" = "01" ]; then
+          if [ "$(TZ=Asia/Kolkata date -d 'tomorrow' +%d)" = "01" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -47,9 +43,14 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           echo "Triggering Billing Job..."
-          echo "Triggering Billing Job..."
           curl -fsS -X POST "$BASE_URL/api/cron/billing/run" \
             -H "x-cron-secret: $CRON_SECRET" -H "Accept: application/json"
-      - name: Skip Billing Job
+      - name: Skip (not the 1st in IST)
         if: steps.guard.outputs.run == 'false'
-        run: echo "Not the 1st in IST; skipping."
+        run: |
+          echo 'Skipping: not the 1st in IST.'
+
+# Optional: prevent overlapping invocations of the same job
+concurrency:
+  group: cron-${{ github.workflow }}-${{ github.job }}
+  cancel-in-progress: false
