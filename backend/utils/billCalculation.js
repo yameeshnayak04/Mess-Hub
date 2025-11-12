@@ -1,4 +1,5 @@
 // utils/billCalculation.js
+
 // All exported function names/signatures are unchanged to maintain compatibility across controllers, jobs, and routes.
 
 const DEFAULT_TZ_OFFSET_MIN = parseInt(process.env.TZ_OFFSET_MINUTES || '330', 10); // IST by default
@@ -12,16 +13,16 @@ const getLocalMinutes = (now = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) =>
   return (utcMin + normOffset(offsetMin)) % 1440;
 };
 
-// Exported: startOfDay/endOfDay — compute the local (IST) day bounds as UTC instants.
-// These return Date objects that represent the exact start and end instants of the given local day.
+// Exported: startOfDay — compute the local (IST) day start as a UTC instant Date
 function startOfDay(date = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) {
   const d = new Date(date);
-  // 1) Construct the UTC midnight for the calendar day of 'd'
+  // Construct the UTC midnight for the calendar day of 'd'
   const utcMidnight = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  // 2) Shift that instant backward by the offset to get the local midnight as a UTC instant
+  // Shift that instant backward by the offset to get the local midnight as a UTC instant
   return new Date(utcMidnight - offsetMin * 60 * 1000);
 }
 
+// Exported: endOfDay — compute the local (IST) day end as a UTC instant Date
 function endOfDay(date = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) {
   const s = startOfDay(date, offsetMin);
   return new Date(s.getTime() + 24 * 60 * 60 * 1000 - 1);
@@ -32,7 +33,7 @@ function getStartAndEndOfDay(date = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MI
   return { startOfDay: startOfDay(date, offsetMin), endOfDay: endOfDay(date, offsetMin) };
 }
 
-// Internal: strip time for inclusive day arithmetic
+// Internal: strip time for inclusive day arithmetic (local calendar, not offset-corrected)
 const stripTime = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const dayMs = 24 * 60 * 60 * 1000;
 
@@ -51,13 +52,10 @@ function getStartAndEndOfMonth(month, year, offsetMin = DEFAULT_TZ_OFFSET_MIN) {
   // Local first-of-month midnight as a UTC instant
   const startUTC = Date.UTC(year, m0, 1);
   const startOfMonth = new Date(startUTC - offsetMin * 60 * 1000);
-
-  // Local last millisecond of month:
-  // Take local first-of-next-month midnight and subtract 1 millisecond.
+  // Local last millisecond of month: local first-of-next-month midnight minus 1 ms
   const nextMonthUTC = Date.UTC(year, m0 + 1, 1);
   const startOfNextLocal = new Date(nextMonthUTC - offsetMin * 60 * 1000);
   const endOfMonth = new Date(startOfNextLocal.getTime() - 1);
-
   return { startOfMonth, endOfMonth };
 }
 
@@ -65,9 +63,6 @@ function getStartAndEndOfMonth(month, year, offsetMin = DEFAULT_TZ_OFFSET_MIN) {
 // timings: { lunch: { start: '12:00', end: '14:00' }, dinner: { start: '20:00', end: '22:00' } }
 function checkMealTiming(timings, mealType, offsetMin = DEFAULT_TZ_OFFSET_MIN, now = new Date()) {
   const t = timings || {};
-  const key = String(mealType || '').toLowerCase() === 'lunch' ? 'lunch' : 'dinner';
-  const slot = t[key] || {};
-
   const parseHM = (s) => {
     if (!s || typeof s !== 'string') return null;
     const parts = s.split(':');
@@ -78,15 +73,48 @@ function checkMealTiming(timings, mealType, offsetMin = DEFAULT_TZ_OFFSET_MIN, n
     return (hh % 24) * 60 + (mm % 60);
   };
 
-  const startMin = parseHM(slot.start);
-  const endMin = parseHM(slot.end);
+  const lunchSlot = t.lunch || {};
+  const dinnerSlot = t.dinner || {};
+
+  const lunchStart = parseHM(lunchSlot.start);
+  const lunchEnd = parseHM(lunchSlot.end);
+  const dinnerStart = parseHM(dinnerSlot.start);
+  const dinnerEnd = parseHM(dinnerSlot.end);
+
   const localNow = getLocalMinutes(now, offsetMin);
 
-  const hasWindow = Number.isInteger(startMin) && Number.isInteger(endMin);
-  const isWithin = hasWindow && localNow >= startMin && localNow <= endMin;
-  const isPast = hasWindow && localNow > endMin;
+  const lunchHas = Number.isInteger(lunchStart) && Number.isInteger(lunchEnd);
+  const dinnerHas = Number.isInteger(dinnerStart) && Number.isInteger(dinnerEnd);
 
-  return { hasWindow, isWithin, isPast, startMin, endMin, nowMin: localNow };
+  const lunchWithin = lunchHas && localNow >= lunchStart && localNow <= lunchEnd;
+  const dinnerWithin = dinnerHas && localNow >= dinnerStart && localNow <= dinnerEnd;
+
+  // Resolve currentMeal preference: explicit mealType first, else whichever window is active.
+  const requested = String(mealType || '').toLowerCase();
+  let currentMeal = 'None';
+  if (requested === 'lunch' && lunchWithin) currentMeal = 'Lunch';
+  else if (requested === 'dinner' && dinnerWithin) currentMeal = 'Dinner';
+  else if (lunchWithin) currentMeal = 'Lunch';
+  else if (dinnerWithin) currentMeal = 'Dinner';
+
+  const hasWindow = (requested === 'lunch' ? lunchHas : requested === 'dinner' ? dinnerHas : lunchHas || dinnerHas);
+  const isWithin = currentMeal !== 'None';
+  const isPast =
+    requested === 'lunch'
+      ? lunchHas && localNow > lunchEnd
+      : requested === 'dinner'
+      ? dinnerHas && localNow > dinnerEnd
+      : (lunchHas && localNow > lunchEnd) && (!dinnerHas || localNow > dinnerEnd);
+
+  return {
+    hasWindow,
+    isWithin,
+    isPast,
+    startMin: currentMeal === 'Lunch' ? lunchStart : currentMeal === 'Dinner' ? dinnerStart : null,
+    endMin: currentMeal === 'Lunch' ? lunchEnd : currentMeal === 'Dinner' ? dinnerEnd : null,
+    nowMin: localNow,
+    currentMeal, // added to help dashboards resolve the active meal string
+  };
 }
 
 // Compatible helpers already referenced in code (names preserved)
@@ -95,12 +123,15 @@ function checkMealTiming(timings, mealType, offsetMin = DEFAULT_TZ_OFFSET_MIN, n
 function getActiveWindowForMonth(membership, startOfMonth, endOfMonth) {
   const memberStart = membership?.startDate ? new Date(membership.startDate) : startOfMonth;
   const memberEnd = membership?.endDate ? new Date(membership.endDate) : endOfMonth;
-
   const activeStart = memberStart > startOfMonth ? memberStart : startOfMonth;
   const activeEnd = memberEnd < endOfMonth ? memberEnd : endOfMonth;
-
   if (activeEnd < activeStart) {
-    return { activeStart: null, activeEnd: null, activeDays: 0, monthDays: calculateDaysDifference(startOfMonth, endOfMonth) };
+    return {
+      activeStart: null,
+      activeEnd: null,
+      activeDays: 0,
+      monthDays: calculateDaysDifference(startOfMonth, endOfMonth),
+    };
   }
   return {
     activeStart,
@@ -127,11 +158,9 @@ module.exports = {
   startOfDay,
   endOfDay,
   calculateDaysDifference,
-
   // Also exported previously/used elsewhere
   getActiveWindowForMonth,
   getMealsFromPlan,
-
   // Expose default offset for consumers that need it
   DEFAULT_TZ_OFFSET_MIN,
 };
