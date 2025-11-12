@@ -152,69 +152,60 @@ exports.getMyMess = async (req, res, next) => {
 };
 
 
-
-// @desc    Discover messes (sorted by distance)
-// @route   GET /api/mess/discover
-// @access  Private (Customer only)
+// @desc Discover messes (all, sorted by distance)
+// @route GET /api/mess/discover
+// @access Private (Customer only)
 exports.discoverMesses = async (req, res, next) => {
   try {
     const { cuisine, serviceType, page = 1, limit = 10 } = req.query;
 
+    // 1) Get user location or fallback (e.g., city center of your market)
+    let userLocation = req.user?.location?.coordinates;
+    const hasValidPoint = Array.isArray(userLocation) && userLocation.length === 2 &&
+                          userLocation.every(v => !Number.isNaN(Number(v)));
+    if (!hasValidPoint) {
+      // Fallback (example: Pune center). Replace with your default region center.
+      userLocation = [73.8567, 18.5204]; // [lng, lat]
+    } else {
+      userLocation = userLocation.map(Number);
+    }
+
+    // 2) Build optional filters
     const matchConditions = {};
-    if (cuisine) matchConditions.cuisine = cuisine;
-    if (serviceType) matchConditions.serviceType = serviceType;
+    if (typeof cuisine === 'string' && cuisine.trim()) matchConditions.cuisine = cuisine.trim();
+    if (typeof serviceType === 'string' && serviceType.trim()) matchConditions.serviceType = serviceType.trim();
 
-    const userLocation = req.user.location.coordinates;
+    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+    const lim = parseInt(limit, 10);
 
+    // 3) Aggregate: $geoNear without maxDistance means include all docs, sorted by distance
     const messes = await Mess.aggregate([
       {
         $geoNear: {
-          near: {
-            type: 'Point',
-            coordinates: userLocation
-          },
+          near: { type: 'Point', coordinates: userLocation },
           distanceField: 'distance',
-          maxDistance: 50000, // 50km radius
-          spherical: true
+          spherical: true,
+          key: 'location'
+          // no maxDistance so we list all messes
         }
       },
-      ...(Object.keys(matchConditions).length > 0 ? [{ $match: matchConditions }] : []),
-      {
-        $lookup: {
-          from: 'reviews',
-          localField: '_id',
-          foreignField: 'mess',
-          as: 'reviews'
-        }
-      },
-      {
-        $addFields: {
-          averageRating: { $avg: '$reviews.rating' },
-          reviewCount: { $size: '$reviews' }
-        }
-      },
-      {
-        $project: {
-          reviews: 0
-        }
-      },
-      { $skip: (parseInt(page) - 1) * parseInt(limit) },
-      { $limit: parseInt(limit) }
+      ...(Object.keys(matchConditions).length ? [{ $match: matchConditions }] : []),
+      { $lookup: { from: 'reviews', localField: '_id', foreignField: 'mess', as: 'reviews' } },
+      { $addFields: { averageRating: { $avg: '$reviews.rating' }, reviewCount: { $size: '$reviews' } } },
+      { $project: { reviews: 0 } },
+      { $skip: skip },
+      { $limit: lim }
     ]);
 
-    // Get total count
-    const totalCount = await Mess.countDocuments(matchConditions);
+    // 4) Total count for pagination (ignores distance)
+    const total = await Mess.countDocuments(matchConditions);
 
-    res.status(200).json({
-      success: true,
-      count: messes.length,
-      total: totalCount,
-      data: messes
-    });
+    return res.status(200).json({ success: true, count: messes.length, total, data: messes });
   } catch (error) {
     next(error);
   }
 };
+
 
 
 // @desc    Get mess by ID
