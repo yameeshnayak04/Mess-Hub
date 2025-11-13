@@ -377,7 +377,7 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
                             },
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
                         _LegendRow(),
                         const SizedBox(height: 12),
                         _DayMeals(
@@ -574,32 +574,50 @@ class _CountsRow extends StatelessWidget {
 }
 
 class _LegendRow extends StatelessWidget {
+  const _LegendRow();
+
   @override
   Widget build(BuildContext context) {
-    Widget dot(Color c) => Container(
-        width: 10,
-        height: 10,
-        decoration: BoxDecoration(color: c, shape: BoxShape.circle));
-    return Row(children: [
-      dot(AppTheme.successGreen),
-      const SizedBox(width: 6),
-      const Text('Present'),
-      const SizedBox(width: 16),
-      dot(AppTheme.warningYellow),
-      const SizedBox(width: 6),
-      const Text('Skipped'),
-      const SizedBox(width: 16),
-      dot(AppTheme.infoBlue),
-      const SizedBox(width: 6),
-      const Text('Leave'),
-      const SizedBox(width: 16),
-      dot(AppTheme.errorRed),
-      const SizedBox(width: 6),
-      const Text('Absent'),
-      const Spacer(),
-      const Icon(Icons.circle, size: 8, color: AppTheme.textSecondary),
-      const SizedBox(width: 6),
-    ]);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 40),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Legend', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 16,
+                runSpacing: 12,
+                children: [
+                  _buildLegendItem('Present', AppTheme.successGreen),
+                  _buildLegendItem('Skipped', AppTheme.warningYellow),
+                  _buildLegendItem('Leave', AppTheme.infoBlue),
+                  _buildLegendItem('Absent', AppTheme.errorRed),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegendItem(String label, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Text(label),
+      ],
+    );
   }
 }
 
