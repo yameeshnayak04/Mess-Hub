@@ -256,8 +256,8 @@ class _AttendanceCalendarScreenState
                                     ),
                                   if (dinner.isNotEmpty)
                                     Container(
-                                      width: 6,
-                                      height: 6,
+                                      width: 8,
+                                      height: 8,
                                       decoration: BoxDecoration(
                                         color: _colorFor(
                                             dinner['status'] as String?),

@@ -79,7 +79,7 @@ class MessDetailsNotifier extends StateNotifier<MessDetailsScreenState> {
     try {
       final now = DateTime.now();
       final start = DateTime(now.year, now.month, now.day);
-      final end = start.add(const Duration(days: 7)); // next 7 days
+      final end = start.add(const Duration(days: 7));
       final menus = await _detailsRepository.getMenu(
           messId: messId, startDate: start, endDate: end);
       state = state.copyWith(menu: AsyncValue.data(menus));

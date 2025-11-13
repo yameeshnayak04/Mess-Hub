@@ -38,6 +38,7 @@ class MembershipDashboardScreen extends ConsumerWidget {
         data: (data) {
           final membership = data['membership'] as Map<String, dynamic>? ?? {};
           final mess = membership['mess'] as Map<String, dynamic>? ?? {};
+          final messId = (mess['_id'] as String?) ?? '';
           final menu = data['todaysMenu'] as Map<String, dynamic>?;
           final summary =
               data['attendanceSummary'] as Map<String, dynamic>? ?? {};
@@ -80,6 +81,7 @@ class MembershipDashboardScreen extends ConsumerWidget {
                   // Actions grid
                   _ActionsGrid(
                     membershipId: membershipId,
+                    messId: messId,
                     onLeaveMembership: () => _confirmLeave(context, ref),
                   ),
                 ],
@@ -432,9 +434,12 @@ class _SkipMealCard extends StatelessWidget {
 // Actions Grid
 class _ActionsGrid extends StatelessWidget {
   final String membershipId;
+  final String messId;
   final VoidCallback onLeaveMembership;
   const _ActionsGrid(
-      {required this.membershipId, required this.onLeaveMembership});
+      {required this.membershipId,
+      required this.messId,
+      required this.onLeaveMembership});
 
   @override
   Widget build(BuildContext context) {
@@ -463,6 +468,18 @@ class _ActionsGrid extends StatelessWidget {
           title: 'View & Pay Bills',
           color: AppTheme.successGreen,
           onTap: () => context.push('/billing/$membershipId'),
+        ),
+        _ActionCard(
+          icon: Icons.rate_review,
+          title: 'Add/Edit Review',
+          color: AppTheme.primaryOrange,
+          onTap: () async {
+            final changed = await context.push<Map?>('/review-editor/$messId');
+            if (changed == true && context.mounted) {
+              // If you later show average rating somewhere, refresh providers here.
+              // ref.invalidate(membershipDetailsProvider(membershipId)); // if using in a ConsumerWidget scope
+            }
+          },
         ),
         _ActionCard(
           icon: Icons.exit_to_app,

@@ -596,7 +596,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
           return const Center(
               child: Padding(
                   padding: EdgeInsets.symmetric(vertical: 48.0),
-                  child: Text('No menus scheduled for the next 7 days',
+                  child: Text('No menus scheduled',
                       style: TextStyle(color: AppTheme.textSecondary))));
         }
         return ListView.separated(
@@ -691,7 +691,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                         Icon(Icons.rate_review_outlined,
                             size: 60, color: AppTheme.textSecondary),
                         SizedBox(height: 16),
-                        Text('No reviews yet. Be the first!',
+                        Text('No reviews yet!',
                             style: TextStyle(color: AppTheme.textSecondary)),
                       ],
                     ),

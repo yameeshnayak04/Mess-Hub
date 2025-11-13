@@ -94,3 +94,72 @@ exports.getReviews = async (req, res, next) => {
     next(error);
   }
 };
+
+// Update or create (upsert) a user's review for a mess
+// @route PUT /api/reviews/:messId
+// @access Private (Customer)
+exports.upsertMyReview = async (req, res, next) => {
+  try {
+    const { messId } = req.params;
+    const { rating, comment } = req.body;
+
+    const mess = await Mess.findById(messId);
+    if (!mess) {
+      return res.status(404).json({ success: false, message: 'Mess not found' });
+    }
+
+    // Must be a current or past member
+    const membership = await Membership.findOne({
+      user: req.user.id,
+      mess: messId,
+      status: { $in: ['Active', 'Inactive'] },
+    });
+    if (!membership) {
+      return res.status(403).json({
+        success: false,
+        message: 'You must be a member of this mess to leave a review',
+      });
+    }
+
+    // Update if exists; else create
+    const existing = await Review.findOne({ user: req.user.id, mess: messId });
+    if (existing) {
+      if (typeof rating === 'number') existing.rating = rating;
+      if (typeof comment === 'string') existing.comment = comment;
+      await existing.save();
+      const populated = await Review.findById(existing._id).populate('user', 'name');
+      return res.status(200).json({ success: true, data: populated, message: 'Review updated successfully' });
+    } else {
+      const created = await Review.create({
+        user: req.user.id,
+        mess: messId,
+        rating,
+        comment,
+      });
+      const populated = await Review.findById(created._id).populate('user', 'name');
+      return res.status(201).json({ success: true, data: populated, message: 'Review added successfully' });
+    }
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'You have already reviewed this mess' });
+    }
+    next(error);
+  }
+};
+
+// Get current user's review for a mess (helps prefill edit form)
+// @route GET /api/reviews/:messId/me
+// @access Private (Customer)
+exports.getMyReview = async (req, res, next) => {
+  try {
+    const { messId } = req.params;
+    const review = await Review.findOne({ user: req.user.id, mess: messId }).populate('user', 'name');
+    if (!review) {
+      return res.status(200).json({ success: true, data: null });
+    }
+    return res.status(200).json({ success: true, data: review });
+  } catch (error) {
+    next(error);
+  }
+};
+

@@ -1,6 +1,7 @@
 // lib/core/navigation/app_router.dart
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mess_management_app/features/customer/membership/screens/review_editor_screen.dart';
 
 // Manager profile
 import 'package:mess_management_app/features/manager/profile/screens/mess_profile_screen.dart';
@@ -134,6 +135,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, state) =>
             BillingScreen(membershipId: state.pathParameters['id']!),
       ),
+      GoRoute(
+        path: '/review-editor/:messId',
+        builder: (context, state) => ReviewEditorScreen(
+          messId: state.pathParameters['messId']!,
+        ),
+      ),
 
       // Manager tabs
       ShellRoute(
@@ -162,8 +169,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path: RouteNames.kioskMode,
           builder: (_, __) => const KioskModeScreen()),
       GoRoute(
-          path: RouteNames.managerMenu,
-          builder: (_, __) => const MenuEditorScreen()),
+        name: RouteNames.managerMenu,
+        path: RouteNames.managerMenu,
+        builder: (_, __) => const MenuEditorScreen(),
+      ),
       GoRoute(
           path: RouteNames.createMessWizard,
           builder: (_, __) => const CreateMessWizardScreen()),
