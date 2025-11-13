@@ -431,11 +431,11 @@ class _LiveBanner extends StatelessWidget {
     final isOngoing = stats.currentMeal != 'None';
     final statusText = isOngoing
         ? '${stats.currentMeal} Ongoing' // Simpler text
-        : 'Closed • Next Meal: ${stats.liveStatus}'; // Use liveStatus for next
+        : 'Closed'; // Use liveStatus for next
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
             colors: [AppTheme.primaryOrange, AppTheme.secondaryOrange]),
       ),
