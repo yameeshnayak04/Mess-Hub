@@ -2,7 +2,16 @@ const Mess = require('../models/Mess');
 const Membership = require('../models/Membership');
 const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
-const { checkMealTiming, getStartAndEndOfDay } = require('../utils/billCalculation');
+const { checkMealTiming, getStartAndEndOfDay, DEFAULT_TZ_OFFSET_MIN } = require('../utils/billCalculation');
+
+function decorateWithIsOpen(doc) {
+  const tz = DEFAULT_TZ_OFFSET_MIN; // 330 (IST)
+  const now = new Date();
+  const lunch = checkMealTiming(doc.timings, 'Lunch', tz, now);
+  const dinner = checkMealTiming(doc.timings, 'Dinner', tz, now);
+  const isOpen = (lunch.hasWindow && lunch.isWithin) || (dinner.hasWindow && dinner.isWithin);
+  return { ...doc.toObject(), isOpen };
+}
 
 // @desc Create new mess
 // @route POST /api/mess
@@ -159,13 +168,13 @@ exports.discoverMesses = async (req, res, next) => {
   try {
     const { cuisine, serviceType, page = 1, limit = 10 } = req.query;
 
-    // 1) Get user location or fallback (e.g., city center of your market)
+    // 1) Get user location or fallback
     let userLocation = req.user?.location?.coordinates;
     const hasValidPoint = Array.isArray(userLocation) && userLocation.length === 2 &&
                           userLocation.every(v => !Number.isNaN(Number(v)));
+    
     if (!hasValidPoint) {
-      // Fallback (example: Pune center). Replace with your default region center.
-      userLocation = [73.8567, 18.5204]; // [lng, lat]
+      userLocation = [73.8567, 18.5204]; // [lng, lat] - Pune center
     } else {
       userLocation = userLocation.map(Number);
     }
@@ -178,7 +187,21 @@ exports.discoverMesses = async (req, res, next) => {
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const lim = parseInt(limit, 10);
 
-    // 3) Aggregate: $geoNear without maxDistance means include all docs, sorted by distance
+    // *** FIX: Ensure all messes have valid location before geoNear ***
+    // First check if there are any invalid locations
+    const invalidCount = await Mess.countDocuments({
+      $or: [
+        { 'location.coordinates': { $exists: false } },
+        { 'location.coordinates': { $not: { $size: 2 } } },
+        { 'location.type': { $ne: 'Point' } }
+      ]
+    });
+
+    // Add location validation to match conditions
+    matchConditions['location.coordinates'] = { $exists: true, $size: 2 };
+    matchConditions['location.type'] = 'Point';
+
+    // 3) Aggregate: $geoNear with validated locations
     const messes = await Mess.aggregate([
       {
         $geoNear: {
@@ -189,16 +212,21 @@ exports.discoverMesses = async (req, res, next) => {
           // no maxDistance so we list all messes
         }
       },
-      ...(Object.keys(matchConditions).length ? [{ $match: matchConditions }] : []),
+      { $match: matchConditions },
       { $lookup: { from: 'reviews', localField: '_id', foreignField: 'mess', as: 'reviews' } },
-      { $addFields: { averageRating: { $avg: '$reviews.rating' }, reviewCount: { $size: '$reviews' } } },
+      { $addFields: { 
+          averageRating: { $avg: '$reviews.rating' }, 
+          reviewCount: { $size: '$reviews' } 
+        } 
+      },
       { $project: { reviews: 0 } },
       { $skip: skip },
       { $limit: lim }
     ]);
 
-    // 4) Total count for pagination (ignores distance)
+    // 4) Total count for pagination
     const total = await Mess.countDocuments(matchConditions);
+
 
     return res.status(200).json({ success: true, count: messes.length, total, data: messes });
   } catch (error) {
