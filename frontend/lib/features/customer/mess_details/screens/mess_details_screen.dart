@@ -369,240 +369,607 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Rating and Review Count / Distance
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Icon(Icons.star_rounded, color: Colors.amber, size: 20),
-              const SizedBox(width: 4),
-              Text(
-                mess.averageRating != null && mess.averageRating! > 0
-                    ? mess.averageRating!.toStringAsFixed(1)
-                    : 'No Rating',
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '(${mess.reviewCount ?? 0} reviews)',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: AppTheme.textSecondary),
-              ),
-              const Spacer(), // Pushes distance to the right
-              if (mess.distance !=
-                  null) // Show distance if available (from discover)
-                Text(
-                  '${(mess.distance! / 1000).toStringAsFixed(1)} km away',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.primaryOrange,
-                        fontWeight: FontWeight.w500,
+          // Rating and Review Count Card
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.star_rounded,
+                        color: Colors.amber, size: 28),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          mess.averageRating != null && mess.averageRating! > 0
+                              ? mess.averageRating!.toStringAsFixed(1)
+                              : 'No Rating',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 24,
+                          ),
+                        ),
+                        Text(
+                          '${mess.reviewCount ?? 0} reviews',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (mess.distance != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryOrange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: AppTheme.primaryOrange.withOpacity(0.3),
+                        ),
                       ),
-                ),
-            ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: AppTheme.primaryOrange,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${(mess.distance! / 1000).toStringAsFixed(1)} km',
+                            style: const TextStyle(
+                              color: AppTheme.primaryOrange,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 16),
 
-          // Address
-          _buildInfoRow(context, Icons.location_on_outlined,
-              '${mess.address}, ${mess.city}'),
-          const SizedBox(height: 12),
+          // Address Card
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryOrange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.location_on_outlined,
+                      color: AppTheme.primaryOrange,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      '${mess.address}, ${mess.city}',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
 
           // Chips: Cuisine, Service Type, Tiffin
-          Wrap(spacing: 8, runSpacing: 4, children: [
-            _buildChip(mess.cuisine),
-            _buildChip(mess.serviceType),
-            // Show Tiffin chip conditionally
-            if (mess.tiffinService)
-              _buildChip('Tiffin Available', AppTheme.successGreen),
-          ]),
-          const SizedBox(height: 16),
-          const Divider(),
-          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildChip(mess.cuisine, AppTheme.primaryOrange),
+              _buildChip(mess.serviceType, Colors.blue),
+              if (mess.tiffinService)
+                _buildChip('Tiffin Available', AppTheme.successGreen),
+            ],
+          ),
+          const SizedBox(height: 24),
 
           // Basic Thali Details Section
-          _buildSectionTitle(context, 'Basic Thali Includes'),
-          const SizedBox(height: 8),
-          _buildInfoRow(
-              context,
-              Icons.restaurant_menu_outlined,
-              mess.basicThaliDetails.isNotEmpty
-                  ? mess.basicThaliDetails
-                  : 'Not specified'),
-          const SizedBox(height: 16),
-          const Divider(),
+          _buildSectionCard(
+            context,
+            icon: Icons.restaurant_menu_outlined,
+            title: 'Basic Thali Includes',
+            content: mess.basicThaliDetails.isNotEmpty
+                ? mess.basicThaliDetails
+                : 'Not specified',
+          ),
           const SizedBox(height: 16),
 
           // Timings Section
-          _buildSectionTitle(context, 'Timings'),
-          const SizedBox(height: 8),
-          _buildInfoRow(context, Icons.wb_sunny_outlined,
-              'Lunch: ${mess.timings.lunch.start} - ${mess.timings.lunch.end}'),
-          const SizedBox(height: 8),
-          _buildInfoRow(context, Icons.nightlight_outlined,
-              'Dinner: ${mess.timings.dinner.start} - ${mess.timings.dinner.end}'),
-          const SizedBox(height: 16),
-          const Divider(),
+          _buildSectionCard(
+            context,
+            icon: Icons.access_time_outlined,
+            title: 'Timings',
+            content: Column(
+              children: [
+                _buildTimingRow(
+                  context,
+                  Icons.wb_sunny_outlined,
+                  'Lunch',
+                  '${mess.timings.lunch.start} - ${mess.timings.lunch.end}',
+                  Colors.orange,
+                ),
+                const SizedBox(height: 12),
+                _buildTimingRow(
+                  context,
+                  Icons.nightlight_outlined,
+                  'Dinner',
+                  '${mess.timings.dinner.start} - ${mess.timings.dinner.end}',
+                  Colors.indigo,
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
 
           // Plans Section
-          _buildSectionTitle(context, 'Monthly Plans'),
-          const SizedBox(height: 8),
-          if (mess.plans.isEmpty)
-            Padding(
-              // Add padding for empty state
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: const Text('No monthly plans listed.',
-                  style: TextStyle(color: AppTheme.textSecondary)),
-            )
-          else
-            // Use Column for non-scrollable list within SingleChildScrollView
-            Column(
-              children: mess.plans
-                  .map((plan) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                                child: Text(plan.name,
+          _buildSectionCard(
+            context,
+            icon: Icons.payment_outlined,
+            title: 'Monthly Plans',
+            content: mess.plans.isEmpty
+                ? const Text(
+                    'No monthly plans listed.',
+                    style: TextStyle(color: AppTheme.textSecondary),
+                  )
+                : Column(
+                    children: [
+                      ...mess.plans.map((plan) => Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryOrange.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppTheme.primaryOrange.withOpacity(0.2),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    plan.name,
                                     style: Theme.of(context)
                                         .textTheme
-                                        .bodyMedium)), // Allow name to wrap
-                            const SizedBox(width: 16),
-                            Text('₹${plan.rate.toStringAsFixed(0)}',
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primaryOrange,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    '₹${plan.rate.toStringAsFixed(0)}/mo',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )),
+                      if (mess.dailyThaliRate != null &&
+                          mess.serviceType == 'Both Daily & Monthly')
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.blue.withOpacity(0.2),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Daily Thali Rate',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium
-                                    ?.copyWith(fontWeight: FontWeight.w600)),
-                          ],
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w500,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  '₹${mess.dailyThaliRate!.toStringAsFixed(0)}/day',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ))
-                  .toList(),
-            ),
-          // Daily Rate (Show only if applicable)
-          if (mess.dailyThaliRate != null &&
-              mess.serviceType == 'Both Daily & Monthly') ...[
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Daily Thali Rate',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(fontStyle: FontStyle.italic)),
-                Text('₹${mess.dailyThaliRate!.toStringAsFixed(0)}',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontStyle: FontStyle.italic)),
-              ],
-            ),
-          ],
-          const SizedBox(height: 16),
-          const Divider(),
+                    ],
+                  ),
+          ),
           const SizedBox(height: 16),
 
           // Rules Section
-          _buildSectionTitle(context, 'Rules & Policies'),
-          const SizedBox(height: 8),
-          _buildInfoRow(context, Icons.calendar_month_outlined,
-              'Min. Leave for Rebate: ${mess.rules.minLeaveDaysForRebate} days'),
-          const SizedBox(height: 8),
-          _buildInfoRow(context, Icons.money_off_csred_outlined,
-              'Rebate per Meal (on leave): ₹${mess.rules.rebatePerThali.toStringAsFixed(0)}'),
-          const SizedBox(height: 8),
-          _buildInfoRow(context, Icons.skip_next_outlined,
-              'Skip Allowance: ${mess.rules.skipAllowancePercent.toStringAsFixed(0)}% meals/month'),
-          // Conditionally display optional rules
-          if (mess.rules.securityDeposit != null &&
-              mess.rules.securityDeposit! > 0) ...[
-            const SizedBox(height: 8),
-            _buildInfoRow(context, Icons.shield_outlined,
-                'Security Deposit: ₹${mess.rules.securityDeposit!.toStringAsFixed(0)}'),
-          ],
-          if (mess.rules.minMonthlyCharge != null &&
-              mess.rules.minMonthlyCharge! > 0) ...[
-            const SizedBox(height: 8),
-            _buildInfoRow(context, Icons.receipt_long_outlined,
-                'Min. Monthly Charge: ₹${mess.rules.minMonthlyCharge!.toStringAsFixed(0)}'),
-          ],
-          // Add padding below rules before the next section or end
-          const SizedBox(height: 16),
+          _buildSectionCard(
+            context,
+            icon: Icons.rule_outlined,
+            title: 'Rules & Policies',
+            content: Column(
+              children: [
+                _buildRuleItem(
+                  context,
+                  Icons.calendar_month_outlined,
+                  'Min. Leave for Rebate',
+                  '${mess.rules.minLeaveDaysForRebate} days',
+                ),
+                const Divider(height: 20),
+                _buildRuleItem(
+                  context,
+                  Icons.money_off_csred_outlined,
+                  'Rebate per Meal',
+                  '₹${mess.rules.rebatePerThali.toStringAsFixed(0)}',
+                ),
+                const Divider(height: 20),
+                _buildRuleItem(
+                  context,
+                  Icons.skip_next_outlined,
+                  'Skip Allowance',
+                  '${mess.rules.skipAllowancePercent.toStringAsFixed(0)}% meals/month',
+                ),
+                if (mess.rules.securityDeposit != null &&
+                    mess.rules.securityDeposit! > 0) ...[
+                  const Divider(height: 20),
+                  _buildRuleItem(
+                    context,
+                    Icons.shield_outlined,
+                    'Security Deposit',
+                    '₹${mess.rules.securityDeposit!.toStringAsFixed(0)}',
+                  ),
+                ],
+                if (mess.rules.minMonthlyCharge != null &&
+                    mess.rules.minMonthlyCharge! > 0) ...[
+                  const Divider(height: 20),
+                  _buildRuleItem(
+                    context,
+                    Icons.receipt_long_outlined,
+                    'Min. Monthly Charge',
+                    '₹${mess.rules.minMonthlyCharge!.toStringAsFixed(0)}',
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
         ],
       ),
     );
   }
 
-  // Helper for info rows with icons
-  Widget _buildInfoRow(BuildContext context, IconData icon, String text,
-      {Color? iconColor}) {
+  // Helper for section cards
+  Widget _buildSectionCard(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required dynamic content,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryOrange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: AppTheme.primaryOrange,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (content is String)
+              Text(
+                content,
+                style: Theme.of(context).textTheme.bodyMedium,
+              )
+            else
+              content,
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Helper for timing rows
+  Widget _buildTimingRow(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String time,
+    Color color,
+  ) {
     return Row(
-      crossAxisAlignment:
-          CrossAxisAlignment.start, // Align text nicely if it wraps
       children: [
-        Padding(
-          // Add padding around icon for better spacing
-          padding: const EdgeInsets.only(top: 2.0),
-          child:
-              Icon(icon, size: 18, color: iconColor ?? AppTheme.textSecondary),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 20, color: color),
         ),
         const SizedBox(width: 12),
         Expanded(
-            child: Text(text, style: Theme.of(context).textTheme.bodyMedium)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                time,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
 
-  // Helper for section titles
-  Widget _buildSectionTitle(BuildContext context, String title) {
-    // Use headlineSmall for better hierarchy
-    return Text(title, style: Theme.of(context).textTheme.headlineSmall);
-  }
-
-  // Chip widget
-  Widget _buildChip(String label, [Color? color]) {
-    final chipColor = color ?? AppTheme.primaryOrange;
-    // Use Flutter's Chip widget for consistency and semantics
-    return Chip(
-      label: Text(label),
-      labelStyle: TextStyle(
-          color: chipColor, fontSize: 12, fontWeight: FontWeight.w500),
-      backgroundColor: chipColor.withOpacity(0.1),
-      visualDensity: VisualDensity.compact, // Make chip smaller
-      side: BorderSide(color: chipColor.withOpacity(0.3)),
-      padding: const EdgeInsets.symmetric(
-          horizontal: 8, vertical: 2), // Adjust padding
+  // Helper for rule items
+  Widget _buildRuleItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+  ) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: AppTheme.textSecondary),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.primaryOrange,
+              ),
+        ),
+      ],
     );
   }
 
-  // Placeholder for Menu Tab
+  // Chip widget - updated for better visuals
+  Widget _buildChip(String label, [Color? color]) {
+    final chipColor = color ?? AppTheme.primaryOrange;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: chipColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: chipColor.withOpacity(0.4),
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: chipColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: chipColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Enhanced Menu Tab with better design
   Widget _buildMenuTab(Mess mess) {
     final menuAsync =
         ref.watch(messDetailsProvider(widget.messId).select((s) => s.menu));
     return menuAsync.when(
       loading: () => const Center(
-          child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 48.0),
-              child: CircularProgressIndicator())),
+        child: Padding(
+          padding: EdgeInsets.all(48.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(AppTheme.primaryOrange),
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Loading menu...',
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      ),
       error: (e, _) => Center(
-          child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 48.0),
-              child: Text('Could not load menu: $e',
-                  style: const TextStyle(color: AppTheme.errorRed)))),
+        child: Padding(
+          padding: const EdgeInsets.all(48.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppTheme.errorRed.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.restaurant_menu_rounded,
+                  size: 48,
+                  color: AppTheme.errorRed,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Could not load menu',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                e.toString(),
+                style: const TextStyle(color: AppTheme.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
       data: (menus) {
         if (menus.isEmpty) {
-          return const Center(
-              child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 48.0),
-                  child: Text('No menus scheduled',
-                      style: TextStyle(color: AppTheme.textSecondary))));
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(48.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.restaurant_menu_rounded,
+                      size: 64,
+                      color: AppTheme.textSecondary.withOpacity(0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'No Menus Scheduled',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'The mess hasn\'t added any upcoming menus yet',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
         }
+
         return ListView.separated(
           padding: const EdgeInsets.all(16),
           itemCount: menus.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          separatorBuilder: (_, __) => const SizedBox(height: 16),
           itemBuilder: (context, index) {
             final m = menus[index];
             final date = DateTime.tryParse(m['date']?.toString() ?? '');
@@ -610,44 +977,315 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                 (m['lunchItems'] as List?)?.cast<String>() ?? const <String>[];
             final dinner =
                 (m['dinnerItems'] as List?)?.cast<String>() ?? const <String>[];
+
+            final isToday = date != null &&
+                date.year == DateTime.now().year &&
+                date.month == DateTime.now().month &&
+                date.day == DateTime.now().day;
+
+            final isTomorrow = date != null &&
+                date.year == DateTime.now().add(const Duration(days: 1)).year &&
+                date.month ==
+                    DateTime.now().add(const Duration(days: 1)).month &&
+                date.day == DateTime.now().add(const Duration(days: 1)).day;
+
             return Card(
-              elevation: 1,
+              elevation: 0,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: isToday
+                      ? AppTheme.primaryOrange.withOpacity(0.3)
+                      : Colors.grey.shade200,
+                  width: isToday ? 2 : 1,
+                ),
+              ),
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      date != null
-                          ? DateFormat('EEE, MMM d').format(date.toLocal())
-                          : 'Scheduled Menu',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                    // Date Header
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: isToday
+                                ? AppTheme.primaryOrange.withOpacity(0.1)
+                                : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.calendar_today_rounded,
+                            size: 20,
+                            color: isToday
+                                ? AppTheme.primaryOrange
+                                : AppTheme.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                date != null
+                                    ? DateFormat('EEEE').format(date.toLocal())
+                                    : 'Scheduled',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                date != null
+                                    ? DateFormat('MMM d, y')
+                                        .format(date.toLocal())
+                                    : 'Menu',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (isToday)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryOrange,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'Today',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          )
+                        else if (isTomorrow)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'Tomorrow',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Row(children: [
-                      const Icon(Icons.wb_sunny_outlined,
-                          size: 18, color: AppTheme.textSecondary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                          child: Text(lunch.isEmpty
-                              ? 'No lunch items listed'
-                              : lunch.join(', '))),
-                    ]),
-                    const SizedBox(height: 6),
-                    Row(children: [
-                      const Icon(Icons.nightlight_outlined,
-                          size: 18, color: AppTheme.textSecondary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                          child: Text(dinner.isEmpty
-                              ? 'No dinner items listed'
-                              : dinner.join(', '))),
-                    ]),
+
+                    const SizedBox(height: 20),
+
+                    // Lunch Section
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.orange.shade200,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade100,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  Icons.wb_sunny_rounded,
+                                  size: 16,
+                                  color: Colors.orange.shade700,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Lunch',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  color: Colors.orange.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          if (lunch.isEmpty)
+                            Text(
+                              'No items listed',
+                              style: TextStyle(
+                                color: AppTheme.textSecondary.withOpacity(0.7),
+                                fontStyle: FontStyle.italic,
+                              ),
+                            )
+                          else
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: lunch.map((item) {
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.orange.shade200,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 5,
+                                        height: 5,
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.shade600,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        item,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.orange.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Dinner Section
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.indigo.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.indigo.shade200,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.indigo.shade100,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  Icons.nightlight_rounded,
+                                  size: 16,
+                                  color: Colors.indigo.shade700,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Dinner',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  color: Colors.indigo.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          if (dinner.isEmpty)
+                            Text(
+                              'No items listed',
+                              style: TextStyle(
+                                color: AppTheme.textSecondary.withOpacity(0.7),
+                                fontStyle: FontStyle.italic,
+                              ),
+                            )
+                          else
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: dinner.map((item) {
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.indigo.shade200,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 5,
+                                        height: 5,
+                                        decoration: BoxDecoration(
+                                          color: Colors.indigo.shade600,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        item,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.indigo.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -658,22 +1296,20 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
     );
   }
 
-  // *** CORRECTED _buildReviewsTab ***
+  // Enhanced Reviews Tab with better design
   Widget _buildReviewsTab(Mess mess) {
-    // Watch the reviews part of the state *within* this tab builder
     final reviewsAsyncValue =
         ref.watch(messDetailsProvider(widget.messId).select((s) => s.reviews));
-    // Return the actual reviews section widget, passing the AsyncValue
-    // Use SingleChildScrollView as the direct child for scrolling.
-    // REMOVED RefreshIndicator - the top-level one handles refresh.
     return SingleChildScrollView(
-        child: _buildReviewsSection(context, reviewsAsyncValue));
+      child: _buildReviewsSection(context, reviewsAsyncValue),
+    );
   }
 
   Widget _buildReviewsSection(
       BuildContext context, AsyncValue<List<Review>> reviewsAsyncValue) {
     final notifier = ref.read(messDetailsProvider(widget.messId).notifier);
     final state = ref.watch(messDetailsProvider(widget.messId));
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -682,126 +1318,348 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
           reviewsAsyncValue.when(
             data: (reviews) {
               if (reviews.isEmpty) {
-                return const Center(
+                return Center(
                   child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 48.0),
+                    padding: const EdgeInsets.symmetric(vertical: 64.0),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.rate_review_outlined,
-                            size: 60, color: AppTheme.textSecondary),
-                        SizedBox(height: 16),
-                        Text('No reviews yet!',
-                            style: TextStyle(color: AppTheme.textSecondary)),
+                        Container(
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.rate_review_rounded,
+                            size: 64,
+                            color: AppTheme.textSecondary.withOpacity(0.5),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'No Reviews Yet',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Be the first to share your experience!',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 14,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ],
                     ),
                   ),
                 );
               }
+
               return Column(
                 children: [
-                  ListView.builder(
+                  // Reviews header with count
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppTheme.primaryOrange.withOpacity(0.1),
+                          AppTheme.primaryOrange.withOpacity(0.05),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppTheme.primaryOrange.withOpacity(0.2),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryOrange.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.reviews_rounded,
+                            color: AppTheme.primaryOrange,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${reviews.length} ${reviews.length == 1 ? 'Review' : 'Reviews'}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                            Text(
+                              'From our customers',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Reviews list
+                  ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: reviews.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final review = reviews[index];
+                      final initial = (review.userName?.isNotEmpty ?? false)
+                          ? review.userName![0].toUpperCase()
+                          : '?';
+
                       return Card(
-                        elevation: 1,
-                        margin: const EdgeInsets.only(bottom: 12),
+                        elevation: 0,
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(color: Colors.grey.shade200),
+                        ),
                         child: Padding(
-                          padding: const EdgeInsets.all(12.0),
+                          padding: const EdgeInsets.all(16.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(children: [
-                                CircleAvatar(
-                                  radius: 16,
-                                  backgroundColor: AppTheme.lightOrange,
-                                  child: Text(
-                                    (review.userName?.isNotEmpty ?? false)
-                                        ? review.userName![0].toUpperCase()
-                                        : '?',
-                                    style: const TextStyle(
-                                        color: AppTheme.primaryOrange,
-                                        fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(review.userName ?? 'Anonymous',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
-                                          ?.copyWith(
-                                              fontWeight: FontWeight.w600)),
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: List.generate(
-                                    5,
-                                    (i) => Icon(
-                                      i < review.rating
-                                          ? Icons.star_rounded
-                                          : Icons.star_border_rounded,
-                                      color: Colors.amber,
-                                      size: 18,
+                              // User info and rating
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          AppTheme.primaryOrange,
+                                          AppTheme.primaryOrange
+                                              .withOpacity(0.7),
+                                        ],
+                                      ),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        initial,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 20,
+                                        ),
+                                      ),
                                     ),
                                   ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          review.userName ?? 'Anonymous',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          DateFormat.yMMMd().format(
+                                              review.createdAt?.toLocal() ??
+                                                  DateTime.now()),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: AppTheme.textSecondary,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: Colors.amber.withOpacity(0.3),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.star_rounded,
+                                          color: Colors.amber,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '${review.rating}.0',
+                                          style: const TextStyle(
+                                            color: Colors.amber,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              // Star rating display
+                              const SizedBox(height: 12),
+                              Row(
+                                children: List.generate(
+                                  5,
+                                  (i) => Icon(
+                                    i < review.rating
+                                        ? Icons.star_rounded
+                                        : Icons.star_border_rounded,
+                                    color: i < review.rating
+                                        ? Colors.amber
+                                        : Colors.grey.shade300,
+                                    size: 20,
+                                  ),
                                 ),
-                              ]),
+                              ),
+
+                              // Review comment
                               if (review.comment != null &&
                                   review.comment!.trim().isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Text(review.comment!,
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    review.comment!,
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodyMedium
                                         ?.copyWith(
-                                            color: AppTheme.textSecondary)),
+                                          color: AppTheme.textPrimary,
+                                          height: 1.5,
+                                        ),
+                                  ),
+                                ),
                               ],
-                              const SizedBox(height: 8),
-                              Text(
-                                DateFormat.yMMMd().add_jm().format(
-                                    review.createdAt?.toLocal() ??
-                                        DateTime.now()),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                        color: AppTheme.textSecondary
-                                            .withOpacity(0.7)),
-                              ),
                             ],
                           ),
                         ),
                       );
                     },
                   ),
+
+                  // Load more button
                   if (state.reviewsHasMore)
                     Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: OutlinedButton.icon(
-                        onPressed: () => notifier.loadMoreReviews(),
-                        icon: const Icon(Icons.expand_more),
-                        label: const Text('Load more'),
+                      padding: const EdgeInsets.only(top: 16),
+                      child: Center(
+                        child: OutlinedButton.icon(
+                          onPressed: () => notifier.loadMoreReviews(),
+                          icon: const Icon(Icons.expand_more_rounded),
+                          label: const Text('Load More Reviews'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.primaryOrange,
+                            side:
+                                const BorderSide(color: AppTheme.primaryOrange),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                 ],
               );
             },
             loading: () => const Center(
-                child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 48.0),
-              child: CircularProgressIndicator(),
-            )),
+              child: Padding(
+                padding: EdgeInsets.all(48.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      valueColor:
+                          AlwaysStoppedAnimation(AppTheme.primaryOrange),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Loading reviews...',
+                      style: TextStyle(color: AppTheme.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             error: (error, stack) => Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 48.0),
-                child: Text('Could not load reviews: $error',
-                    style: const TextStyle(color: AppTheme.errorRed)),
+                padding: const EdgeInsets.all(48.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: AppTheme.errorRed.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.error_outline_rounded,
+                        size: 48,
+                        color: AppTheme.errorRed,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Could not load reviews',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      error.toString(),
+                      style: const TextStyle(color: AppTheme.textSecondary),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
