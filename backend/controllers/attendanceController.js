@@ -4,7 +4,14 @@ const Mess = require('../models/Mess');
 const User = require('../models/User');
 const Leave = require('../models/Leave');
 // FIX: Import from consolidated utility
-const { checkMealTiming, getStartAndEndOfDay, getStartAndEndOfMonth, startOfDay, endOfDay } = require('../utils/billCalculation');
+const {
+  checkMealTiming,
+  getStartAndEndOfDay,
+  getStartAndEndOfMonth,
+  startOfDay,
+  endOfDay,
+  DEFAULT_TZ_OFFSET_MIN,
+} = require('../utils/billCalculation');
 
 // helpers (add near the top of file)
 const getMealsFromPlan = (planName) => {
@@ -40,6 +47,8 @@ const buildMealTypeFilterOrError = (membership, reqMealType) => {
   }
   return { filter: { mealType: { $in: allowed } }, resolvedMeals: allowed };
 };
+
+const TZ_MS = DEFAULT_TZ_OFFSET_MIN * 60 * 1000;
 
 
 // @desc Skip a meal
@@ -312,23 +321,30 @@ exports.getMyAttendance = async (req, res, next) => {
 
     // Day-level grouping to avoid duplicate dots for one-day leave spanning multiple meals
     const dayMap = new Map();
+
     for (const r of records) {
-      const key = r.date.toISOString().slice(0, 10); // YYYY-MM-DD
+      // Shift stored UTC instant into IST calendar before deriving YYYY-MM-DD
+      const istDate = new Date(r.date.getTime() + TZ_MS);
+      const key = istDate.toISOString().slice(0, 10); // YYYY-MM-DD in IST
+    
       if (!dayMap.has(key)) {
         dayMap.set(key, {
-          date: r.date,
+          date: istDate,
           hasLeave: false,
           hasSkipped: false,
           hasPresent: false,
           meals: [],
         });
       }
+    
       const d = dayMap.get(key);
       d.meals.push({ mealType: r.mealType, status: r.status, attendanceId: r._id });
+    
       if (r.status === 'Leave') d.hasLeave = true;
       if (r.status === 'Skipped') d.hasSkipped = true;
       if (r.status === 'Present') d.hasPresent = true;
     }
+
 
     const calendarDays = Array.from(dayMap.values()).sort(
       (a, b) => a.date.getTime() - b.date.getTime()
@@ -397,40 +413,54 @@ exports.getMemberAttendance = async (req, res, next) => {
     // - For single-meal plans, collapse multiple Leave records on the same day into one
     // - Also guard against accidental duplicates for same day+meal+status
     const allowedMeals = getMealsFromPlan(membership.planName);
+
     const seen = new Set();
     const attendance = [];
+
     for (const r of raw) {
-      const day = r.date.toISOString().slice(0, 10); // YYYY-MM-DD
+      // Use IST calendar day when deduplicating
+      const istDate = new Date(r.date.getTime() + TZ_MS);
+      const day = istDate.toISOString().slice(0, 10); // YYYY-MM-DD in IST
+    
       let key;
       if (allowedMeals.length === 1 && r.status === 'Leave') {
         key = `${day}:Leave`; // collapse per-day leave for single-meal plan
       } else {
         key = `${day}:${r.mealType}:${r.status}`;
       }
+    
       if (seen.has(key)) continue;
       seen.add(key);
       attendance.push(r);
     }
 
+
     // Day-level calendar view (one leave dot per day)
     const dayMap = new Map();
+
     for (const r of attendance) {
-      const key = r.date.toISOString().slice(0, 10);
+      // Group by IST calendar date
+      const istDate = new Date(r.date.getTime() + TZ_MS);
+      const key = istDate.toISOString().slice(0, 10);
+    
       if (!dayMap.has(key)) {
         dayMap.set(key, {
-          date: r.date,
+          date: istDate,
           hasLeave: false,
           hasSkipped: false,
           hasPresent: false,
           meals: [],
         });
       }
+    
       const d = dayMap.get(key);
       d.meals.push({ mealType: r.mealType, status: r.status, attendanceId: r._id });
+    
       if (r.status === 'Leave') d.hasLeave = true;
       if (r.status === 'Skipped') d.hasSkipped = true;
       if (r.status === 'Present') d.hasPresent = true;
     }
+
     const calendarDays = Array.from(dayMap.values()).sort(
       (a, b) => a.date.getTime() - b.date.getTime()
     );

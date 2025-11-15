@@ -33,11 +33,18 @@ exports.applyForLeave = async (req, res, next) => {
       }
 
       const messRules = m.mess.rules;
+
+      const dayMs = 24 * 60 * 60 * 1000;
+
+      // Normalize requested range in IST
       const start = startOfDay(new Date(startDate));
       const end = startOfDay(new Date(endDate));
-      const tomorrow = startOfDay(new Date(Date.now() + 24 * 60 * 60 * 1000));
 
-      if (start < tomorrow) {
+      // Compute today/tomorrow in IST
+      const todayIst = startOfDay(new Date());
+      const tomorrowIst = new Date(todayIst.getTime() + dayMs);
+
+      if (start < tomorrowIst) {
         return res.status(400).json({
           success: false,
           message: 'Start date must be at least tomorrow',
@@ -45,7 +52,8 @@ exports.applyForLeave = async (req, res, next) => {
       }
 
       const minDays = messRules.minLeaveDaysForRebate || 1;
-      const leaveDuration = Math.floor((end - start) / (24 * 3600 * 1000)) + 1;
+      const leaveDuration = Math.floor((end - start) / dayMs) + 1;
+
 
       if (leaveDuration < minDays) {
         return res.status(400).json({
@@ -99,8 +107,11 @@ exports.applyForLeave = async (req, res, next) => {
       }
 
       const bulkOps = [];
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const day = startOfDay(d);
+
+      // Walk the already-normalized IST days using milliseconds
+      for (let t = start.getTime(); t <= end.getTime(); t += dayMs) {
+        const day = new Date(t);
+      
         for (const meal of meals) {
           bulkOps.push({
             updateOne: {
@@ -124,6 +135,7 @@ exports.applyForLeave = async (req, res, next) => {
           });
         }
       }
+
 
       if (bulkOps.length > 0) {
         await Attendance.bulkWrite(bulkOps, { session });
