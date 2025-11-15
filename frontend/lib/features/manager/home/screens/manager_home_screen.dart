@@ -415,6 +415,7 @@ class ManagerHomeScreen extends ConsumerWidget {
     );
   }
 
+  // ...existing code...
   Future _showMembersDialog(
     BuildContext context,
     WidgetRef ref,
@@ -425,32 +426,64 @@ class ManagerHomeScreen extends ConsumerWidget {
     final effectiveMeal =
         (mealType == 'Lunch' || mealType == 'Dinner') ? mealType : 'Lunch';
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      useRootNavigator: true,
-      builder: (_) => Center(
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: const Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(color: AppTheme.primaryOrange),
-              SizedBox(height: 16),
-              Text('Loading members...'),
-            ],
-          ),
-        ),
-      ),
-    );
+    // Use the root navigator so the loading dialog sits above everything.
     final rootNav = Navigator.of(context, rootNavigator: true);
 
-    List<Map<String, dynamic>> data;
+    // Track whether the loading dialog was shown so we only pop it once.
+    var loadingVisible = true;
+
+    // Show a modal loading dialog (non-dismissible) using root navigator.
+    // We intentionally do NOT await this so we can run the fetch logic below.
+    showDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false,
+      barrierColor: Colors.black54,
+      builder: (_) {
+        return WillPopScope(
+          // prevent system back button from closing the loading dialog
+          onWillPop: () async => false,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+              margin: const EdgeInsets.symmetric(horizontal: 40),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 12,
+                    offset: Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  SizedBox(
+                    height: 48,
+                    width: 48,
+                    child: CircularProgressIndicator(
+                      color: AppTheme.primaryOrange,
+                      strokeWidth: 3.5,
+                    ),
+                  ),
+                  SizedBox(height: 14),
+                  Text(
+                    'Loading members...',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
     try {
+      List<Map<String, dynamic>> data;
       switch (type) {
         case 'eating':
           data = await ref
@@ -476,33 +509,52 @@ class ManagerHomeScreen extends ConsumerWidget {
           data = const <Map<String, dynamic>>[];
       }
 
-      if (!context.mounted) return;
-      if (rootNav.canPop()) rootNav.pop();
+      // Dismiss loading dialog if still visible. Guard against throwing if already popped.
+      if (loadingVisible) {
+        try {
+          rootNav.pop();
+        } catch (_) {}
+        loadingVisible = false;
+      }
 
-      final members = data.map((m) {
-        final user = (m['user'] is Map)
-            ? Map<String, dynamic>.from(m['user'])
-            : const <String, dynamic>{};
-        final name = (user['name'] ?? '').toString();
-        final phone = (user['phone'] ?? '').toString();
-        return MemberInfo(name: name, phone: phone);
-      }).toList();
+      // normalize entries
+      final membersList = data
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList();
 
-      if (members.isEmpty) {
-        _showInfoSnackBar(context, 'No members found for $effectiveMeal');
+      if (membersList.isEmpty) {
+        if (context.mounted)
+          _showInfoSnackBar(context, 'No members found for $effectiveMeal');
         return;
       }
 
-      showDialog(
+      // show as modal bottom sheet for better mobile UX
+      if (!context.mounted) return;
+      await showModalBottomSheet(
         context: context,
-        builder: (_) => MemberDetailDialog(
-          title: '$title • $effectiveMeal',
-          members: members,
-        ),
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        // keep using the closest navigator for the sheet so popping the root dialog won't affect it
+        useRootNavigator: false,
+        builder: (ctx) {
+          return SafeArea(
+            child: MemberDetailDialog.fromData(
+              title: '$title • $effectiveMeal',
+              data: membersList,
+            ),
+          );
+        },
       );
     } catch (e) {
+      // ensure loading dismissed
+      if (loadingVisible) {
+        try {
+          rootNav.pop();
+        } catch (_) {}
+        loadingVisible = false;
+      }
       if (!context.mounted) return;
-      if (rootNav.canPop()) rootNav.pop();
       _showErrorSnackBar(context, 'Failed: $e');
     }
   }
@@ -807,12 +859,12 @@ class _ModernMenuCard extends StatelessWidget {
             child: CircularProgressIndicator(color: AppTheme.primaryOrange),
           ),
         ),
-        error: (e, _) => Padding(
-          padding: const EdgeInsets.all(24),
+        error: (e, _) => const Padding(
+          padding: EdgeInsets.all(24),
           child: Row(
             children: [
-              const Icon(Icons.error_outline, color: AppTheme.errorRed),
-              const SizedBox(width: 12),
+              Icon(Icons.error_outline, color: AppTheme.errorRed),
+              SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'Failed to load menu',
@@ -894,7 +946,7 @@ class _ModernMenuCard extends StatelessWidget {
                             color: AppTheme.textSecondary.withOpacity(0.5),
                           ),
                           const SizedBox(height: 12),
-                          Text(
+                          const Text(
                             'No menu set for today',
                             style: TextStyle(
                               color: AppTheme.textSecondary,
@@ -959,7 +1011,7 @@ class _ModernMenuCard extends StatelessWidget {
               ),
               child: Text(
                 item,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 13,
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.w500,
