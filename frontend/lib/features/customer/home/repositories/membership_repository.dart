@@ -34,8 +34,10 @@ class MembershipRepository {
         .toList();
   }
 
+  // FIXED: use request-discontinue endpoint instead of deprecated /leave
   Future<void> leaveMembership(String membershipId) async {
-    final res = await _dioClient.put('/membership/leave/$membershipId');
+    final res =
+        await _dioClient.put('/membership/request-discontinue/$membershipId');
     if (res.statusCode != 200) {
       throw res.data?['message'] ?? 'Failed to leave mess';
     }

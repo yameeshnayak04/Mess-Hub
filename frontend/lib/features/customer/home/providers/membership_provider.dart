@@ -16,7 +16,6 @@ final membershipProvider = StateNotifierProvider.autoDispose<MembershipNotifier,
 
 class MembershipNotifier extends StateNotifier<AsyncValue<List<Membership>>> {
   final MembershipRepository _repository;
-
   MembershipNotifier(this._repository) : super(const AsyncValue.loading()) {
     loadMemberships();
   }

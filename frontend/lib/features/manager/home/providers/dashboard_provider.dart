@@ -4,9 +4,8 @@ import '../../../../core/api/dio_client_provider.dart';
 import '../../../../models/dashboard_stats.dart';
 import '../repositories/dashboard_repository.dart';
 
-final dashboardRepositoryProvider = Provider<DashboardRepository>(
-  (ref) => DashboardRepository(ref.watch(dioClientProvider)),
-);
+final dashboardRepositoryProvider =
+    Provider((ref) => DashboardRepository(ref.watch(dioClientProvider)));
 
 final dashboardStatsProvider =
     StateNotifierProvider<DashboardStatsNotifier, AsyncValue<DashboardStats>>(
@@ -31,15 +30,18 @@ class DashboardStatsNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
 
   Future<void> refresh() async => loadStats();
 
-  // Drill-down
-  Future<List<Map<String, dynamic>>> getMembersEating() =>
-      _repository.getMembersEating();
-  Future<List<Map<String, dynamic>>> getMembersOnLeave() =>
-      _repository.getMembersOnLeave();
-  Future<List<Map<String, dynamic>>> getMembersSkipped() =>
-      _repository.getMembersSkipped();
-  Future<List<Map<String, dynamic>>> getMembersRemaining() =>
-      _repository.getMembersRemaining();
+  // UPDATED: drill-down now require explicit mealType (Lunch/Dinner)
+  Future<List<Map<String, dynamic>>> getMembersEating(String mealType) =>
+      _repository.getMembersEating(mealType);
+
+  Future<List<Map<String, dynamic>>> getMembersOnLeave(String mealType) =>
+      _repository.getMembersOnLeave(mealType);
+
+  Future<List<Map<String, dynamic>>> getMembersSkipped(String mealType) =>
+      _repository.getMembersSkipped(mealType);
+
+  Future<List<Map<String, dynamic>>> getMembersRemaining(String mealType) =>
+      _repository.getMembersRemaining(mealType);
 }
 
 // Lists for action center

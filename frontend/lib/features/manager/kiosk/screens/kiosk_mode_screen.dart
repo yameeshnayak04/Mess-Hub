@@ -277,7 +277,7 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen> {
                               final m = e as Map;
                               final meal = (m['mealType'] ?? '').toString();
                               return meal.isEmpty ||
-                                  meal == _meal; // guard by meal when provided
+                                  meal == _meal; // only current meal
                             })
                             .map((e) =>
                                 (e as Map)['user']?['_id'] ?? (e)['user'] ?? '')
@@ -285,14 +285,22 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen> {
                             .toSet();
 
                         final q = _searchCtrl.text.trim().toLowerCase();
+
                         final filtered = list.where((m) {
                           final mm = m as Map;
                           final user = mm['user'] as Map?;
                           final name =
                               (user?['name'] ?? '').toString().toLowerCase();
                           final id = (user?['_id'] ?? '').toString();
-                          final matches = q.isEmpty || name.contains(q);
-                          return matches;
+
+                          final matchesSearch = q.isEmpty || name.contains(q);
+
+                          // NEW: hide on-leave, skipped, and already-present members
+                          final isBlocked = eatingUserIds.contains(id) ||
+                              leaveUserIds.contains(id) ||
+                              skippedUserIds.contains(id);
+
+                          return matchesSearch && !isBlocked;
                         }).toList();
 
                         return GridView.builder(

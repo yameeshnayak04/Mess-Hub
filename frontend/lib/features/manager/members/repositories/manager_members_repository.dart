@@ -94,4 +94,21 @@ class ManagerMembersRepository {
     }
     throw _msg(res, 'Failed to load bills');
   }
+
+  Future<Map<String, dynamic>> approveDiscontinue(String membershipId) async {
+    final res = await _dio.put('/membership/approve-discontinue/$membershipId');
+    if (res.statusCode == 200 && res.data is Map) {
+      return Map<String, dynamic>.from(res.data as Map);
+    }
+    throw _msg(res, 'Failed to approve discontinuation');
+  }
+
+  // NEW: reject customer discontinuation request
+  Future<Map<String, dynamic>> rejectDiscontinue(String membershipId) async {
+    final res = await _dio.put('/membership/reject-discontinue/$membershipId');
+    if (res.statusCode == 200 && res.data is Map) {
+      return Map<String, dynamic>.from(res.data as Map);
+    }
+    throw _msg(res, 'Failed to reject discontinuation');
+  }
 }

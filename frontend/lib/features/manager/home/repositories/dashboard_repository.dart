@@ -17,7 +17,6 @@ class DashboardRepository {
     return fallback;
   }
 
-  // Meal-aware stats for current window (Lunch/Dinner)
   Future<DashboardStats> getDashboardStats() async {
     final res = await _dioClient.get('/mess/my-mess/dashboard');
     if (res.statusCode == 200 && res.data is Map && res.data['data'] is Map) {
@@ -27,56 +26,59 @@ class DashboardRepository {
     throw _msg(res, 'Failed to load dashboard stats');
   }
 
-  Future<List<Map<String, dynamic>>> getMembersRemaining() async {
-    try {
-      final res = await _dioClient.get('/mess/dashboard/members-remaining');
-      if (res.statusCode == 200 &&
-          res.data is Map &&
-          res.data['data'] is List) {
-        return List<Map<String, dynamic>>.from(res.data['data'] as List);
-      }
-      throw _msg(res, 'Failed to load members remaining');
-    } on DioException catch (e) {
-      // Graceful fallback when route isn’t deployed yet
-      if (e.response?.statusCode == 404) {
-        throw 'Members remaining route not found';
-      }
-      rethrow;
+  Future<Map<String, dynamic>> _getMealDashboard(String mealType) async {
+    final res = await _dioClient.get(
+      '/attendance/meal-dashboard',
+      queryParameters: {'mealType': mealType},
+    );
+    if (res.statusCode == 200 && res.data is Map && res.data['data'] is Map) {
+      // Shape: { data: { remaining: { members: [] }, eaten: {...}, onLeave:{...}, skipped:{...}, ... } }
+      return Map<String, dynamic>.from(res.data['data'] as Map);
     }
+    throw _msg(res, 'Failed to load meal dashboard');
   }
 
-  // Drill-down lists shown in MemberDetailDialog (server is meal-aware)
-  Future<List<Map<String, dynamic>>> getMembersEating() async {
-    final res = await _dioClient.get('/mess/dashboard/members-eating');
-    if (res.statusCode == 200 && res.data is Map && res.data['data'] is List) {
-      return (res.data['data'] as List)
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    }
-    throw _msg(res, 'Failed to load members eating');
+  // Meal-aware stats for current window (Lunch/Dinner)
+
+  Future<List<Map<String, dynamic>>> getMembersRemaining(
+      String mealType) async {
+    final data = await _getMealDashboard(mealType);
+    final section = (data['remaining'] as Map?) ?? const {};
+    final list = (section['members'] as List?) ?? const [];
+    return list
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
-  Future<List<Map<String, dynamic>>> getMembersOnLeave() async {
-    final res = await _dioClient.get('/mess/dashboard/members-on-leave');
-    if (res.statusCode == 200 && res.data is Map && res.data['data'] is List) {
-      return (res.data['data'] as List)
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    }
-    throw _msg(res, 'Failed to load members on leave');
+  Future<List<Map<String, dynamic>>> getMembersEating(String mealType) async {
+    final data = await _getMealDashboard(mealType);
+    final section = (data['eaten'] as Map?) ?? const {};
+    final list = (section['members'] as List?) ?? const [];
+    return list
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
-  Future<List<Map<String, dynamic>>> getMembersSkipped() async {
-    final res = await _dioClient.get('/mess/dashboard/members-skipped');
-    if (res.statusCode == 200 && res.data is Map && res.data['data'] is List) {
-      return (res.data['data'] as List)
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    }
-    throw _msg(res, 'Failed to load skipped members');
+  Future<List<Map<String, dynamic>>> getMembersOnLeave(String mealType) async {
+    final data = await _getMealDashboard(mealType);
+    final section = (data['onLeave'] as Map?) ?? const {};
+    final list = (section['members'] as List?) ?? const [];
+    return list
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getMembersSkipped(String mealType) async {
+    final data = await _getMealDashboard(mealType);
+    final section = (data['skipped'] as Map?) ?? const {};
+    final list = (section['members'] as List?) ?? const [];
+    return list
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
   // Payments (manager)

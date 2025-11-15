@@ -73,41 +73,66 @@ class ManagerHomeScreen extends ConsumerWidget {
                           childAspectRatio: 1.3,
                           children: [
                             // 1. Members remaining (popup)
+                            // Members remaining
                             StatCard(
                               title: 'Members remaining$mealTag',
                               value: remaining.toString(),
                               icon: Icons.groups_2_rounded,
                               color: AppTheme.infoBlue,
-                              onTap: () => _showMembersDialog(context, ref,
-                                  'Members remaining', 'remaining'),
+                              onTap: () => _showMembersDialog(
+                                context,
+                                ref,
+                                'Members remaining',
+                                'remaining',
+                                stats.currentMeal,
+                              ),
                             ),
-                            // 2. Members eaten (popup)
+
+// Members eaten
                             StatCard(
                               title: 'Members eaten$mealTag',
                               value: eaten.toString(),
                               icon: Icons.restaurant_rounded,
                               color: Colors.teal,
                               onTap: () => _showMembersDialog(
-                                  context, ref, 'Members eaten', 'eating'),
+                                context,
+                                ref,
+                                'Members eaten',
+                                'eating',
+                                stats.currentMeal,
+                              ),
                             ),
-                            // 3. On leave (popup)
+
+// On leave
                             StatCard(
                               title: 'On leave$mealTag',
                               value: onLeave.toString(),
                               icon: Icons.beach_access_rounded,
                               color: AppTheme.warningYellow,
                               onTap: () => _showMembersDialog(
-                                  context, ref, 'On leave', 'leave'),
+                                context,
+                                ref,
+                                'On leave',
+                                'leave',
+                                stats.currentMeal,
+                              ),
                             ),
-                            // 4. Skipped (popup)
+
+// Skipped
                             StatCard(
                               title: 'Skipped$mealTag',
                               value: skipped.toString(),
                               icon: Icons.remove_circle_outline,
                               color: Colors.pinkAccent,
                               onTap: () => _showMembersDialog(
-                                  context, ref, 'Skipped', 'skipped'),
+                                context,
+                                ref,
+                                'Skipped',
+                                'skipped',
+                                stats.currentMeal,
+                              ),
                             ),
+
                             // 5. Daily Members (no popup)
                             StatCard(
                               title: 'Daily Members$mealTag',
@@ -315,106 +340,84 @@ class ManagerHomeScreen extends ConsumerWidget {
   }
 
   // --- THIS IS THE FIXED FUNCTION ---
-  Future<void> _showMembersDialog(
+  Future _showMembersDialog(
     BuildContext context,
     WidgetRef ref,
     String title,
     String type,
+    String mealType, // 'Lunch' | 'Dinner' | 'None'
   ) async {
-    // Show loader on ROOT navigator so it’s independent of nested GoRouter stacks
+    // Decide effective meal for the dialog; when backend reports 'None',
+    // default to Lunch so that lists still show something.
+    final effectiveMeal =
+        (mealType == 'Lunch' || mealType == 'Dinner') ? mealType : 'Lunch';
+
     showDialog(
       context: context,
       barrierDismissible: false,
       useRootNavigator: true,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-
     final rootNav = Navigator.of(context, rootNavigator: true);
-    List<Map<String, dynamic>> data;
 
+    List<Map<String, dynamic>> data;
     try {
-      // 1. Fetch data based on type
       switch (type) {
         case 'eating':
           data = await ref
               .read(dashboardStatsProvider.notifier)
-              .getMembersEating();
+              .getMembersEating(effectiveMeal);
           break;
         case 'leave':
           data = await ref
               .read(dashboardStatsProvider.notifier)
-              .getMembersOnLeave();
+              .getMembersOnLeave(effectiveMeal);
           break;
         case 'skipped':
           data = await ref
               .read(dashboardStatsProvider.notifier)
-              .getMembersSkipped();
+              .getMembersSkipped(effectiveMeal);
           break;
         case 'remaining':
           data = await ref
               .read(dashboardStatsProvider.notifier)
-              .getMembersRemaining();
+              .getMembersRemaining(effectiveMeal);
           break;
         default:
           data = const <Map<String, dynamic>>[];
       }
 
       if (!context.mounted) return;
-
-      // 2. Close loader
       if (rootNav.canPop()) rootNav.pop();
 
-      // 3. Parse data into MemberInfo list
-      // This logic is preserved from your original file
-      final members = data.map<MemberInfo>((item) {
-        final user = (item['user'] is Map)
-            ? Map<String, dynamic>.from(item['user'] as Map)
-            : <String, dynamic>{};
-        final name = (item['name'] ?? user['name'] ?? 'Unknown').toString();
-
-        // Normalize phone: empty -> null
-        final phoneRaw =
-            (item['phone'] ?? user['phone'])?.toString().trim() ?? '';
-        return MemberInfo(name: name, phone: phoneRaw); // phone is String
+      final members = data.map((m) {
+        final user = (m['user'] is Map)
+            ? Map<String, dynamic>.from(m['user'])
+            : const <String, dynamic>{};
+        final name = (user['name'] ?? '').toString();
+        final phone = (user['phone'] ?? '').toString();
+        return MemberInfo(name: name, phone: phone);
       }).toList();
 
-      // 4. Show the appropriate dialog (MemberDetailDialog or "No members")
-      showDialog(
-        context: context,
-        useRootNavigator: true,
-        builder: (_) {
-          if (members.isEmpty) {
-            return AlertDialog(
-              title: Text(title),
-              content: const Text('No members found'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(_, rootNavigator: true).pop(),
-                  child: const Text('Close'),
-                ),
-              ],
-            );
-          }
-          return MemberDetailDialog(title: title, members: members);
-        },
-      );
-    } catch (e) {
-      // Handle any errors during fetch
-      if (!context.mounted) return;
-      if (rootNav.canPop()) rootNav.pop(); // Close loader
+      if (members.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No members found for $effectiveMeal')),
+        );
+        return;
+      }
 
       showDialog(
         context: context,
-        useRootNavigator: true,
-        builder: (_) => AlertDialog(
-          title: const Text('Error'),
-          content: Text('Failed to load member list: ${e.toString()}'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(_, rootNavigator: true).pop(),
-              child: const Text('Close'),
-            ),
-          ],
+        builder: (_) => MemberDetailDialog(
+            title: '$title • $effectiveMeal', members: members),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      if (rootNav.canPop()) rootNav.pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed: $e'),
+          backgroundColor: AppTheme.errorRed,
         ),
       );
     }

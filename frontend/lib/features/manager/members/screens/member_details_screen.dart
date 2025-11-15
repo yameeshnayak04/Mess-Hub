@@ -67,6 +67,47 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
       }
     }
 
+    // lib/features/manager/members/screens/member_details_screen.dart
+
+    Future _approveDiscontinue() async {
+      try {
+        await ref
+            .read(managerMembersRepositoryProvider)
+            .approveDiscontinue(widget.membershipId);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Discontinuation approved')),
+        );
+        ref.invalidate(memberDetailsProvider(widget.membershipId));
+        ref.invalidate(membersByStatusProvider('Active'));
+        ref.invalidate(membersByStatusProvider('Inactive'));
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e')),
+        );
+      }
+    }
+
+    Future _rejectDiscontinue() async {
+      try {
+        await ref
+            .read(managerMembersRepositoryProvider)
+            .rejectDiscontinue(widget.membershipId);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Discontinuation request rejected')),
+        );
+        ref.invalidate(memberDetailsProvider(widget.membershipId));
+        ref.invalidate(membersByStatusProvider('Active'));
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e')),
+        );
+      }
+    }
+
     Future<void> _reject() async {
       try {
         await ref
@@ -146,6 +187,7 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
                 final address = (map['address'] ?? '').toString().isNotEmpty
                     ? (map['address'] as String?)
                     : null;
+                final leaveRequested = map['leaveRequested'] == true;
 
                 return Column(
                   children: [
@@ -178,8 +220,40 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: ElevatedButton(
-                                  onPressed: _approve,
-                                  child: const Text('Approve')),
+                                onPressed: _approve,
+                                child: const Text('Approve'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // NEW: discontinuation approval when active & requested
+                    if (status == 'Active' && leaveRequested)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: _rejectDiscontinue,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.warningYellow,
+                                  side: const BorderSide(
+                                      color: AppTheme.warningYellow),
+                                ),
+                                child: const Text('Reject discontinue'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: _approveDiscontinue,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.errorRed,
+                                ),
+                                child: const Text('Approve discontinue'),
+                              ),
                             ),
                           ],
                         ),
