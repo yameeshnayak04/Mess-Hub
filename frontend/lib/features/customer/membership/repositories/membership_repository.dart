@@ -29,7 +29,6 @@ class MembershipRepository {
     return (res.data['data'] as List);
   }
 
-  // FIXED: call new backend route for permanent discontinuation request
   Future<Map<String, dynamic>> leaveMess(String membershipId) async {
     final res = await _dio.put('/membership/request-discontinue/$membershipId');
     if (res.statusCode != 200) throw _msg(res);

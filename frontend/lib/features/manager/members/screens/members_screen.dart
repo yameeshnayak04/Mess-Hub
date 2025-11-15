@@ -33,6 +33,42 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
     final active = ref.watch(membersByStatusProvider('Active'));
     final inactive = ref.watch(membersByStatusProvider('Inactive'));
 
+    // lib/features/manager/members/screens/members_screen.dart
+
+    Future _approveDiscontinue(String id) async {
+      try {
+        await ref.read(managerMembersRepositoryProvider).approveDiscontinue(id);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Membership discontinued successfully')),
+        );
+        // Refresh active + inactive lists (status changes to Inactive)
+        ref.invalidate(membersByStatusProvider('Active'));
+        ref.invalidate(membersByStatusProvider('Inactive'));
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e')),
+        );
+      }
+    }
+
+    Future _rejectDiscontinue(String id) async {
+      try {
+        await ref.read(managerMembersRepositoryProvider).rejectDiscontinue(id);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Discontinuation request rejected')),
+        );
+        ref.invalidate(membersByStatusProvider('Active'));
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e')),
+        );
+      }
+    }
+
     Future<void> _approve(String id) async {
       try {
         await ref.read(managerMembersRepositoryProvider).approveMembership(id);
@@ -104,6 +140,7 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
         controller: _controller,
         children: [
           // Pending
+          // Pending tab: join requests + discontinue requests
           pending.when(
             loading: () => const Center(
               child: CircularProgressIndicator(
@@ -115,11 +152,37 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
               detail: e.toString(),
               onRetry: () => ref.refresh(pendingMembersProvider),
             ),
-            data: (list) => _PendingList(
-              list: list.cast<Map<String, dynamic>>(),
-              onApprove: (id) => _approve(id),
-              onReject: (id) => _reject(id),
-            ),
+            data: (pendingListRaw) {
+              final pendingList = pendingListRaw.cast<Map<String, dynamic>>();
+
+              return active.when(
+                loading: () => const Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation(AppTheme.primaryOrange),
+                  ),
+                ),
+                error: (e, st) => _ErrorRetry(
+                  message: 'Failed to load discontinuation requests',
+                  detail: e.toString(),
+                  onRetry: () => ref.refresh(membersByStatusProvider('Active')),
+                ),
+                data: (activeListRaw) {
+                  final activeList = activeListRaw.cast<Map<String, dynamic>>();
+                  final discontinueList = activeList
+                      .where((m) => m['leaveRequested'] == true)
+                      .toList();
+
+                  return _PendingCombinedList(
+                    joinRequests: pendingList,
+                    discontinueRequests: discontinueList,
+                    onApproveJoin: _approve,
+                    onRejectJoin: _reject,
+                    onApproveDiscontinue: _approveDiscontinue,
+                    onRejectDiscontinue: _rejectDiscontinue,
+                  );
+                },
+              );
+            },
           ),
 
           // Active
@@ -340,6 +403,101 @@ class _ErrorRetry extends StatelessWidget {
               label: const Text('Retry')),
         ]),
       ),
+    );
+  }
+}
+
+class _PendingCombinedList extends StatelessWidget {
+  final List<Map<String, dynamic>> joinRequests;
+  final List<Map<String, dynamic>> discontinueRequests;
+  final Future<void> Function(String id) onApproveJoin;
+  final Future<void> Function(String id) onRejectJoin;
+  final Future<void> Function(String id) onApproveDiscontinue;
+  final Future<void> Function(String id) onRejectDiscontinue;
+
+  const _PendingCombinedList({
+    required this.joinRequests,
+    required this.discontinueRequests,
+    required this.onApproveJoin,
+    required this.onRejectJoin,
+    required this.onApproveDiscontinue,
+    required this.onRejectDiscontinue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (joinRequests.isEmpty && discontinueRequests.isEmpty) {
+      return const _EmptyState(message: 'No pending requests');
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (joinRequests.isNotEmpty) ...[
+          Text(
+            'Join requests',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          ...joinRequests.map(
+            (m) => Card(
+              child: ListTile(
+                title: Text((m['user']?['name'] ?? 'Unknown') as String),
+                subtitle: Text((m['planName'] ?? '') as String),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppTheme.errorRed),
+                      onPressed: () => onRejectJoin(m['_id'] as String),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.check, color: Colors.green),
+                      onPressed: () => onApproveJoin(m['_id'] as String),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+        if (discontinueRequests.isNotEmpty) ...[
+          Text(
+            'Discontinuation requests',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          ...discontinueRequests.map(
+            (m) {
+              final user = (m['user'] as Map?) ?? const {};
+              final name = (user['name'] ?? 'Unknown') as String;
+              return Card(
+                child: ListTile(
+                  title: Text(name),
+                  subtitle: const Text('Requests permanent discontinuation'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.close,
+                            color: AppTheme.warningYellow),
+                        onPressed: () =>
+                            onRejectDiscontinue(m['_id'] as String),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.check, color: AppTheme.errorRed),
+                        onPressed: () =>
+                            onApproveDiscontinue(m['_id'] as String),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ],
     );
   }
 }

@@ -17,28 +17,27 @@ class DashboardRepository {
     return fallback;
   }
 
+  // Meal-aware summary stats (current window Lunch/Dinner)
   Future<DashboardStats> getDashboardStats() async {
     final res = await _dioClient.get('/mess/my-mess/dashboard');
     if (res.statusCode == 200 && res.data is Map && res.data['data'] is Map) {
       return DashboardStats.fromJson(
-          Map<String, dynamic>.from(res.data['data'] as Map));
+        Map<String, dynamic>.from(res.data['data'] as Map),
+      );
     }
     throw _msg(res, 'Failed to load dashboard stats');
   }
 
   Future<Map<String, dynamic>> _getMealDashboard(String mealType) async {
     final res = await _dioClient.get(
-      '/attendance/meal-dashboard',
+      '/attendance/dashboard/meal-stats', // <-- correct path
       queryParameters: {'mealType': mealType},
     );
     if (res.statusCode == 200 && res.data is Map && res.data['data'] is Map) {
-      // Shape: { data: { remaining: { members: [] }, eaten: {...}, onLeave:{...}, skipped:{...}, ... } }
       return Map<String, dynamic>.from(res.data['data'] as Map);
     }
     throw _msg(res, 'Failed to load meal dashboard');
   }
-
-  // Meal-aware stats for current window (Lunch/Dinner)
 
   Future<List<Map<String, dynamic>>> getMembersRemaining(
       String mealType) async {

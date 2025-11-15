@@ -103,7 +103,6 @@ class ManagerMembersRepository {
     throw _msg(res, 'Failed to approve discontinuation');
   }
 
-  // NEW: reject customer discontinuation request
   Future<Map<String, dynamic>> rejectDiscontinue(String membershipId) async {
     final res = await _dio.put('/membership/reject-discontinue/$membershipId');
     if (res.statusCode == 200 && res.data is Map) {

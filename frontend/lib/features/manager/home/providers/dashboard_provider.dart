@@ -4,6 +4,8 @@ import '../../../../core/api/dio_client_provider.dart';
 import '../../../../models/dashboard_stats.dart';
 import '../repositories/dashboard_repository.dart';
 
+// lib/features/manager/dashboard/providers/dashboard_provider.dart
+
 final dashboardRepositoryProvider =
     Provider((ref) => DashboardRepository(ref.watch(dioClientProvider)));
 
@@ -14,23 +16,27 @@ final dashboardStatsProvider =
 
 class DashboardStatsNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
   final DashboardRepository _repository;
+
   DashboardStatsNotifier(this._repository) : super(const AsyncValue.loading()) {
     loadStats();
   }
 
   Future<void> loadStats() async {
+    // show loading spinner
     state = const AsyncValue.loading();
     try {
+      // fetch from backend
       final stats = await _repository.getDashboardStats();
+      // push data into state
       state = AsyncValue.data(stats);
     } catch (e, st) {
+      // show error in UI via ErrorView
       state = AsyncValue.error(e, st);
     }
   }
 
   Future<void> refresh() async => loadStats();
 
-  // UPDATED: drill-down now require explicit mealType (Lunch/Dinner)
   Future<List<Map<String, dynamic>>> getMembersEating(String mealType) =>
       _repository.getMembersEating(mealType);
 
