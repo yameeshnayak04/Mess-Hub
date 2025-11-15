@@ -481,34 +481,48 @@ exports.getMemberAttendance = async (req, res, next) => {
   }
 };
 
+// controllers/attendanceController.js
 
-
+// @desc Get per-meal dashboard stats (remaining, eaten, on leave, skipped)
+// @route GET /api/attendance/meal-dashboard?mealType=Lunch|Dinner
+// @access Private (Manager only)
 exports.getMealDashboardStats = async (req, res, next) => {
   try {
-    // 1) Resolve manager's mess
+    // 1. Resolve manager's mess
     const mess = await Mess.findOne({ owner: req.user.id });
     if (!mess) {
-      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
+      return res
+        .status(404)
+        .json({ success: false, message: 'No mess found for this manager' });
     }
 
-    // 2) Resolve current meal (timing-driven), allow override
-    const queryMeal = req.query.mealType;
-    const timingCheck = checkMealTiming(mess.timings, queryMeal || null);
-    const mealType =
-      queryMeal === 'Lunch' || queryMeal === 'Dinner'
-        ? queryMeal
-        : timingCheck.currentMeal === 'Lunch' || timingCheck.currentMeal === 'Dinner'
-        ? timingCheck.currentMeal
-        : 'Lunch'; // default fallback
+    // 2. Resolve meal: allow explicit query even if timing not currently active
+    const queryMeal = req.query.mealType; // 'Lunch' | 'Dinner' | undefined
+    const timingCheck = checkMealTiming(mess.timings, queryMeal); // IST-aware helper
 
+    // If client passes a mealType, trust that (as long as that window exists for the mess);
+    // otherwise, fall back to whatever window is currently active.
+    let mealType;
+    if (queryMeal === 'Lunch' || queryMeal === 'Dinner') {
+      mealType = queryMeal;
+    } else {
+      mealType = timingCheck.currentMeal; // 'Lunch' | 'Dinner' | 'None'
+    }
+
+    if (!mealType || mealType === 'None') {
+      return res.status(403).json({
+        success: false,
+        message: 'No lunch or dinner window configured for this mess.',
+      });
+    }
+
+    // 3. Determine today (IST-normalized) and resolve eligible monthly members
     const todayStart = startOfDay(new Date());
-
-    // 3) Load eligible active monthly members for this meal (plan-based)
     const allMembers = await Membership.find({
       mess: mess._id,
       status: 'Active',
     })
-      .select('_id user planName')
+      .select('id user planName')
       .populate('user', 'name phone');
 
     const eligible = allMembers.filter((m) => {
@@ -518,9 +532,10 @@ exports.getMealDashboardStats = async (req, res, next) => {
       if (mealType === 'Dinner') return plan.includes('dinner');
       return false;
     });
+
     const eligibleIds = eligible.map((m) => m._id.toString());
 
-    // 4) Today’s attendance for the resolved meal (monthly)
+    // 4. Today’s attendance + leave window for this meal
     const todays = await Attendance.find({
       mess: mess._id,
       date: todayStart,
@@ -530,21 +545,30 @@ exports.getMealDashboardStats = async (req, res, next) => {
     })
       .select('user membership status')
       .populate('user', 'name phone')
-      .populate('membership', '_id');
+      .populate('membership', 'id');
 
     const eaten = todays.filter((r) => r.status === 'Present');
     const skipped = todays.filter((r) => r.status === 'Skipped');
     const onLeave = todays.filter((r) => r.status === 'Leave');
 
-    const eatenSet = new Set(eaten.map((r) => String(r.membership?._id || r.membership)));
-    const skippedSet = new Set(skipped.map((r) => String(r.membership?._id || r.membership)));
-    const leaveSet = new Set(onLeave.map((r) => String(r.membership?._id || r.membership)));
+    const eatenSet = new Set(
+      eaten.map((r) => String(r.membership?._id || r.membership)),
+    );
+    const skippedSet = new Set(
+      skipped.map((r) => String(r.membership?._id || r.membership)),
+    );
+    const leaveSet = new Set(
+      onLeave.map((r) => String(r.membership?._id || r.membership)),
+    );
+
     const anyMarked = new Set([...eatenSet, ...skippedSet, ...leaveSet]);
 
-    // 5) Remaining = eligible - anyMarked
-    const remaining = eligible.filter((m) => !anyMarked.has(m._id.toString()));
+    // 5. Remaining eligible = not eaten, not skipped, not on leave
+    const remaining = eligible.filter(
+      (m) => !anyMarked.has(m._id.toString()),
+    );
 
-    // 6) Daily members count (depending on mess service type)
+    // 6. Daily (walk-in) members for this meal, if mess supports it
     let dailyMembersCount = 0;
     if (String(mess.serviceType || '').toLowerCase().includes('daily')) {
       dailyMembersCount = await Attendance.countDocuments({
@@ -556,9 +580,9 @@ exports.getMealDashboardStats = async (req, res, next) => {
       });
     }
 
-    // 7) Build lists for pop-ups (except Daily Members)
+    // 7. Build lists for pop-ups (used by kiosk & dashboard dialogs)
     const toMemberLite = (item) => ({
-      _id: item.user?._id,
+      id: item.user?._id,
       name: item.user?.name,
       phone: item.user?.phone,
       membershipId: item.membership?._id || item.membership,
@@ -568,7 +592,7 @@ exports.getMealDashboardStats = async (req, res, next) => {
     const skippedList = skipped.map(toMemberLite);
     const leaveList = onLeave.map(toMemberLite);
     const remainingList = remaining.map((m) => ({
-      _id: m.user?._id,
+      id: m.user?._id,
       name: m.user?.name,
       phone: m.user?.phone,
       membershipId: m._id,
@@ -582,7 +606,7 @@ exports.getMealDashboardStats = async (req, res, next) => {
         eaten: { count: eatenList.length, members: eatenList },
         onLeave: { count: leaveList.length, members: leaveList },
         skipped: { count: skippedList.length, members: skippedList },
-        dailyMembers: { count: dailyMembersCount }, // No pop-up
+        dailyMembers: { count: dailyMembersCount, members: [] }, // no pop-up yet
       },
     });
   } catch (error) {

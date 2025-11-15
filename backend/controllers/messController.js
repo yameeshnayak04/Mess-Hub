@@ -81,40 +81,84 @@ exports.createMess = async (req, res, next) => {
 // @desc Update manager's mess
 // @route PUT /api/mess/my-mess
 // @access Private (Manager only)
+// controllers/messController.js
+
+// @desc Update manager's mess
+// @route PUT /api/mess/my-mess
+// @access Private (Manager only)
 exports.updateMyMess = async (req, res, next) => {
   try {
     const mess = await Mess.findOne({ owner: req.user.id });
-    if (!mess) return res.status(404).json({ success: false, message: 'No mess found for this manager' });
-
-    const allowedUpdates = [
-      'messName', 'address', 'city', 'contactPhone', 'serviceType',
-      'cuisine', 'maxCapacity', 'timings', 'plans', 'dailyThaliRate', 'rules',
-      'tiffinService', 'basicThaliDetails'
-    ];
-    const updates = {};
-    for (const field of allowedUpdates) {
-      if (Object.prototype.hasOwnProperty.call(req.body, field)) updates[field] = req.body[field];
+    if (!mess) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'No mess found for this manager' });
     }
-    if (req.body.tiffinService === 'true') updates.tiffinService = true;
-    else if (req.body.tiffinService === 'false') updates.tiffinService = false;
 
-    // Use Cloudinary URL if a file was uploaded
+    // Only allow non-structural fields to be changed:
+    // - address, contactPhone
+    // - maxCapacity
+    // - timings
+    // - plans (pricing and plan names)
+    // - dailyThaliRate
+    // - rules (minLeaveDaysForRebate, rebatePerThali, skipAllowancePercent, minMonthlyCharge, etc.)
+    // - tiffinService
+    // - basicThaliDetails
+    // messImage is handled separately from file upload.
+    const allowedUpdates = [
+      'address',
+      'contactPhone',
+      'maxCapacity',
+      'timings',
+      'plans',
+      'dailyThaliRate',
+      'rules',
+      'tiffinService',
+      'basicThaliDetails',
+    ];
+
+    const updates = {};
+
+    // Pick only allowed fields from body
+    for (const field of allowedUpdates) {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    // Coerce tiffinService string to boolean if needed
+    if (Object.prototype.hasOwnProperty.call(req.body, 'tiffinService')) {
+      if (req.body.tiffinService === 'true') updates.tiffinService = true;
+      else if (req.body.tiffinService === 'false') updates.tiffinService = false;
+      // if body sends a real boolean, it is already in updates[field]
+    }
+
+    // Use Cloudinary URL if a file was uploaded (mess image)
     if (req.file && req.file.cloudinaryUrl) {
       updates.messImage = req.file.cloudinaryUrl;
     }
 
     if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ success: false, message: 'No valid fields provided to update' });
+      return res.status(400).json({
+        success: false,
+        message: 'No valid fields provided to update',
+      });
     }
 
-    // Schedule changes for next month as in your original logic
+    // Schedule changes for next month (same logic as before)
     const now = new Date();
-    const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+    const nextMonthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0)
+    );
+
     const existing = mess.scheduledUpdates || {};
     mess.scheduledUpdates = { ...existing, ...updates };
+
+    // If there was no scheduled date or it is earlier than the next month, move it
     if (!mess.scheduledEffectiveFrom || mess.scheduledEffectiveFrom < nextMonthStart) {
       mess.scheduledEffectiveFrom = nextMonthStart;
     }
+
     await mess.save();
 
     return res.status(200).json({
@@ -124,15 +168,22 @@ exports.updateMyMess = async (req, res, next) => {
         scheduledUpdates: mess.scheduledUpdates,
         scheduledEffectiveFrom: mess.scheduledEffectiveFrom,
       },
-      message: 'Changes scheduled and will take effect from the next billing cycle (next month).'
+      message:
+        'Changes scheduled and will take effect from the next billing cycle (next month).',
     });
   } catch (error) {
     if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: 'A mess with this name and address already exists' });
+      // Unique index conflict (e.g., mess name + address)
+      return res.status(400).json({
+        success: false,
+        message: 'A mess with this name and address already exists',
+      });
     }
+
     return next(error);
   }
 };
+
 
 
 // @desc    Get manager's mess

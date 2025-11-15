@@ -120,11 +120,36 @@ function checkMealTiming(timings, mealType, offsetMin = DEFAULT_TZ_OFFSET_MIN, n
 // Compatible helpers already referenced in code (names preserved)
 
 // Limit a membership’s active window to the billing month for proration.
+// utils/billCalculation.js
+
+// Limit a membership’s active window to the billing month for proration.
 function getActiveWindowForMonth(membership, startOfMonth, endOfMonth) {
-  const memberStart = membership?.startDate ? new Date(membership.startDate) : startOfMonth;
-  const memberEnd = membership?.endDate ? new Date(membership.endDate) : endOfMonth;
+  // Prefer explicit startDate/endDate if present (legacy), otherwise use effectiveFrom/joinedDate.
+  const memberStartRaw =
+    membership?.startDate ||
+    membership?.effectiveFrom ||
+    membership?.joinedDate ||
+    startOfMonth;
+
+  // If there is an explicit endDate, use it.
+  // Else, if membership is inactive, treat updatedAt as the last active day.
+  // Else, assume active through endOfMonth.
+  let memberEndRaw = membership?.endDate || null;
+
+  if (!memberEndRaw) {
+    if (membership && membership.status === 'Inactive' && membership.updatedAt) {
+      memberEndRaw = membership.updatedAt;
+    } else {
+      memberEndRaw = endOfMonth;
+    }
+  }
+
+  const memberStart = new Date(memberStartRaw);
+  const memberEnd = new Date(memberEndRaw);
+
   const activeStart = memberStart > startOfMonth ? memberStart : startOfMonth;
   const activeEnd = memberEnd < endOfMonth ? memberEnd : endOfMonth;
+
   if (activeEnd < activeStart) {
     return {
       activeStart: null,
@@ -133,6 +158,7 @@ function getActiveWindowForMonth(membership, startOfMonth, endOfMonth) {
       monthDays: calculateDaysDifference(startOfMonth, endOfMonth),
     };
   }
+
   return {
     activeStart,
     activeEnd,
@@ -140,6 +166,7 @@ function getActiveWindowForMonth(membership, startOfMonth, endOfMonth) {
     monthDays: calculateDaysDifference(startOfMonth, endOfMonth),
   };
 }
+
 
 // Meals covered by a plan string
 function getMealsFromPlan(planName) {

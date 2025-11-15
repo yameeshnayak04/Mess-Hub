@@ -93,50 +93,13 @@ exports.getMembershipDetails = async (req, res, next) => {
   }
 };
 
-// @desc   Manager verifies member can leave (no dues), then sets Inactive
-// @route  PUT /api/membership/verify-leave/:membershipId
+// @desc Manager verifies member can leave (alias for approve-discontinue)
+// @route PUT /api/membership/verify-leave/:membershipId
 // @access Private (Manager only)
 exports.verifyLeaveMembership = async (req, res, next) => {
-  try {
-    const { membershipId } = req.params;
-
-    const membership = await Membership.findById(membershipId);
-    if (!membership) {
-      return res.status(404).json({ success: false, message: 'Membership not found' });
-    }
-
-    // Ensure the manager owns this mess
-    const mess = await Mess.findOne({ _id: membership.mess, owner: req.user.id });
-    if (!mess) {
-      return res.status(403).json({ success: false, message: 'Not authorized to verify this membership' });
-    }
-
-    // Block if any outstanding bills exist
-    const outstanding = await Bill.exists({
-      user: membership.user,
-      mess: membership.mess,
-      status: { $in: ['Due', 'Pending Approval'] },
-    });
-    if (outstanding) {
-      return res.status(400).json({ success: false, message: 'Outstanding dues found; cannot deactivate membership' });
-    }
-
-    membership.status = 'Inactive';
-    await membership.save();
-
-    const populated = await Membership.findById(membership._id)
-      .populate('user', 'name phone')
-      .populate('mess', 'messName');
-
-    return res.status(200).json({
-      success: true,
-      message: 'Membership set to Inactive',
-      data: populated,
-    });
-  } catch (error) {
-    next(error);
-  }
+  return exports.approveDiscontinueMembership(req, res, next);
 };
+
 
 
 // @desc    Join a mess
@@ -168,27 +131,45 @@ exports.joinMess = async (req, res, next) => {
     }
 
     // Check if user already has a membership for this mess
-    const existingMembership = await Membership.findOne({
-      user: req.user.id,
-      mess: messId,
-      status: { $in: ['Pending', 'Active'] }
-    });
+    // Check if user already has a membership for this mess
+const existingMembership = await Membership.findOne({
+  user: req.user.id,
+  mess: messId,
+  status: { $in: ['Pending', 'Active'] },
+});
 
-    if (existingMembership) {
-      return res.status(400).json({
-        success: false,
-        message: 'You already have an active or pending membership for this mess'
-      });
-    }
+if (existingMembership) {
+  return res.status(400).json({
+    success: false,
+    message: 'You already have an active or pending membership for this mess',
+  });
+}
 
-    // Create membership
-    const membership = await Membership.create({
-      user: req.user.id,
-      mess: messId,
-      planName: selectedPlan.name,
-      billingRate: selectedPlan.rate,
-      status: 'Pending'
+// Enforce max capacity at join time (based on active members only)
+if (typeof mess.maxCapacity === 'number' && mess.maxCapacity > 0) {
+  const activeCount = await Membership.countDocuments({
+    mess: messId,
+    status: 'Active',
+  });
+
+  if (activeCount >= mess.maxCapacity) {
+    return res.status(400).json({
+      success: false,
+      message:
+        'This mess has reached its maximum capacity and cannot accept new members.',
     });
+  }
+}
+
+// Create membership (still Pending; final capacity guard also exists in approve)
+const membership = await Membership.create({
+  user: req.user.id,
+  mess: messId,
+  planName: selectedPlan.name,
+  billingRate: selectedPlan.rate,
+  status: 'Pending',
+});
+
 
     const populatedMembership = await Membership.findById(membership._id)
       .populate('mess', 'messName address city contactPhone')
@@ -254,17 +235,33 @@ exports.approveMembership = async (req, res, next) => {
 
     // Verify manager owns the mess
     const mess = await Mess.findOne({ _id: membership.mess, owner: req.user.id });
-
     if (!mess) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to approve this membership'
+        message: 'Not authorized to approve this membership',
       });
     }
-
+    
+    // Enforce max capacity on approval as the final gate
+    if (typeof mess.maxCapacity === 'number' && mess.maxCapacity > 0) {
+      const activeCount = await Membership.countDocuments({
+        mess: mess._id,
+        status: 'Active',
+      });
+    
+      if (activeCount >= mess.maxCapacity) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Cannot approve this membership because the mess is already at maximum capacity.',
+        });
+      }
+    }
+    
     membership.status = 'Active';
     membership.joinedDate = new Date();
     await membership.save();
+
 
     const populatedMembership = await Membership.findById(membership._id)
       .populate('user', 'name phone')
@@ -439,6 +436,176 @@ exports.getMemberDetails = async (req, res, next) => {
         recentAttendance,
         recentLeaves
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Customer requests permanent discontinuation of a membership
+// @route PUT /api/membership/request-discontinue/:membershipId
+// @access Private (Customer only)
+exports.requestDiscontinueMembership = async (req, res, next) => {
+  try {
+    const membership = await Membership.findById(req.params.membershipId);
+
+    if (!membership) {
+      return res.status(404).json({
+        success: false,
+        message: 'Membership not found',
+      });
+    }
+
+    // Ensure membership belongs to this user
+    if (membership.user.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to modify this membership',
+      });
+    }
+
+    // Only active memberships can be discontinued
+    if (membership.status !== 'Active') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only active memberships can be discontinued.',
+      });
+    }
+
+    // Avoid duplicate requests
+    if (membership.leaveRequested) {
+      return res.status(400).json({
+        success: false,
+        message: 'You already have a pending discontinuation request for this membership.',
+      });
+    }
+
+    // Block if any outstanding bills exist
+    const outstandingBill = await Bill.findOne({
+      user: req.user.id,
+      mess: membership.mess,
+      status: { $in: ['Due', 'Pending Approval'] },
+    });
+
+    if (outstandingBill) {
+      return res.status(403).json({
+        success: false,
+        message: 'Please clear your outstanding dues before requesting discontinuation.',
+      });
+    }
+
+    membership.leaveRequested = true;
+    await membership.save();
+
+    return res.status(200).json({
+      success: true,
+      message:
+        'Your request to permanently discontinue this membership has been sent to the mess manager for approval.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Manager approves permanent discontinuation (sets Inactive)
+// @route PUT /api/membership/approve-discontinue/:membershipId
+// @access Private (Manager only)
+exports.approveDiscontinueMembership = async (req, res, next) => {
+  try {
+    const { membershipId } = req.params;
+    const membership = await Membership.findById(membershipId);
+
+    if (!membership) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'Membership not found' });
+    }
+
+    // Ensure the manager owns this mess
+    const mess = await Mess.findOne({ _id: membership.mess, owner: req.user.id });
+    if (!mess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to discontinue this membership',
+      });
+    }
+
+    // Require a pending discontinuation request or an active membership
+    if (!membership.leaveRequested && membership.status !== 'Active') {
+      return res.status(400).json({
+        success: false,
+        message: 'No pending discontinuation request for this membership.',
+      });
+    }
+
+    // Double-check for outstanding bills before deactivation
+    const outstanding = await Bill.exists({
+      user: membership.user,
+      mess: membership.mess,
+      status: { $in: ['Due', 'Pending Approval'] },
+    });
+
+    if (outstanding) {
+      return res.status(400).json({
+        success: false,
+        message: 'Outstanding dues found; cannot deactivate membership.',
+      });
+    }
+
+    membership.status = 'Inactive';
+    membership.leaveRequested = false;
+    await membership.save();
+
+    const populated = await Membership.findById(membership._id)
+      .populate('user', 'name phone')
+      .populate('mess', 'messName');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Membership has been permanently discontinued.',
+      data: populated,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Manager rejects a discontinuation request
+// @route PUT /api/membership/reject-discontinue/:membershipId
+// @access Private (Manager only)
+exports.rejectDiscontinueMembership = async (req, res, next) => {
+  try {
+    const { membershipId } = req.params;
+    const membership = await Membership.findById(membershipId);
+
+    if (!membership) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'Membership not found' });
+    }
+
+    // Ensure the manager owns this mess
+    const mess = await Mess.findOne({ _id: membership.mess, owner: req.user.id });
+    if (!mess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to reject discontinuation for this membership',
+      });
+    }
+
+    if (!membership.leaveRequested) {
+      return res.status(400).json({
+        success: false,
+        message: 'No pending discontinuation request to reject.',
+      });
+    }
+
+    membership.leaveRequested = false;
+    await membership.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Discontinuation request has been rejected. Membership remains active.',
     });
   } catch (error) {
     next(error);
