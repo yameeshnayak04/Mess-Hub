@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../providers/manager_members_providers.dart'; // MemberCalendarParams should be exported from here
+import '../providers/manager_members_providers.dart';
 
 class MemberDetailsScreen extends ConsumerStatefulWidget {
   final String membershipId;
@@ -22,409 +22,315 @@ class MemberDetailsScreen extends ConsumerStatefulWidget {
       _MemberDetailsScreenState();
 }
 
-class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen>
-    with SingleTickerProviderStateMixin {
-  CalendarFormat _format = CalendarFormat.month;
-  DateTime _focused = DateTime.now();
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
+class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
+  CalendarFormat _calendarFormat = CalendarFormat.month;
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _selectedDay;
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOut,
-    );
-    _animationController.forward();
+    _selectedDay = _focusedDay;
   }
 
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
+  List<String> _mealsFromPlan(String planName) {
+    final p = planName.toLowerCase();
+    if (p.contains('both')) return const ['Lunch', 'Dinner'];
+    if (p.contains('lunch')) return const ['Lunch'];
+    if (p.contains('dinner')) return const ['Dinner'];
+    return const ['Lunch', 'Dinner'];
+  }
+
+  Color _colorFor(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'present':
+        return AppTheme.successGreen;
+      case 'leave':
+        return AppTheme.infoBlue;
+      case 'skipped':
+        return AppTheme.warningYellow;
+      case 'absent':
+        return AppTheme.errorRed;
+      default:
+        return AppTheme.textSecondary;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final detailsAsync = ref.watch(memberDetailsProvider(widget.membershipId));
-    final attendanceAsync = ref.watch(
-      memberAttendanceProvider(
-        MemberCalendarParams(
-          widget.membershipId,
-          _focused.month,
-          _focused.year,
-        ),
-      ),
+    final params = MemberCalendarParams(
+      widget.membershipId,
+      _focusedDay.month,
+      _focusedDay.year,
     );
+    final attendanceAsync = ref.watch(memberAttendanceProvider(params));
 
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: AppTheme.primaryOrange,
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.pop(),
+        ),
+        title: const Text(
+          'Member Details',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: () {
+              ref.invalidate(memberDetailsProvider(widget.membershipId));
+              ref.invalidate(memberAttendanceProvider(params));
+            },
+            tooltip: 'Refresh',
+          ),
+        ],
+      ),
       body: detailsAsync.when(
-        data: (details) => _buildContent(context, details, attendanceAsync),
         loading: () => _buildLoadingState(),
         error: (error, stack) => _buildErrorState(error),
+        data: (details) {
+          final membership = details['membership'] as Map<String, dynamic>;
+          final user = membership['user'] as Map<String, dynamic>;
+          final planName = membership['planName'] as String? ?? '';
+          final allowedMeals = _mealsFromPlan(planName);
+
+          return attendanceAsync.when(
+            loading: () => _buildContent(
+              user,
+              membership,
+              planName,
+              allowedMeals,
+              const [],
+              isLoading: true,
+            ),
+            error: (e, s) => _buildContent(
+              user,
+              membership,
+              planName,
+              allowedMeals,
+              const [],
+              error: e.toString(),
+            ),
+            data: (attendance) => _buildContent(
+              user,
+              membership,
+              planName,
+              allowedMeals,
+              attendance,
+            ),
+          );
+        },
       ),
     );
   }
 
   Widget _buildContent(
-    BuildContext context,
-    Map<String, dynamic> details,
-    AsyncValue<List<Map<String, dynamic>>> attendanceAsync,
-  ) {
-    final membership = details['membership'] as Map<String, dynamic>;
-    final user = membership['user'] as Map<String, dynamic>;
-    final recentAttendance = details['recentAttendance'] as List? ?? [];
+    Map<String, dynamic> user,
+    Map<String, dynamic> membership,
+    String planName,
+    List<String> allowedMeals,
+    List<Map<String, dynamic>> attendance, {
+    bool isLoading = false,
+    String? error,
+  }) {
+    final filtered = attendance.where((e) {
+      final meal = (e['mealType'] as String?)?.trim();
+      return meal == null || meal.isEmpty || allowedMeals.contains(meal);
+    }).toList();
 
-    return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
-      slivers: [
-        // Modern App Bar
-        SliverAppBar(
-          expandedHeight: 120,
-          floating: false,
-          pinned: true,
-          backgroundColor: AppTheme.primaryOrange,
-          leading: IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.arrow_back, color: Colors.white),
-            ),
-            onPressed: () => context.pop(),
+    final entriesByDate = _groupEntriesByDate(filtered);
+    final counts = _computeCounts(filtered);
+
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // Member Info Card
+          _MemberInfoCard(
+            membership: membership,
+            user: user,
+            planName: planName,
           ),
-          flexibleSpace: FlexibleSpaceBar(
-            background: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppTheme.primaryOrange,
-                    AppTheme.secondaryOrange,
-                  ],
-                ),
-              ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    right: -30,
-                    top: -30,
-                    child: Container(
-                      width: 150,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.1),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: -50,
-                    bottom: -50,
-                    child: Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.08),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+
+          const SizedBox(height: 16),
+
+          // Monthly Summary
+          _MonthlySummary(counts: counts),
+
+          const SizedBox(height: 16),
+
+          // Attendance Calendar
+          if (error != null)
+            _ErrorCard(message: error)
+          else if (isLoading)
+            const _SectionLoading()
+          else
+            _AttendanceCalendarCard(
+              focusedDay: _focusedDay,
+              selectedDay: _selectedDay,
+              calendarFormat: _calendarFormat,
+              entriesByDate: entriesByDate,
+              allowedMeals: allowedMeals,
+              onDaySelected: (selectedDay, focusedDay) {
+                setState(() {
+                  _selectedDay = selectedDay;
+                  _focusedDay = focusedDay;
+                });
+              },
+              onFormatChanged: (format) {
+                setState(() => _calendarFormat = format);
+              },
+              onPageChanged: (focusedDay) {
+                setState(() => _focusedDay = focusedDay);
+              },
+              colorFor: _colorFor,
             ),
-            title: FadeTransition(
-              opacity: _fadeAnimation,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    user['name'] ?? 'Member',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    user['phone'] ?? '',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                ],
-              ),
+
+          const SizedBox(height: 16),
+
+          // Legend
+          const _Legend(),
+
+          const SizedBox(height: 16),
+
+          // Selected Day Details
+          if (_selectedDay != null)
+            _MealDetailsCard(
+              selectedDate: _selectedDay!,
+              entries: entriesByDate[DateTime(
+                    _selectedDay!.year,
+                    _selectedDay!.month,
+                    _selectedDay!.day,
+                  )] ??
+                  [],
+              allowedMeals: allowedMeals,
+              colorFor: _colorFor,
             ),
-            titlePadding: const EdgeInsets.only(left: 60, bottom: 16),
-          ),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _buildStatusChip(membership['status']),
-            ),
-          ],
-        ),
 
-        // Content
-        SliverToBoxAdapter(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Column(
-              children: [
-                const SizedBox(height: 16),
+          const SizedBox(height: 16),
 
-                // Member Info Card
-                _MemberInfoCard(membership: membership, user: user),
+          // Leave History
+          _LeaveHistoryCard(membershipId: widget.membershipId),
 
-                const SizedBox(height: 16),
+          const SizedBox(height: 16),
 
-                // Recent Activity
-                if (recentAttendance.isNotEmpty)
-                  _RecentActivityCard(attendance: recentAttendance),
+          // Payment History
+          _PaymentHistoryCard(membershipId: widget.membershipId),
 
-                const SizedBox(height: 16),
-
-                // Attendance Calendar
-                _AttendanceCalendar(
-                  membershipId: widget.membershipId,
-                  attendanceAsync: attendanceAsync,
-                  focused: _focused,
-                  format: _format,
-                  onFormatChanged: (format) => setState(() => _format = format),
-                  onFocusedDayChanged: (focused) =>
-                      setState(() => _focused = focused),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Monthly Summary
-                attendanceAsync.when(
-                  data: (attendance) =>
-                      _MonthlySummaryCard(attendance: attendance),
-                  loading: () => const _SectionLoading(),
-                  error: (e, s) => _ErrorCard(message: e.toString()),
-                ),
-
-                const SizedBox(height: 100),
-              ],
-            ),
-          ),
-        ),
-      ],
+          const SizedBox(height: 24),
+        ],
+      ),
     );
   }
 
-  Widget _buildStatusChip(String? status) {
-    Color bgColor;
-    Color textColor;
-    IconData icon;
-
-    switch (status?.toLowerCase()) {
-      case 'active':
-        bgColor = AppTheme.successGreen;
-        textColor = Colors.white;
-        icon = Icons.check_circle;
-        break;
-      case 'inactive':
-        bgColor = AppTheme.errorRed;
-        textColor = Colors.white;
-        icon = Icons.cancel;
-        break;
-      case 'pending':
-        bgColor = AppTheme.warningYellow;
-        textColor = Colors.white;
-        icon = Icons.pending;
-        break;
-      default:
-        bgColor = Colors.grey;
-        textColor = Colors.white;
-        icon = Icons.info;
+  Map<DateTime, List<Map<String, dynamic>>> _groupEntriesByDate(
+      List<Map<String, dynamic>> entries) {
+    final map = <DateTime, List<Map<String, dynamic>>>{};
+    for (final e in entries) {
+      try {
+        final d = DateTime.parse(e['date'] as String).toLocal();
+        final key = DateTime(d.year, d.month, d.day);
+        map[key] = map[key] ?? [];
+        map[key]!.add(e);
+      } catch (err) {
+        debugPrint('Error parsing entry: $err');
+      }
     }
+    return map;
+  }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: bgColor.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: textColor, size: 14),
-          const SizedBox(width: 4),
-          Text(
-            status ?? 'N/A',
-            style: TextStyle(
-              color: textColor,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
+  Map<String, int> _computeCounts(List<Map<String, dynamic>> entries) {
+    final result = {'present': 0, 'skipped': 0, 'leave': 0, 'absent': 0};
+    for (final e in entries) {
+      final status = (e['status'] as String?)?.toLowerCase();
+      if (status != null && result.containsKey(status)) {
+        result[status] = result[status]! + 1;
+      }
+    }
+    return result;
   }
 
   Widget _buildLoadingState() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            AppTheme.primaryOrange.withOpacity(0.1),
-            AppTheme.backgroundColor,
-          ],
-        ),
-      ),
-      child: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 120,
-            pinned: true,
-            backgroundColor: AppTheme.primaryOrange,
-            leading: IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.arrow_back, color: Colors.white),
-              ),
-              onPressed: () => context.pop(),
-            ),
-          ),
-          const SliverToBoxAdapter(
-            child: Column(
-              children: [
-                SizedBox(height: 16),
-                _HeaderSkeleton(),
-                SizedBox(height: 16),
-                _SectionLoading(),
-                SizedBox(height: 16),
-                _SectionLoading(),
-              ],
-            ),
-          ),
-        ],
+    return const Center(
+      child: CircularProgressIndicator(
+        valueColor: AlwaysStoppedAnimation(AppTheme.primaryOrange),
       ),
     );
   }
 
   Widget _buildErrorState(Object error) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            AppTheme.primaryOrange.withOpacity(0.1),
-            AppTheme.backgroundColor,
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.errorRed.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.error_outline_rounded,
+                size: 64,
+                color: AppTheme.errorRed,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Failed to load member details',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error.toString(),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
-      ),
-      child: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 120,
-            pinned: true,
-            backgroundColor: AppTheme.primaryOrange,
-            leading: IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.arrow_back, color: Colors.white),
-              ),
-              onPressed: () => context.pop(),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: _ErrorCard(message: error.toString()),
-            ),
-          ),
-        ],
       ),
     );
   }
 }
 
-// Modern Member Info Card
+// Member Info Card
 class _MemberInfoCard extends StatelessWidget {
   final Map<String, dynamic> membership;
   final Map<String, dynamic> user;
+  final String planName;
 
   const _MemberInfoCard({
     required this.membership,
     required this.user,
+    required this.planName,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white,
-            AppTheme.primaryOrange.withOpacity(0.02),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.primaryOrange.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
       ),
-      child: Column(
-        children: [
-          // Header with Avatar
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppTheme.primaryOrange.withOpacity(0.1),
-                  AppTheme.secondaryOrange.withOpacity(0.05),
-                ],
-              ),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-              ),
-            ),
-            child: Row(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            // Avatar and Basic Info
+            Row(
               children: [
                 Container(
                   width: 70,
@@ -490,80 +396,95 @@ class _MemberInfoCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryOrange.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          membership['planName'] ?? 'N/A',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.primaryOrange,
-                          ),
-                        ),
-                      ),
+                      _buildStatusBadge(membership['status']),
                     ],
                   ),
                 ),
               ],
             ),
-          ),
 
-          // Info Grid
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
+            const SizedBox(height: 20),
+            const Divider(height: 1),
+            const SizedBox(height: 20),
+
+            // Plan and Billing Info
+            Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _InfoTile(
-                        icon: Icons.currency_rupee,
-                        label: 'Billing Rate',
-                        value: '₹${membership['billingRate'] ?? 0}',
-                        color: AppTheme.primaryOrange,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _InfoTile(
-                        icon: Icons.calendar_today,
-                        label: 'Joined Date',
-                        value: _formatDate(membership['joinedDate']),
-                        color: AppTheme.successGreen,
-                      ),
-                    ),
-                  ],
+                Expanded(
+                  child: _InfoTile(
+                    icon: Icons.restaurant_menu_rounded,
+                    label: 'Current Plan',
+                    value: planName.isEmpty ? 'N/A' : planName,
+                    color: AppTheme.primaryOrange,
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _InfoTile(
-                        icon: Icons.event_available,
-                        label: 'Effective From',
-                        value: _formatDate(membership['effectiveFrom']),
-                        color: AppTheme.infoBlue,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _InfoTile(
-                        icon: Icons.payment,
-                        label: 'Payment',
-                        value: membership['paymentStatus'] ?? 'N/A',
-                        color: AppTheme.warningYellow,
-                      ),
-                    ),
-                  ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _InfoTile(
+                    icon: Icons.currency_rupee,
+                    label: 'Billing Rate',
+                    value: '₹${membership['billingRate'] ?? 0}',
+                    color: AppTheme.successGreen,
+                  ),
                 ),
               ],
+            ),
+
+            const SizedBox(height: 12),
+
+            // Joined Date (Full Width)
+            _InfoTile(
+              icon: Icons.calendar_today,
+              label: 'Joined Date',
+              value: _formatDate(membership['joinedDate']),
+              color: AppTheme.infoBlue,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String? status) {
+    Color bgColor;
+    IconData icon;
+
+    switch (status?.toLowerCase()) {
+      case 'active':
+        bgColor = AppTheme.successGreen;
+        icon = Icons.check_circle;
+        break;
+      case 'inactive':
+        bgColor = AppTheme.errorRed;
+        icon = Icons.cancel;
+        break;
+      case 'pending':
+        bgColor = AppTheme.warningYellow;
+        icon = Icons.pending;
+        break;
+      default:
+        bgColor = Colors.grey;
+        icon = Icons.info;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: bgColor.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: bgColor, size: 12),
+          const SizedBox(width: 4),
+          Text(
+            status ?? 'N/A',
+            style: TextStyle(
+              color: bgColor,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -574,7 +495,7 @@ class _MemberInfoCard extends StatelessWidget {
   String _formatDate(dynamic date) {
     if (date == null) return 'N/A';
     try {
-      final dt = DateTime.parse(date.toString());
+      final dt = DateTime.parse(date.toString()).toLocal();
       return DateFormat('dd MMM yyyy').format(dt);
     } catch (e) {
       return 'Invalid Date';
@@ -598,13 +519,13 @@ class _InfoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.05),
+        color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: color.withOpacity(0.1),
-          width: 1,
+          color: color.withOpacity(0.3),
+          width: 1.5,
         ),
       ),
       child: Column(
@@ -615,7 +536,7 @@ class _InfoTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, size: 16, color: color),
@@ -637,11 +558,11 @@ class _InfoTile extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 15,
               fontWeight: FontWeight.bold,
               color: color,
             ),
-            maxLines: 1,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
         ],
@@ -650,494 +571,282 @@ class _InfoTile extends StatelessWidget {
   }
 }
 
-// Recent Activity Card
-class _RecentActivityCard extends StatelessWidget {
-  final List<dynamic> attendance;
-
-  const _RecentActivityCard({required this.attendance});
+// Monthly Summary (Same as Customer Attendance Calendar)
+class _MonthlySummary extends StatelessWidget {
+  final Map<String, int> counts;
+  const _MonthlySummary({required this.counts});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.primaryOrange,
-                        AppTheme.secondaryOrange,
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primaryOrange.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+                    color: AppTheme.primaryOrange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
-                    Icons.history,
-                    color: Colors.white,
+                    Icons.analytics_rounded,
+                    color: AppTheme.primaryOrange,
                     size: 20,
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Text(
-                  'Recent Activity',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary,
+                Text(
+                  'Monthly Overview',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStat(
+                    context,
+                    'Present',
+                    counts['present'] ?? 0,
+                    AppTheme.successGreen,
+                    Icons.check_circle_rounded,
+                  ),
+                ),
+                Container(
+                  width: 1,
+                  height: 60,
+                  color: Colors.grey.shade200,
+                ),
+                Expanded(
+                  child: _buildStat(
+                    context,
+                    'Skipped',
+                    counts['skipped'] ?? 0,
+                    AppTheme.warningYellow,
+                    Icons.skip_next_rounded,
+                  ),
+                ),
+                Container(
+                  width: 1,
+                  height: 60,
+                  color: Colors.grey.shade200,
+                ),
+                Expanded(
+                  child: _buildStat(
+                    context,
+                    'Leave',
+                    counts['leave'] ?? 0,
+                    AppTheme.infoBlue,
+                    Icons.beach_access_rounded,
+                  ),
+                ),
+                Container(
+                  width: 1,
+                  height: 60,
+                  color: Colors.grey.shade200,
+                ),
+                Expanded(
+                  child: _buildStat(
+                    context,
+                    'Absent',
+                    counts['absent'] ?? 0,
+                    AppTheme.errorRed,
+                    Icons.cancel_rounded,
                   ),
                 ),
               ],
             ),
-          ),
-          const Divider(height: 1),
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16),
-            itemCount: attendance.take(5).length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final item = attendance[index];
-              return _ActivityItem(activity: item);
-            },
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
-}
 
-class _ActivityItem extends StatelessWidget {
-  final Map<String, dynamic> activity;
-
-  const _ActivityItem({required this.activity});
-
-  @override
-  Widget build(BuildContext context) {
-    final status = activity['status'] as String?;
-    final mealType = activity['mealType'] as String?;
-    final date = activity['date'];
-
-    Color statusColor = _getStatusColor(status);
-    IconData statusIcon = _getStatusIcon(status);
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: statusColor.withOpacity(0.2),
-          width: 1,
+  Widget _buildStat(
+    BuildContext context,
+    String label,
+    int value,
+    Color color,
+    IconData icon,
+  ) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 24),
+        const SizedBox(height: 8),
+        Text(
+          value.toString(),
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.bold,
+              ),
         ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(statusIcon, color: statusColor, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  mealType ?? 'Meal',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _formatDate(date),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.textSecondary.withOpacity(0.7),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: statusColor,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              status ?? 'N/A',
-              style: const TextStyle(
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppTheme.textSecondary,
                 fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _getStatusColor(String? status) {
-    switch (status?.toLowerCase()) {
-      case 'present':
-        return AppTheme.successGreen;
-      case 'leave':
-        return AppTheme.infoBlue;
-      case 'skipped':
-        return AppTheme.warningYellow;
-      case 'absent':
-        return AppTheme.errorRed;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  IconData _getStatusIcon(String? status) {
-    switch (status?.toLowerCase()) {
-      case 'present':
-        return Icons.check_circle_rounded;
-      case 'leave':
-        return Icons.beach_access_rounded;
-      case 'skipped':
-        return Icons.skip_next_rounded;
-      case 'absent':
-        return Icons.cancel_rounded;
-      default:
-        return Icons.help_outline;
-    }
-  }
-
-  String _formatDate(dynamic date) {
-    if (date == null) return 'N/A';
-    try {
-      final dt = DateTime.parse(date.toString()).toLocal();
-      return DateFormat('dd MMM, hh:mm a').format(dt);
-    } catch (e) {
-      return 'Invalid Date';
-    }
-  }
-}
-
-// Attendance Calendar with Modern Design
-class _AttendanceCalendar extends StatelessWidget {
-  final String membershipId;
-  final AsyncValue<List<Map<String, dynamic>>> attendanceAsync;
-  final DateTime focused;
-  final CalendarFormat format;
-  final Function(CalendarFormat) onFormatChanged;
-  final Function(DateTime) onFocusedDayChanged;
-
-  const _AttendanceCalendar({
-    required this.membershipId,
-    required this.attendanceAsync,
-    required this.focused,
-    required this.format,
-    required this.onFormatChanged,
-    required this.onFocusedDayChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.primaryOrange,
-                        AppTheme.secondaryOrange,
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primaryOrange.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.calendar_month,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Attendance Calendar',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          attendanceAsync.when(
-            data: (attendance) => Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: TableCalendar(
-                    firstDay: DateTime(focused.year, focused.month, 1),
-                    lastDay: DateTime(focused.year, focused.month + 1, 0),
-                    focusedDay: focused,
-                    calendarFormat: format,
-                    startingDayOfWeek: StartingDayOfWeek.monday,
-                    headerStyle: HeaderStyle(
-                      formatButtonVisible: true,
-                      titleCentered: true,
-                      formatButtonShowsNext: false,
-                      formatButtonDecoration: BoxDecoration(
-                        color: AppTheme.primaryOrange.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      formatButtonTextStyle: const TextStyle(
-                        color: AppTheme.primaryOrange,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      titleTextStyle: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
-                      leftChevronIcon: const Icon(
-                        Icons.chevron_left,
-                        color: AppTheme.primaryOrange,
-                      ),
-                      rightChevronIcon: const Icon(
-                        Icons.chevron_right,
-                        color: AppTheme.primaryOrange,
-                      ),
-                    ),
-                    daysOfWeekStyle: DaysOfWeekStyle(
-                      weekdayStyle: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textSecondary.withOpacity(0.7),
-                      ),
-                      weekendStyle: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.primaryOrange.withOpacity(0.7),
-                      ),
-                    ),
-                    calendarStyle: CalendarStyle(
-                      outsideDaysVisible: false,
-                      todayDecoration: BoxDecoration(
-                        color: AppTheme.infoBlue.withOpacity(0.3),
-                        shape: BoxShape.circle,
-                      ),
-                      todayTextStyle: const TextStyle(
-                        color: AppTheme.infoBlue,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      defaultTextStyle: const TextStyle(
-                        color: AppTheme.textPrimary,
-                      ),
-                      weekendTextStyle: TextStyle(
-                        color: AppTheme.primaryOrange.withOpacity(0.7),
-                      ),
-                      selectedDecoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            AppTheme.primaryOrange,
-                            AppTheme.secondaryOrange,
-                          ],
-                        ),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    onFormatChanged: onFormatChanged,
-                    onPageChanged: onFocusedDayChanged,
-                    calendarBuilders: CalendarBuilders(
-                      defaultBuilder: (context, day, focusedDay) {
-                        return _DayCell(
-                          day: day,
-                          attendance: attendance,
-                        );
-                      },
-                      todayBuilder: (context, day, focusedDay) {
-                        return _DayCell(
-                          day: day,
-                          attendance: attendance,
-                          isToday: true,
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                _LegendRow(),
-                const SizedBox(height: 16),
-              ],
-            ),
-            loading: () => const Padding(
-              padding: EdgeInsets.all(16),
-              child: _SectionLoading(),
-            ),
-            error: (e, s) => Padding(
-              padding: const EdgeInsets.all(16),
-              child: _ErrorCard(message: e.toString()),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DayCell extends StatelessWidget {
-  final DateTime day;
-  final List<Map<String, dynamic>> attendance;
-  final bool isToday;
-
-  const _DayCell({
-    required this.day,
-    required this.attendance,
-    this.isToday = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final dayMeals = attendance.where((a) {
-      try {
-        final dateStr = a['date'].toString();
-        final attDate = DateTime.parse(dateStr).toLocal();
-        final attDay = DateTime(attDate.year, attDate.month, attDate.day);
-        final checkDay = DateTime(day.year, day.month, day.day);
-
-        return attDay.year == checkDay.year &&
-            attDay.month == checkDay.month &&
-            attDay.day == checkDay.day;
-      } catch (e) {
-        return false;
-      }
-    }).toList();
-
-    if (dayMeals.isEmpty) {
-      return Center(
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: isToday
-              ? BoxDecoration(
-                  color: AppTheme.infoBlue.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppTheme.infoBlue,
-                    width: 2,
-                  ),
-                )
-              : null,
-          child: Center(
-            child: Text(
-              '${day.day}',
-              style: TextStyle(
-                color: isToday ? AppTheme.infoBlue : AppTheme.textPrimary,
-                fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ),
+          textAlign: TextAlign.center,
         ),
-      );
-    }
+      ],
+    );
+  }
+}
 
-    return Center(
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: isToday
-                  ? AppTheme.infoBlue.withOpacity(0.1)
-                  : Colors.transparent,
+// Attendance Calendar Card (Same design as Customer)
+class _AttendanceCalendarCard extends StatelessWidget {
+  final DateTime focusedDay;
+  final DateTime? selectedDay;
+  final CalendarFormat calendarFormat;
+  final Map<DateTime, List<Map<String, dynamic>>> entriesByDate;
+  final List<String> allowedMeals;
+  final Function(DateTime, DateTime) onDaySelected;
+  final Function(CalendarFormat) onFormatChanged;
+  final Function(DateTime) onPageChanged;
+  final Color Function(String?) colorFor;
+
+  const _AttendanceCalendarCard({
+    required this.focusedDay,
+    required this.selectedDay,
+    required this.calendarFormat,
+    required this.entriesByDate,
+    required this.allowedMeals,
+    required this.onDaySelected,
+    required this.onFormatChanged,
+    required this.onPageChanged,
+    required this.colorFor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: TableCalendar(
+          firstDay: DateTime.utc(2020, 1, 1),
+          lastDay: DateTime.utc(2030, 12, 31),
+          focusedDay: focusedDay,
+          calendarFormat: calendarFormat,
+          selectedDayPredicate: (day) => isSameDay(selectedDay, day),
+          onDaySelected: onDaySelected,
+          onFormatChanged: onFormatChanged,
+          onPageChanged: onPageChanged,
+          calendarStyle: CalendarStyle(
+            outsideDaysVisible: false,
+            todayDecoration: BoxDecoration(
+              color: AppTheme.primaryOrange.withOpacity(0.3),
               shape: BoxShape.circle,
-              border: isToday
-                  ? Border.all(color: AppTheme.infoBlue, width: 2)
-                  : null,
             ),
-            child: Center(
-              child: Text(
-                '${day.day}',
-                style: TextStyle(
-                  color: isToday ? AppTheme.infoBlue : AppTheme.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+            todayTextStyle: const TextStyle(
+              color: AppTheme.primaryOrange,
+              fontWeight: FontWeight.bold,
+            ),
+            selectedDecoration: const BoxDecoration(
+              color: AppTheme.primaryOrange,
+              shape: BoxShape.circle,
+            ),
+            selectedTextStyle: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+            weekendTextStyle: TextStyle(
+              color: AppTheme.errorRed.withOpacity(0.7),
+            ),
+            defaultTextStyle: const TextStyle(
+              fontWeight: FontWeight.w500,
             ),
           ),
-          Positioned(
-            bottom: 2,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: dayMeals.map((meal) {
-                final status = meal['status'] as String?;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 1),
+          headerStyle: HeaderStyle(
+            formatButtonVisible: true,
+            titleCentered: true,
+            formatButtonShowsNext: false,
+            titleTextStyle: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+            ),
+            formatButtonDecoration: BoxDecoration(
+              color: AppTheme.primaryOrange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: AppTheme.primaryOrange.withOpacity(0.3),
+              ),
+            ),
+            formatButtonTextStyle: const TextStyle(
+              color: AppTheme.primaryOrange,
+              fontWeight: FontWeight.w600,
+            ),
+            leftChevronIcon: const Icon(
+              Icons.chevron_left,
+              color: AppTheme.primaryOrange,
+            ),
+            rightChevronIcon: const Icon(
+              Icons.chevron_right,
+              color: AppTheme.primaryOrange,
+            ),
+          ),
+          daysOfWeekStyle: DaysOfWeekStyle(
+            weekdayStyle: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+            weekendStyle: TextStyle(
+              color: AppTheme.errorRed.withOpacity(0.7),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          calendarBuilders: CalendarBuilders(
+            markerBuilder: (context, date, events) {
+              final key = DateTime(date.year, date.month, date.day);
+              final dayEntries = entriesByDate[key];
+              if (dayEntries == null || dayEntries.isEmpty) {
+                return null;
+              }
+
+              final lunch = dayEntries.firstWhere(
+                (e) => e['mealType'] == 'Lunch',
+                orElse: () => <String, dynamic>{},
+              );
+              final dinner = dayEntries.firstWhere(
+                (e) => e['mealType'] == 'Dinner',
+                orElse: () => <String, dynamic>{},
+              );
+
+              // Single-meal plan
+              if (allowedMeals.length == 1) {
+                final chosen = allowedMeals.first == 'Lunch' ? lunch : dinner;
+                if (chosen.isEmpty) return null;
+                return Positioned(
+                  bottom: 2,
                   child: Container(
                     width: 6,
                     height: 6,
                     decoration: BoxDecoration(
-                      color: _colorFor(status),
+                      color: colorFor(chosen['status'] as String?),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: _colorFor(status).withOpacity(0.5),
+                          color: colorFor(chosen['status'] as String?)
+                              .withOpacity(0.5),
                           blurRadius: 2,
                           spreadRadius: 1,
                         ),
@@ -1145,113 +854,121 @@ class _DayCell extends StatelessWidget {
                     ),
                   ),
                 );
-              }).toList(),
-            ),
+              }
+
+              // Two-meal plan
+              return Positioned(
+                bottom: 2,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (lunch.isNotEmpty)
+                      Container(
+                        width: 6,
+                        height: 6,
+                        margin: const EdgeInsets.only(right: 3),
+                        decoration: BoxDecoration(
+                          color: colorFor(lunch['status'] as String?),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: colorFor(lunch['status'] as String?)
+                                  .withOpacity(0.5),
+                              blurRadius: 2,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (dinner.isNotEmpty)
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: colorFor(dinner['status'] as String?),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: colorFor(dinner['status'] as String?)
+                                  .withOpacity(0.5),
+                              blurRadius: 2,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
           ),
-        ],
+        ),
       ),
     );
   }
-
-  Color _colorFor(String? status) {
-    switch (status?.toLowerCase()) {
-      case 'present':
-        return AppTheme.successGreen;
-      case 'leave':
-        return AppTheme.infoBlue;
-      case 'skipped':
-        return AppTheme.warningYellow;
-      case 'absent':
-        return AppTheme.errorRed;
-      default:
-        return Colors.grey;
-    }
-  }
 }
 
-class _LegendRow extends StatelessWidget {
+// Legend (Same as Customer)
+class _Legend extends StatelessWidget {
+  const _Legend();
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: Colors.grey.shade200),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryOrange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.info_outline_rounded,
-                  color: AppTheme.primaryOrange,
-                  size: 16,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                'Status Legend',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryOrange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
                     ),
+                    child: const Icon(
+                      Icons.info_outline_rounded,
+                      color: AppTheme.primaryOrange,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Status Legend',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 20,
+                runSpacing: 12,
+                children: [
+                  _buildLegendItem('Present', AppTheme.successGreen),
+                  _buildLegendItem('Skipped', AppTheme.warningYellow),
+                  _buildLegendItem('Leave', AppTheme.infoBlue),
+                  _buildLegendItem('Absent', AppTheme.errorRed),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 20,
-            runSpacing: 12,
-            children: [
-              _LegendItem(
-                color: AppTheme.successGreen,
-                label: 'Present',
-                icon: Icons.check_circle_rounded,
-              ),
-              _LegendItem(
-                color: AppTheme.infoBlue,
-                label: 'Leave',
-                icon: Icons.beach_access_rounded,
-              ),
-              _LegendItem(
-                color: AppTheme.warningYellow,
-                label: 'Skipped',
-                icon: Icons.skip_next_rounded,
-              ),
-              _LegendItem(
-                color: AppTheme.errorRed,
-                label: 'Absent',
-                icon: Icons.cancel_rounded,
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
-}
 
-class _LegendItem extends StatelessWidget {
-  final Color color;
-  final String label;
-  final IconData icon;
-
-  const _LegendItem({
-    required this.color,
-    required this.label,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildLegendItem(String label, Color color) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1284,132 +1001,524 @@ class _LegendItem extends StatelessWidget {
   }
 }
 
-// Monthly Summary Card
-class _MonthlySummaryCard extends StatelessWidget {
-  final List<Map<String, dynamic>> attendance;
+// Meal Details Card (Same as Customer)
+class _MealDetailsCard extends StatelessWidget {
+  final DateTime selectedDate;
+  final List<Map<String, dynamic>> entries;
+  final List<String> allowedMeals;
+  final Color Function(String?) colorFor;
 
-  const _MonthlySummaryCard({required this.attendance});
+  const _MealDetailsCard({
+    required this.selectedDate,
+    required this.entries,
+    required this.allowedMeals,
+    required this.colorFor,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final counts = _monthlyCounts(attendance);
+    final lunchEntry = entries.firstWhere(
+      (e) => e['mealType'] == 'Lunch',
+      orElse: () => {},
+    );
+    final dinnerEntry = entries.firstWhere(
+      (e) => e['mealType'] == 'Dinner',
+      orElse: () => {},
+    );
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.primaryOrange,
-            AppTheme.secondaryOrange,
-          ],
+    if (entries.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.grey.shade200),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.calendar_today_outlined,
+                    size: 48,
+                    color: AppTheme.textSecondary.withOpacity(0.5),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  DateFormat('EEEE, MMMM d').format(selectedDate),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'No attendance records for this date',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
         ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.primaryOrange.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: Colors.grey.shade200),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryOrange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.event_note_rounded,
+                      color: AppTheme.primaryOrange,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Day Details',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                        ),
+                        Text(
+                          DateFormat('EEEE, MMM d, y').format(selectedDate),
+                          style:
+                              Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              if (allowedMeals.contains('Lunch'))
+                _buildMealRow(
+                  context,
+                  'Lunch',
+                  Icons.wb_sunny_rounded,
+                  lunchEntry['status'] as String?,
+                  Colors.orange,
+                  colorFor, // Pass colorFor function
+                ),
+              if (allowedMeals.contains('Lunch') &&
+                  allowedMeals.contains('Dinner'))
+                const SizedBox(height: 12),
+              if (allowedMeals.contains('Dinner'))
+                _buildMealRow(
+                  context,
+                  'Dinner',
+                  Icons.nightlight_rounded,
+                  dinnerEntry['status'] as String?,
+                  Colors.indigo,
+                  colorFor, // Pass colorFor function
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Widget _buildMealRow(
+  BuildContext context,
+  String mealName,
+  IconData icon,
+  String? status,
+  Color mealColor,
+  Color Function(String?) colorFor, // Add this parameter
+) {
+  final color = colorFor(status); // Use the colorFor function
+  final statusText = status ?? 'No data';
+
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: color.withOpacity(0.3),
+        width: 1.5,
+      ),
+    ),
+    child: Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: mealColor.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: mealColor, size: 24),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                mealName,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    statusText,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Text(
+            _getStatusEmoji(status),
+            style: const TextStyle(
+              fontSize: 18,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+String _getStatusEmoji(String? status) {
+  switch (status?.toLowerCase()) {
+    case 'present':
+      return '✓';
+    case 'skipped':
+      return '⊘';
+    case 'leave':
+      return '🏖';
+    case 'absent':
+      return '✗';
+    default:
+      return '?';
+  }
+}
+
+// Leave History Card
+class _LeaveHistoryCard extends ConsumerWidget {
+  final String membershipId;
+
+  const _LeaveHistoryCard({required this.membershipId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final leavesAsync = ref.watch(memberLeavesProvider(membershipId));
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.infoBlue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.beach_access_rounded,
+                    color: AppTheme.infoBlue,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Leave History',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          leavesAsync.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation(AppTheme.infoBlue),
+                ),
+              ),
+            ),
+            error: (e, s) => Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.error_outline_rounded,
+                    size: 48,
+                    color: AppTheme.errorRed.withOpacity(0.5),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Failed to load leave history',
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    e.toString(),
+                    style: TextStyle(
+                      color: AppTheme.textSecondary.withOpacity(0.7),
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+            data: (leavesData) {
+              // Handle both List and Map response structures
+              List<Map<String, dynamic>> leaves = [];
+
+              if (leavesData is List) {
+                leaves = leavesData
+                    .whereType<Map>()
+                    .map((e) => Map<String, dynamic>.from(e))
+                    .toList();
+              } else if (leavesData is Map) {
+                // If it's wrapped in a 'leaves' key
+                final dataMap = Map<String, dynamic>.from(leavesData as Map);
+                final leavesList = dataMap['leaves'] as List?;
+                if (leavesList != null) {
+                  leaves = leavesList
+                      .whereType<Map>()
+                      .map((e) => Map<String, dynamic>.from(e))
+                      .toList();
+                }
+              }
+
+              if (leaves.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.event_busy_outlined,
+                          size: 48,
+                          color: AppTheme.textSecondary.withOpacity(0.5),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No leave history',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary.withOpacity(0.7),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                itemCount: leaves.length > 5 ? 5 : leaves.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final leave = leaves[index];
+                  return _LeaveItem(leave: leave);
+                },
+              );
+            },
           ),
         ],
       ),
-      child: Stack(
+    );
+  }
+}
+
+class _LeaveItem extends StatelessWidget {
+  final Map<String, dynamic> leave;
+
+  const _LeaveItem({required this.leave});
+
+  @override
+  Widget build(BuildContext context) {
+    final fromDate = leave['fromDate'] ?? leave['startDate'];
+    final toDate = leave['toDate'] ?? leave['endDate'];
+    final reason =
+        leave['reason'] as String? ?? leave['leaveReason'] as String?;
+    final status = leave['status'] as String?;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.infoBlue.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppTheme.infoBlue.withOpacity(0.2),
+          width: 1,
+        ),
+      ),
+      child: Row(
         children: [
-          Positioned(
-            right: -30,
-            top: -30,
-            child: Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.1),
-              ),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppTheme.infoBlue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.calendar_today,
+              color: AppTheme.infoBlue,
+              size: 20,
             ),
           ),
-          Positioned(
-            left: -40,
-            bottom: -40,
-            child: Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.08),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.analytics_rounded,
-                        color: Colors.white,
-                        size: 24,
+                    Expanded(
+                      child: Text(
+                        '${_formatDate(fromDate)} - ${_formatDate(toDate)}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Monthly Summary',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                    if (status != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(status).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _getStatusColor(status).withOpacity(0.3),
+                          ),
+                        ),
+                        child: Text(
+                          status,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: _getStatusColor(status),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _SummaryTile(
-                        icon: Icons.check_circle_rounded,
-                        label: 'Present',
-                        value: '${counts['present'] ?? 0}',
+                if (reason != null && reason.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.notes_rounded,
+                        size: 14,
+                        color: AppTheme.textSecondary.withOpacity(0.6),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _SummaryTile(
-                        icon: Icons.beach_access_rounded,
-                        label: 'Leave',
-                        value: '${counts['leave'] ?? 0}',
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          reason,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary.withOpacity(0.7),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _SummaryTile(
-                        icon: Icons.skip_next_rounded,
-                        label: 'Skipped',
-                        value: '${counts['skipped'] ?? 0}',
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _SummaryTile(
-                        icon: Icons.cancel_rounded,
-                        label: 'Absent',
-                        value: '${counts['absent'] ?? 0}',
-                      ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -1417,48 +1526,133 @@ class _MonthlySummaryCard extends StatelessWidget {
       ),
     );
   }
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'approved':
+        return AppTheme.successGreen;
+      case 'pending':
+        return AppTheme.warningYellow;
+      case 'rejected':
+        return AppTheme.errorRed;
+      default:
+        return AppTheme.infoBlue;
+    }
+  }
+
+  String _formatDate(dynamic date) {
+    if (date == null) return 'N/A';
+    try {
+      final dt = DateTime.parse(date.toString()).toLocal();
+      return DateFormat('dd MMM yyyy').format(dt);
+    } catch (e) {
+      return 'Invalid';
+    }
+  }
 }
 
-class _SummaryTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
+// Payment History Card
+class _PaymentHistoryCard extends ConsumerWidget {
+  final String membershipId;
 
-  const _SummaryTile({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
+  const _PaymentHistoryCard({required this.membershipId});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final billsAsync = ref.watch(memberBillsProvider(membershipId));
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: Colors.white, size: 24),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.successGreen.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.payment_rounded,
+                    color: AppTheme.successGreen,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Payment History',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.white.withOpacity(0.9),
-              fontWeight: FontWeight.w500,
+          const Divider(height: 1),
+          billsAsync.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation(AppTheme.successGreen),
+                ),
+              ),
             ),
+            error: (e, s) => Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                'Error: $e',
+                style: const TextStyle(color: AppTheme.errorRed),
+              ),
+            ),
+            data: (bills) {
+              if (bills.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.receipt_long_outlined,
+                          size: 48,
+                          color: AppTheme.textSecondary.withOpacity(0.5),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No payment history',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary.withOpacity(0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                itemCount: bills.take(5).length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final bill = bills[index];
+                  return _PaymentItem(bill: bill);
+                },
+              );
+            },
           ),
         ],
       ),
@@ -1466,135 +1660,117 @@ class _SummaryTile extends StatelessWidget {
   }
 }
 
-// Helper Functions
-Map<String, int> _monthlyCounts(List<Map<String, dynamic>> attendance) {
-  final counts = <String, int>{
-    'present': 0,
-    'leave': 0,
-    'skipped': 0,
-    'absent': 0,
-  };
+class _PaymentItem extends StatelessWidget {
+  final Map<String, dynamic> bill;
 
-  for (final att in attendance) {
-    final status = (att['status'] as String?)?.toLowerCase();
-    if (status == 'present') {
-      counts['present'] = (counts['present'] ?? 0) + 1;
-    } else if (status == 'leave') {
-      counts['leave'] = (counts['leave'] ?? 0) + 1;
-    } else if (status == 'skipped') {
-      counts['skipped'] = (counts['skipped'] ?? 0) + 1;
-    } else if (status == 'absent') {
-      counts['absent'] = (counts['absent'] ?? 0) + 1;
-    }
-  }
-
-  return counts;
-}
-
-Color _colorFor(String? status) {
-  switch (status?.toLowerCase()) {
-    case 'present':
-    case 'eating now':
-      return AppTheme.successGreen;
-    case 'leave':
-      return AppTheme.warningYellow;
-    case 'skipped':
-    case 'not eating':
-      return AppTheme.errorRed;
-    default:
-      return Colors.grey;
-  }
-}
-
-// Loading States
-class _HeaderSkeleton extends StatelessWidget {
-  const _HeaderSkeleton();
+  const _PaymentItem({required this.bill});
 
   @override
   Widget build(BuildContext context) {
+    final totalAmount = bill['totalAmount'];
+    final status = bill['status'] as String?;
+    final month = bill['month'];
+    final year = bill['year'];
+
+    final statusColor = _getStatusColor(status);
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: statusColor.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: statusColor.withOpacity(0.2),
+          width: 1,
+        ),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 150,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: 100,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              _getStatusIcon(status),
+              color: statusColor,
+              size: 20,
+            ),
           ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(12),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$month $year',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Container(
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 4),
+                Text(
+                  '₹${totalAmount ?? 0}',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
                   ),
                 ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: statusColor,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              status ?? 'N/A',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
               ),
-            ],
+            ),
           ),
         ],
       ),
     );
   }
+
+  Color _getStatusColor(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'paid':
+        return AppTheme.successGreen;
+      case 'pending':
+        return AppTheme.warningYellow;
+      case 'overdue':
+        return AppTheme.errorRed;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getStatusIcon(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'paid':
+        return Icons.check_circle_rounded;
+      case 'pending':
+        return Icons.schedule_rounded;
+      case 'overdue':
+        return Icons.error_rounded;
+      default:
+        return Icons.receipt_long_rounded;
+    }
+  }
 }
 
+// Loading and Error States
 class _SectionLoading extends StatelessWidget {
   const _SectionLoading();
 
@@ -1602,38 +1778,16 @@ class _SectionLoading extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(40),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
       ),
-      child: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            height: 200,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ],
+      child: const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation(AppTheme.primaryOrange),
+        ),
       ),
     );
   }
@@ -1647,21 +1801,15 @@ class _ErrorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: AppTheme.errorRed.withOpacity(0.3),
           width: 2,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.errorRed.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         children: [
