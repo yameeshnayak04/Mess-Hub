@@ -44,40 +44,54 @@ class DashboardRepository {
     final data = await _getMealDashboard(mealType);
     final section = (data['remaining'] as Map?) ?? const {};
     final list = (section['members'] as List?) ?? const [];
-    return list
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
+    return list.whereType<Map>().map((e) {
+      final item = Map<String, dynamic>.from(e);
+      // Ensure user data is properly structured
+      if (item['user'] is! Map) {
+        // If user is just an ID, create a minimal structure
+        item['user'] = {'_id': item['user']};
+      }
+      return item;
+    }).toList();
   }
 
   Future<List<Map<String, dynamic>>> getMembersEating(String mealType) async {
     final data = await _getMealDashboard(mealType);
     final section = (data['eaten'] as Map?) ?? const {};
     final list = (section['members'] as List?) ?? const [];
-    return list
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
+    return list.whereType<Map>().map((e) {
+      final item = Map<String, dynamic>.from(e);
+      if (item['user'] is! Map) {
+        item['user'] = {'_id': item['user']};
+      }
+      return item;
+    }).toList();
   }
 
   Future<List<Map<String, dynamic>>> getMembersOnLeave(String mealType) async {
     final data = await _getMealDashboard(mealType);
     final section = (data['onLeave'] as Map?) ?? const {};
     final list = (section['members'] as List?) ?? const [];
-    return list
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
+    return list.whereType<Map>().map((e) {
+      final item = Map<String, dynamic>.from(e);
+      if (item['user'] is! Map) {
+        item['user'] = {'_id': item['user']};
+      }
+      return item;
+    }).toList();
   }
 
   Future<List<Map<String, dynamic>>> getMembersSkipped(String mealType) async {
     final data = await _getMealDashboard(mealType);
     final section = (data['skipped'] as Map?) ?? const {};
     final list = (section['members'] as List?) ?? const [];
-    return list
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
+    return list.whereType<Map>().map((e) {
+      final item = Map<String, dynamic>.from(e);
+      if (item['user'] is! Map) {
+        item['user'] = {'_id': item['user']};
+      }
+      return item;
+    }).toList();
   }
 
   // Payments (manager)
