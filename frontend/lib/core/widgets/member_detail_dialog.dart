@@ -285,9 +285,7 @@ class _MemberDetailDialogState extends State<MemberDetailDialog>
                             ),
                           ),
                           IconButton(
-                            onPressed: () =>
-                                Navigator.of(context, rootNavigator: true)
-                                    .pop(),
+                            onPressed: () => Navigator.of(context).pop(),
                             icon: const Icon(Icons.close, color: Colors.white),
                             style: IconButton.styleFrom(
                               backgroundColor: Colors.white.withOpacity(0.2),

@@ -415,7 +415,6 @@ class ManagerHomeScreen extends ConsumerWidget {
     );
   }
 
-  // ...existing code...
   Future _showMembersDialog(
     BuildContext context,
     WidgetRef ref,
@@ -450,7 +449,7 @@ class ManagerHomeScreen extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: [
+                boxShadow: const [
                   BoxShadow(
                     color: Colors.black26,
                     blurRadius: 12,
@@ -458,9 +457,9 @@ class ManagerHomeScreen extends ConsumerWidget {
                   ),
                 ],
               ),
-              child: Column(
+              child: const Column(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
+                children: [
                   SizedBox(
                     height: 48,
                     width: 48,
@@ -509,10 +508,10 @@ class ManagerHomeScreen extends ConsumerWidget {
           data = const <Map<String, dynamic>>[];
       }
 
-      // Dismiss loading dialog if still visible. Guard against throwing if already popped.
+      // Safely dismiss loading dialog if it was shown.
       if (loadingVisible) {
         try {
-          rootNav.pop();
+          await rootNav.maybePop();
         } catch (_) {}
         loadingVisible = false;
       }
@@ -524,18 +523,20 @@ class ManagerHomeScreen extends ConsumerWidget {
           .toList();
 
       if (membersList.isEmpty) {
-        if (context.mounted)
+        if (context.mounted) {
           _showInfoSnackBar(context, 'No members found for $effectiveMeal');
+        }
         return;
       }
 
       // show as modal bottom sheet for better mobile UX
       if (!context.mounted) return;
+
       await showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        // keep using the closest navigator for the sheet so popping the root dialog won't affect it
+        // use the local navigator; no nested Navigator inside the sheet
         useRootNavigator: false,
         builder: (ctx) {
           return SafeArea(
@@ -550,7 +551,7 @@ class ManagerHomeScreen extends ConsumerWidget {
       // ensure loading dismissed
       if (loadingVisible) {
         try {
-          rootNav.pop();
+          await rootNav.maybePop();
         } catch (_) {}
         loadingVisible = false;
       }
