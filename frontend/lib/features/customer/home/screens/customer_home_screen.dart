@@ -36,13 +36,13 @@ class CustomerHomeScreen extends ConsumerWidget {
       };
     }
 
-    // Parse lunch timings - Access MessTimings properties directly
+    // Parse lunch timings
     final lunchStart = mess.timings.lunch.start;
     final lunchEnd = mess.timings.lunch.end;
     final lunchStartMinutes = _parseTimeToMinutes(lunchStart);
     final lunchEndMinutes = _parseTimeToMinutes(lunchEnd);
 
-    // Parse dinner timings - Access MessTimings properties directly
+    // Parse dinner timings
     final dinnerStart = mess.timings.dinner.start;
     final dinnerEnd = mess.timings.dinner.end;
     final dinnerStartMinutes = _parseTimeToMinutes(dinnerStart);
@@ -52,10 +52,16 @@ class CustomerHomeScreen extends ConsumerWidget {
     final hasLunch = planName.contains('both') || planName.contains('lunch');
     final hasDinner = planName.contains('both') || planName.contains('dinner');
 
-    // Check if lunch is active
-    if (hasLunch &&
+    // Active windows
+    final isLunchActive = hasLunch &&
         currentMinutes >= lunchStartMinutes &&
-        currentMinutes < lunchEndMinutes) {
+        currentMinutes < lunchEndMinutes;
+
+    final isDinnerActive = hasDinner &&
+        currentMinutes >= dinnerStartMinutes &&
+        currentMinutes < dinnerEndMinutes;
+
+    if (isLunchActive) {
       return {
         'isActive': true,
         'mealType': 'lunch',
@@ -70,10 +76,7 @@ class CustomerHomeScreen extends ConsumerWidget {
       };
     }
 
-    // Check if dinner is active
-    if (hasDinner &&
-        currentMinutes >= dinnerStartMinutes &&
-        currentMinutes < dinnerEndMinutes) {
+    if (isDinnerActive) {
       return {
         'isActive': true,
         'mealType': 'dinner',
@@ -88,22 +91,31 @@ class CustomerHomeScreen extends ConsumerWidget {
       };
     }
 
-    // No active meal, determine next meal
-    String nextMeal = 'Lunch';
-    String nextMealTime = _formatTime(lunchStart);
+    // Not active: choose the next upcoming meal (handle after-dinner -> next day's lunch)
+    String nextMeal;
+    String nextMealTime;
 
     if (hasLunch && currentMinutes < lunchStartMinutes) {
+      // Before lunch window -> lunch is next
       nextMeal = 'Lunch';
       nextMealTime = _formatTime(lunchStart);
     } else if (hasDinner && currentMinutes < dinnerStartMinutes) {
+      // After lunch window but before dinner window -> dinner is next
       nextMeal = 'Dinner';
       nextMealTime = _formatTime(dinnerStart);
-    } else if (hasDinner) {
-      nextMeal = 'Dinner';
-      nextMealTime = _formatTime(dinnerStart);
-    } else if (hasLunch) {
-      nextMeal = 'Lunch';
-      nextMealTime = _formatTime(lunchStart);
+    } else {
+      // After dinner window or only one meal in plan -> next day's first available meal
+      if (hasLunch) {
+        nextMeal = 'Lunch';
+        nextMealTime = _formatTime(lunchStart);
+      } else if (hasDinner) {
+        nextMeal = 'Dinner';
+        nextMealTime = _formatTime(dinnerStart);
+      } else {
+        // Fallback
+        nextMeal = 'Lunch';
+        nextMealTime = '09:00 AM';
+      }
     }
 
     return {

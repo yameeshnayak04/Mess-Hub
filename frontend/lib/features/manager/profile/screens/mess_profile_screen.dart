@@ -51,16 +51,13 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
   bool _tiffinService = false;
 
   // Timings
-  TimeOfDay? _lunchStart;
-  TimeOfDay? _lunchEnd;
-  TimeOfDay? _dinnerStart;
-  TimeOfDay? _dinnerEnd;
+  TimeOfDay? _lunchStart, _lunchEnd, _dinnerStart, _dinnerEnd;
 
   // Plans snapshot (from backend)
   List<Map<String, dynamic>> _plans = [];
 
   File? _picked;
-  bool _initialized = false;
+  bool _initialized = false; // seed form once per fresh fetch
   bool _isSaving = false;
 
   @override
@@ -88,14 +85,14 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
     super.dispose();
   }
 
-  TimeOfDay? _parseHHMM(String? v) {
-    if (v == null || v.isEmpty) return null;
-    final parts = v.split(':');
-    if (parts.length != 2) return null;
+  TimeOfDay? _parseHHMM(String? s) {
+    if (s == null || s.isEmpty) return null;
+    final parts = s.split(':');
+    if (parts.length < 2) return null;
     final h = int.tryParse(parts[0]);
     final m = int.tryParse(parts[1]);
     if (h == null || m == null) return null;
-    return TimeOfDay(hour: h, minute: m);
+    return TimeOfDay(hour: h.clamp(0, 23), minute: m.clamp(0, 59));
   }
 
   String _formatHHMM(TimeOfDay? t) {
@@ -194,6 +191,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
               _basicThali.text = (mess['basicThaliDetails'] ?? '').toString();
               _tiffinService = mess['tiffinService'] == true;
 
+              // Seed timings from server response (flat keys)
               final timings =
                   (mess['timings'] as Map?)?.cast<String, dynamic>() ?? {};
               _lunchStart = _parseHHMM(timings['lunchStart'] as String?);
@@ -210,24 +208,14 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
               _initialized = true;
             }
 
-            final scheduled =
-                (mess['scheduledUpdates'] as Map?)?.cast<String, dynamic>() ??
-                    {};
-            final effective = mess['scheduledEffectiveFrom'] != null
-                ? DateTime.tryParse(mess['scheduledEffectiveFrom'])
-                : null;
-
             final imagePath = (mess['messImage'] as String?) ?? '';
             final imageUrl = dio.resolveServerUrl(imagePath);
 
             return Column(
               children: [
-                // Modern Header with Image
                 _buildHeader(context, imageUrl, mess),
 
-                // Scheduled Updates Banner (Moved here - above tabs)
-                if (scheduled.isNotEmpty || effective != null)
-                  _buildScheduledBanner(context, scheduled, effective),
+                // Remove scheduled updates banner (no scheduling anymore)
 
                 // Tab Bar
                 Container(
@@ -297,6 +285,74 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
     );
   }
 
+  Future<void> _handleSave(BuildContext context) async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSaving = true);
+
+    try {
+      // Build payload with HH:mm strings
+      final timings = <String, String>{};
+      if (_lunchStart != null) timings['lunchStart'] = _formatHHMM(_lunchStart);
+      if (_lunchEnd != null) timings['lunchEnd'] = _formatHHMM(_lunchEnd);
+      if (_dinnerStart != null)
+        timings['dinnerStart'] = _formatHHMM(_dinnerStart);
+      if (_dinnerEnd != null) timings['dinnerEnd'] = _formatHHMM(_dinnerEnd);
+
+      final rules = <String, dynamic>{
+        'minLeaveDaysForRebate': _minLeaveDays.text.trim(),
+        'rebatePerThali': _rebatePerThali.text.trim(),
+        'skipAllowancePercent': _skipPercent.text.trim(),
+        'minMonthlyCharge': _minMonthlyCharge.text.trim(),
+      };
+
+      final plansPayload = _plans.map((p) {
+        return {
+          '_id': p['_id']?.toString(),
+          'name': (p['name'] ?? '').toString(),
+          'rate': (p['rate'] ?? '').toString(),
+        };
+      }).toList();
+
+      final fields = <String, dynamic>{
+        'address': _address.text.trim(),
+        'contactPhone': _phone.text.trim(),
+        'maxCapacity': _maxCapacity.text.trim(),
+        'dailyThaliRate': _dailyRate.text.trim(),
+        'tiffinService': _tiffinService.toString(),
+        'basicThaliDetails': _basicThali.text.trim(),
+        'timings': timings,
+        'rules': rules,
+        'plans': plansPayload,
+      };
+
+      MultipartFile? mf;
+      if (_picked != null) {
+        mf = await MultipartFile.fromFile(
+          _picked!.path,
+          filename: _picked!.path.split('/').last,
+        );
+      }
+
+      await ref.read(messProfileUpdaterProvider)(fields, image: mf);
+
+      if (!mounted) return;
+      _showSnackBar('Changes saved successfully!');
+
+      // Force reseed from fresh server data so timings show up immediately
+      setState(() {
+        _initialized = false;
+      });
+      ref.invalidate(messProfileProvider);
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('Failed: ${e.toString().replaceAll('Exception: ', '')}',
+          isError: true);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   Widget _buildLoadingState() {
     return Center(
       child: Column(
@@ -355,13 +411,13 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
       ),
       child: Column(
         children: [
-          // Top Bar
-          const Padding(
-            padding: EdgeInsets.all(16),
+          // Top Bar (modified to include info button)
+          Padding(
+            padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                SizedBox(width: 16),
-                Expanded(
+                const SizedBox(width: 16),
+                const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -385,7 +441,16 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
                     ],
                   ),
                 ),
-                LogoutAction(),
+                // Info / Manual button
+                Tooltip(
+                  message: 'User Manual',
+                  child: IconButton(
+                    icon: const Icon(Icons.info_outline_rounded,
+                        color: Colors.white),
+                    onPressed: () => _showManagerAboutDialog(context),
+                  ),
+                ),
+                const LogoutAction(),
               ],
             ),
           ),
@@ -515,6 +580,217 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
       ),
     );
   }
+
+  void _showManagerAboutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 12, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryOrange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.info_outline_rounded,
+                color: AppTheme.primaryOrange,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Mess Hub Manager Manual',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Close',
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            )
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _mgrTitle('Overview'),
+                _mgrPara(
+                  'Mess Hub gives you real-time control over meal operations, membership management, billing, leave & skip policies, '
+                  'and attendance visibility. Changes you save in your profile apply immediately.',
+                ),
+                _mgrTitle('Dashboard Stats'),
+                _mgrBullets([
+                  'Eating: Members marked present for current meal.',
+                  'Remaining: Members eligible who have not acted yet.',
+                  'Skipped: Members who missed window without leave.',
+                  'On Leave: Approved leave members inside the date range.',
+                  'Daily Members: Snapshot of valid/active memberships today.',
+                ]),
+                _mgrTitle('Member Attendance Categories'),
+                _mgrPara(
+                  'These categories allow you to anticipate resource usage (e.g., thali count) and assess behavior for billing adjustments.',
+                ),
+                _mgrTitle('Menu Management'),
+                _mgrBullets([
+                  'Define lunchItems and dinnerItems per date.',
+                  'Consistency helps reduce disputes and improves satisfaction.',
+                ]),
+                _mgrTitle('Immediate Profile Updates'),
+                _mgrBullets([
+                  'Address / Contact changes applied at once.',
+                  'Timings (lunchStart, lunchEnd, dinnerStart, dinnerEnd) drive all meal window logic.',
+                  'Plans: Adjust rates; existing memberships can use updated pricing for future calculations.',
+                  'Rules: minLeaveDaysForRebate, rebatePerThali, skipAllowancePercent, minMonthlyCharge directly influence billing.',
+                ]),
+                _mgrTitle('Rules Clarification'),
+                _mgrBullets([
+                  'minLeaveDaysForRebate: Minimum consecutive leave days to qualify for rebate.',
+                  'rebatePerThali: Applied per meal missed under valid leave.',
+                  'skipAllowancePercent: Limit of allowable unplanned skips before extra charge logic could apply.',
+                  'minMonthlyCharge: Floor to prevent excessive rebate erosion.',
+                ]),
+                _mgrTitle('Plans & Pricing'),
+                _mgrPara(
+                  'Each plan defines a name and a rate. Keep naming clear (e.g., Lunch Only, Dinner Only, Both). '
+                  'Maintain parity between expected service and pricing transparency.',
+                ),
+                _mgrTitle('Tiffin Service & Thali Details'),
+                _mgrBullets([
+                  'tiffinService: Toggle if you support packed delivery.',
+                  'basicThaliDetails: Communicate core meal composition (helps manage expectations).',
+                ]),
+                _mgrTitle('Approvals & Join Requests'),
+                _mgrBullets([
+                  'Join Requests: New customers awaiting your approval.',
+                  'Payment Approvals: Validate payment proofs before marking as settled.',
+                ]),
+                _mgrTitle('Leave & Skips'),
+                _mgrPara(
+                  'Members apply leave ahead of time to earn rebates if they meet minimum requirements. '
+                  'Skips are passive non-attendance inside the meal window. Encourage early leave requests to manage inventory.',
+                ),
+                _mgrTitle('Billing Workflow'),
+                _mgrBullets([
+                  'Collect attendance metrics during cycle.',
+                  'Apply rebatePerThali after verifying minLeaveDaysForRebate.',
+                  'Ensure final sum respects minMonthlyCharge.',
+                  'Approve payment proofs & mark bill as cleared.',
+                ]),
+                _mgrTitle('Kiosk Operations'),
+                _mgrBullets([
+                  'Physical device / kiosk uses Customer PIN for attendance.',
+                  'Keep device secure and supervised during active windows.',
+                ]),
+                _mgrTitle('Best Practices'),
+                _mgrBullets([
+                  'Update timings carefully—changes affect live attendance windows.',
+                  'Communicate plan/rate changes before editing to reduce disputes.',
+                  'Monitor skip patterns to forecast supply accurately.',
+                  'Refresh dashboard after major profile edits.',
+                ]),
+                _mgrTitle('Data & Security'),
+                _mgrPara(
+                  'All requests use authenticated APIs. Avoid sharing manager credentials. '
+                  'Image uploads and form submissions are processed immediately (no deferred scheduling).',
+                ),
+                _mgrTitle('Support'),
+                _mgrPara(
+                  'For issues like incorrect billing or attendance anomalies, verify timings and rules first, then reach out to technical support if needed.',
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: Text(
+                    '© 2024 Mess Hub',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryOrange,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Manager manual helpers
+  Widget _mgrTitle(String text) => Padding(
+        padding: const EdgeInsets.only(top: 18, bottom: 6),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+      );
+
+  Widget _mgrPara(String text) => Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          height: 1.5,
+          color: AppTheme.textSecondary,
+        ),
+      );
+
+  Widget _mgrBullets(List<String> items) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: items
+            .map(
+              (e) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('• ',
+                        style: TextStyle(fontSize: 14, height: 1.4)),
+                    Expanded(
+                      child: Text(
+                        e,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+            .toList(),
+      );
 
   Widget _buildBasicTab() {
     return ListView(
@@ -1070,116 +1346,6 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
     );
   }
 
-  Widget _buildScheduledBanner(
-      BuildContext context, Map scheduled, DateTime? effective) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.infoBlue.withOpacity(0.15),
-            AppTheme.infoBlue.withOpacity(0.05),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.infoBlue.withOpacity(0.3)),
-      ),
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppTheme.infoBlue.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.schedule, color: AppTheme.infoBlue, size: 20),
-        ),
-        title: const Text(
-          'Scheduled Changes',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        subtitle: effective != null
-            ? Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  'Effective: ${DateFormat('MMM d, y').format(effective.toLocal())}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.infoBlue,
-                  ),
-                ),
-              )
-            : null,
-        iconColor: AppTheme.infoBlue,
-        collapsedIconColor: AppTheme.infoBlue,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: scheduled.entries
-                  .map(
-                    (e) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            margin: const EdgeInsets.only(top: 6),
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: AppTheme.infoBlue,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: RichText(
-                              text: TextSpan(
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.textPrimary,
-                                ),
-                                children: [
-                                  TextSpan(
-                                    text: '${e.key}: ',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: '${e.value}',
-                                    style: TextStyle(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSaveButton(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1262,60 +1428,6 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
         ),
       ),
     );
-  }
-
-  Future<void> _handleSave(BuildContext context) async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isSaving = true);
-
-    try {
-      final fields = <String, String>{
-        'address': _address.text.trim(),
-        'contactPhone': _phone.text.trim(),
-        'maxCapacity': _maxCapacity.text.trim(),
-        'dailyThaliRate': _dailyRate.text.trim(),
-        'tiffinService': _tiffinService.toString(),
-        'basicThaliDetails': _basicThali.text.trim(),
-        'rules.minLeaveDaysForRebate': _minLeaveDays.text.trim(),
-        'rules.rebatePerThali': _rebatePerThali.text.trim(),
-        'rules.skipAllowancePercent': _skipPercent.text.trim(),
-        'rules.minMonthlyCharge': _minMonthlyCharge.text.trim(),
-        'timings.lunchStart': _formatHHMM(_lunchStart),
-        'timings.lunchEnd': _formatHHMM(_lunchEnd),
-        'timings.dinnerStart': _formatHHMM(_dinnerStart),
-        'timings.dinnerEnd': _formatHHMM(_dinnerEnd),
-      };
-
-      for (var i = 0; i < _plans.length; i++) {
-        final p = _plans[i];
-        final id = p['_id']?.toString() ?? '$i';
-        final rate = p['rate']?.toString() ?? '';
-        fields['plans.$id.rate'] = rate;
-      }
-
-      MultipartFile? mf;
-      if (_picked != null) {
-        mf = await MultipartFile.fromFile(
-          _picked!.path,
-          filename: _picked!.path.split('/').last,
-        );
-      }
-
-      await ref.read(messProfileUpdaterProvider)(fields, image: mf);
-
-      if (!mounted) return;
-      _showSnackBar('Changes scheduled for next month! 🎉');
-      ref.invalidate(messProfileProvider);
-    } catch (e) {
-      if (!mounted) return;
-      _showSnackBar('Failed: ${e.toString().replaceAll('Exception: ', '')}',
-          isError: true);
-    } finally {
-      if (mounted) {
-        setState(() => _isSaving = false);
-      }
-    }
   }
 }
 

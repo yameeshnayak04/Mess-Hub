@@ -287,33 +287,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               const SizedBox(height: 16),
                               _modernSettingCard(
                                 context,
-                                icon: Icons.dark_mode_outlined,
-                                iconColor: Colors.indigo,
-                                iconBg: Colors.indigo.withOpacity(0.1),
-                                title: 'Dark Mode',
-                                subtitle: 'Coming soon',
-                                trailing: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade200,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    'Soon',
-                                    style: TextStyle(
-                                      color: AppTheme.textSecondary,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              _modernSettingCard(
-                                context,
                                 icon: Icons.help_outline_rounded,
                                 iconColor: Colors.teal,
                                 iconBg: Colors.teal.withOpacity(0.1),
@@ -960,6 +933,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 12, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
         title: Row(
           children: [
             Container(
@@ -975,62 +950,111 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
             const SizedBox(width: 12),
-            const Text('About'),
+            const Expanded(
+              child: Text(
+                'About Mess Hub',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Close',
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(context),
+            )
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Mess Management System',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Version 1.0.0',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'A comprehensive solution for managing mess operations, memberships, and billing.',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryOrange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.copyright_rounded,
-                    color: AppTheme.primaryOrange,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '2024 Mess Management',
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _aboutSectionTitle('What is Mess Hub?'),
+                _aboutParagraph(
+                  'Mess Hub is a modern platform that helps you manage your daily meals at a registered mess efficiently. '
+                  'You can view today\'s menu, track meal windows, manage attendance (eat / skip / leave), request leaves, '
+                  'monitor billing, and securely access kiosks using your PIN.',
+                ),
+                _aboutSectionTitle('Quick Start'),
+                _aboutBullets([
+                  'Join a mess using an approved plan.',
+                  'Check meal timings so you know when Lunch or Dinner windows are open.',
+                  'Tap actions (Eat / Skip / Leave) in the relevant feature (if available in your build).',
+                  'View your current plan and remaining days from your membership/cost screens.',
+                ]),
+                _aboutSectionTitle('Meal Attendance States'),
+                _aboutBullets([
+                  'Eating: You are counted for the meal.',
+                  'Skipped: Meal window passed, you did not eat (may count toward skip allowance).',
+                  'On Leave: You applied leave in advance for rebate eligibility.',
+                  'Remaining: You have not acted yet and meal window still open.',
+                ]),
+                _aboutSectionTitle('Skip vs Leave vs Absent'),
+                _aboutParagraph(
+                  'Leave is planned in advance and can qualify for a per-thali rebate if minimum leave days are met. '
+                  'Skip is unplanned non-attendance during the window and is limited by skipAllowancePercent. '
+                  'Absent simply means neither attended nor registered a valid leave and may not earn rebates.',
+                ),
+                _aboutSectionTitle('Rebate & Rules'),
+                _aboutBullets([
+                  'minLeaveDaysForRebate: Minimum consecutive leave days needed to earn rebate.',
+                  'rebatePerThali: Amount reduced per meal for eligible leave days.',
+                  'skipAllowancePercent: Percentage of total billed meals allowed to skip without penalty.',
+                  'minMonthlyCharge: Ensures a baseline monthly billing even if rebates reduce total.',
+                ]),
+                _aboutSectionTitle('Meal Timings'),
+                _aboutParagraph(
+                  'Each mess defines lunchStart, lunchEnd, dinnerStart, dinnerEnd (HH:MM format). '
+                  'A meal is active only inside its window. After dinner ends, nextMeal switches to next day lunch.',
+                ),
+                _aboutSectionTitle('Plans & Charges'),
+                _aboutBullets([
+                  'Plans have names and rates (e.g., Lunch Only, Dinner Only, Both).',
+                  'dailyThaliRate applies when a daily (flex) structure is used.',
+                  'minMonthlyCharge guarantees the mess earns a baseline.',
+                ]),
+                _aboutSectionTitle('Thali & Tiffin Service'),
+                _aboutParagraph(
+                  'basicThaliDetails lists standard meal items. Tiffin Service indicates whether packed delivery is supported.',
+                ),
+                _aboutSectionTitle('Kiosk PIN'),
+                _aboutParagraph(
+                  'Your 4-digit PIN unlocks kiosk devices for quick attendance actions. Keep it secret and change it if compromised.',
+                ),
+                _aboutSectionTitle('Billing & Payments'),
+                _aboutBullets([
+                  'Pending payments may await manager approval.',
+                  'History shows finalized bills and payment proofs.',
+                  'Rebates reduce payable amount when qualifying leave conditions are met.',
+                ]),
+                _aboutSectionTitle('Next Meal Logic'),
+                _aboutParagraph(
+                  'If inside a meal window you see it as Active. Between windows you see the upcoming one. After dinner ends, next meal rolls over to tomorrow\'s lunch if your plan includes lunch.',
+                ),
+                _aboutSectionTitle('Privacy & Safety'),
+                _aboutBullets([
+                  'Only your mess manager and authorized staff can view attendance details.',
+                  'PIN and personal data are transmitted over HTTPS.',
+                ]),
+                _aboutSectionTitle('Need Help?'),
+                _aboutParagraph(
+                  'Use Help & Support (coming soon) or contact your manager directly for urgent issues.',
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: Text(
+                    '© 2024 Mess Hub',
                     style: TextStyle(
-                      color: AppTheme.primaryOrange,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 8),
+              ],
             ),
-          ],
+          ),
         ),
         actions: [
           ElevatedButton(
@@ -1038,12 +1062,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               backgroundColor: AppTheme.primaryOrange,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
               ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
@@ -1052,6 +1073,56 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
     );
   }
+
+  // Helper widgets for About (customer)
+  Widget _aboutSectionTitle(String text) => Padding(
+        padding: const EdgeInsets.only(top: 18, bottom: 6),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+      );
+
+  Widget _aboutParagraph(String text) => Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          height: 1.5,
+          color: AppTheme.textSecondary,
+        ),
+      );
+
+  Widget _aboutBullets(List<String> items) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: items
+            .map(
+              (e) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('• ',
+                        style: TextStyle(fontSize: 14, height: 1.4)),
+                    Expanded(
+                      child: Text(
+                        e,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+            .toList(),
+      );
 
   void _showLogoutDialog(BuildContext context) {
     showDialog(
@@ -1079,8 +1150,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ],
         ),
         content: const Text(
-          'Are you sure you want to logout from your account?',
-          style: TextStyle(height: 1.5),
+          'Are you sure you want to logout?',
         ),
         actions: [
           TextButton(
@@ -1099,11 +1169,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 vertical: 12,
               ),
             ),
-            onPressed: () async {
-              if (context.mounted) {
-                Navigator.of(context, rootNavigator: true).pop();
-              }
-              await ref.read(authProvider.notifier).logout();
+            onPressed: () {
+              Navigator.pop(context);
+              ref.read(authProvider.notifier).logout();
             },
             child: const Text('Logout'),
           ),

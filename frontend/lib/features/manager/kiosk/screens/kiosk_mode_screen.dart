@@ -140,6 +140,11 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen>
       },
       child: Scaffold(
         backgroundColor: AppTheme.backgroundColor,
+        appBar: AppBar(
+          backgroundColor: AppTheme.primaryOrange,
+          foregroundColor: Colors.white,
+          toolbarHeight: 0,
+        ),
         body: SafeArea(
           child: Column(
             children: [

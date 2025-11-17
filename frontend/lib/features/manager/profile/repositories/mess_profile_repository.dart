@@ -2,6 +2,7 @@
 
 import '../../../../core/api/dio_client.dart';
 import 'package:dio/dio.dart';
+import 'dart:convert';
 
 class MessProfileRepository {
   final DioClient _dio;
@@ -10,13 +11,13 @@ class MessProfileRepository {
   Future<Map<String, dynamic>> getMyMess() async {
     final res = await _dio.get('/mess/my-mess');
     return (res.data['data'] as Map).cast<String, dynamic>();
-  } // controller auto-applies scheduled updates when due
+  } // immediate model (no scheduling)
 
-  Future<Map<String, dynamic>> scheduleUpdate({
+  Future<Map<String, dynamic>> updateMyMess({
     required Map<String, dynamic> fields,
     MultipartFile? imageFile,
   }) async {
-    // Whitelist only fields that backend allows to change
+    // Only fields backend allows to change
     const allowedKeys = <String>{
       'address',
       'contactPhone',
@@ -37,8 +38,13 @@ class MessProfileRepository {
     });
 
     final form = FormData();
+
     filtered.forEach((k, v) {
-      form.fields.add(MapEntry(k, v?.toString() ?? ''));
+      if (v is Map || v is List) {
+        form.fields.add(MapEntry(k, jsonEncode(v)));
+      } else {
+        form.fields.add(MapEntry(k, v?.toString() ?? ''));
+      }
     });
 
     if (imageFile != null) {
@@ -47,5 +53,5 @@ class MessProfileRepository {
 
     final res = await _dio.put('/mess/my-mess', data: form);
     return (res.data as Map).cast<String, dynamic>();
-  } // writes scheduledUpdates + scheduledEffectiveFrom
+  } // immediate save
 }

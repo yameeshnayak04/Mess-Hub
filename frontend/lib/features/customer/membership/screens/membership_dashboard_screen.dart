@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/membership_providers.dart';
 import '../providers/attendance_providers.dart';
@@ -34,6 +35,12 @@ class MembershipDashboardScreen extends ConsumerWidget {
           final menu = data['todaysMenu'] as Map<String, dynamic>?;
           final summary =
               data['attendanceSummary'] as Map<String, dynamic>? ?? {};
+
+          // Extract manager phone (supports multiple possible keys) and sanitize
+          final rawPhone =
+              (mess['contactPhone'] ?? mess['phone'] ?? mess['mobile'] ?? '')
+                  .toString()
+                  .trim();
 
           return CustomScrollView(
             slivers: [
@@ -124,6 +131,12 @@ class MembershipDashboardScreen extends ConsumerWidget {
                   ),
                 ),
                 actions: [
+                  if (rawPhone.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Call Manager',
+                      icon: const Icon(Icons.call_rounded),
+                      onPressed: () => _callManager(context, rawPhone),
+                    ),
                   IconButton(
                     icon: const Icon(Icons.refresh_rounded),
                     onPressed: () =>
@@ -330,6 +343,45 @@ class MembershipDashboardScreen extends ConsumerWidget {
             child: const Text('Leave', style: TextStyle(color: Colors.white)),
           ),
         ],
+      ),
+    );
+  }
+
+  // Call Manager helpers
+  Future<void> _callManager(BuildContext context, String rawPhone) async {
+    final phone = _sanitizePhone(rawPhone);
+    if (phone.isEmpty) {
+      _showSnackBar(context, 'Manager phone not available', isError: true);
+      return;
+    }
+    final uri = Uri(scheme: 'tel', path: phone);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) {
+        _showSnackBar(context, 'Could not open dialer', isError: true);
+      }
+    } catch (_) {
+      _showSnackBar(context, 'Could not open dialer', isError: true);
+    }
+  }
+
+  String _sanitizePhone(String input) {
+    final s = input.trim();
+    final hasPlus = s.startsWith('+');
+    final digits = s.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return '';
+    return hasPlus ? '+$digits' : digits;
+    // If you want to force country code (e.g., +91), you could:
+    // return hasPlus ? '+$digits' : (digits.length == 10 ? '+91$digits' : digits);
+  }
+
+  void _showSnackBar(BuildContext context, String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? AppTheme.errorRed : AppTheme.primaryOrange,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
