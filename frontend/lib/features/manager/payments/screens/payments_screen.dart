@@ -65,6 +65,11 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
+      appBar: AppBar(
+        backgroundColor: AppTheme.primaryOrange,
+        foregroundColor: Colors.white,
+        toolbarHeight: 0,
+      ),
       body: SafeArea(
         child: Column(
           children: [

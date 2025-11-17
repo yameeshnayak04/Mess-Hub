@@ -156,145 +156,142 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
     final messAsync = ref.watch(messProfileProvider);
     final dio = ref.read(dioClientProvider);
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: AppTheme.primaryOrange,
-        systemNavigationBarIconBrightness: Brightness.light,
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
+      appBar: AppBar(
+        backgroundColor: AppTheme.primaryOrange,
+        foregroundColor: Colors.white,
+        toolbarHeight: 0,
       ),
-      child: Scaffold(
-        backgroundColor: AppTheme.backgroundColor,
-        body: SafeArea(
-          child: messAsync.when(
-            loading: () => _buildLoadingState(),
-            error: (e, _) =>
-                _Error(message: 'Failed to load', detail: e.toString()),
-            data: (mess) {
-              // One-time initialization from backend data
-              if (!_initialized) {
-                _name.text = (mess['messName'] ?? '').toString();
-                _city.text = (mess['city'] ?? '').toString();
-                _serviceType.text = (mess['serviceType'] ?? '').toString();
-                _cuisine.text = (mess['cuisine'] ?? '').toString();
+      body: SafeArea(
+        child: messAsync.when(
+          loading: () => _buildLoadingState(),
+          error: (e, _) =>
+              _Error(message: 'Failed to load', detail: e.toString()),
+          data: (mess) {
+            // One-time initialization from backend data
+            if (!_initialized) {
+              _name.text = (mess['messName'] ?? '').toString();
+              _city.text = (mess['city'] ?? '').toString();
+              _serviceType.text = (mess['serviceType'] ?? '').toString();
+              _cuisine.text = (mess['cuisine'] ?? '').toString();
 
-                _address.text = (mess['address'] ?? '').toString();
-                _phone.text = (mess['contactPhone'] ?? '').toString();
-                _maxCapacity.text = (mess['maxCapacity'] ?? '').toString();
-                _dailyRate.text = (mess['dailyThaliRate'] ?? '').toString();
+              _address.text = (mess['address'] ?? '').toString();
+              _phone.text = (mess['contactPhone'] ?? '').toString();
+              _maxCapacity.text = (mess['maxCapacity'] ?? '').toString();
+              _dailyRate.text = (mess['dailyThaliRate'] ?? '').toString();
 
-                final rules =
-                    (mess['rules'] as Map?)?.cast<String, dynamic>() ?? {};
-                _minLeaveDays.text =
-                    (rules['minLeaveDaysForRebate'] ?? '').toString();
-                _rebatePerThali.text =
-                    (rules['rebatePerThali'] ?? '').toString();
-                _skipPercent.text =
-                    (rules['skipAllowancePercent'] ?? '').toString();
-                _minMonthlyCharge.text =
-                    (rules['minMonthlyCharge'] ?? '').toString();
+              final rules =
+                  (mess['rules'] as Map?)?.cast<String, dynamic>() ?? {};
+              _minLeaveDays.text =
+                  (rules['minLeaveDaysForRebate'] ?? '').toString();
+              _rebatePerThali.text = (rules['rebatePerThali'] ?? '').toString();
+              _skipPercent.text =
+                  (rules['skipAllowancePercent'] ?? '').toString();
+              _minMonthlyCharge.text =
+                  (rules['minMonthlyCharge'] ?? '').toString();
 
-                _basicThali.text = (mess['basicThaliDetails'] ?? '').toString();
-                _tiffinService = mess['tiffinService'] == true;
+              _basicThali.text = (mess['basicThaliDetails'] ?? '').toString();
+              _tiffinService = mess['tiffinService'] == true;
 
-                final timings =
-                    (mess['timings'] as Map?)?.cast<String, dynamic>() ?? {};
-                _lunchStart = _parseHHMM(timings['lunchStart'] as String?);
-                _lunchEnd = _parseHHMM(timings['lunchEnd'] as String?);
-                _dinnerStart = _parseHHMM(timings['dinnerStart'] as String?);
-                _dinnerEnd = _parseHHMM(timings['dinnerEnd'] as String?);
+              final timings =
+                  (mess['timings'] as Map?)?.cast<String, dynamic>() ?? {};
+              _lunchStart = _parseHHMM(timings['lunchStart'] as String?);
+              _lunchEnd = _parseHHMM(timings['lunchEnd'] as String?);
+              _dinnerStart = _parseHHMM(timings['dinnerStart'] as String?);
+              _dinnerEnd = _parseHHMM(timings['dinnerEnd'] as String?);
 
-                final rawPlans = mess['plans'] as List? ?? const [];
-                _plans = rawPlans
-                    .whereType<Map>()
-                    .map((e) => Map<String, dynamic>.from(e))
-                    .toList();
+              final rawPlans = mess['plans'] as List? ?? const [];
+              _plans = rawPlans
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList();
 
-                _initialized = true;
-              }
+              _initialized = true;
+            }
 
-              final scheduled =
-                  (mess['scheduledUpdates'] as Map?)?.cast<String, dynamic>() ??
-                      {};
-              final effective = mess['scheduledEffectiveFrom'] != null
-                  ? DateTime.tryParse(mess['scheduledEffectiveFrom'])
-                  : null;
+            final scheduled =
+                (mess['scheduledUpdates'] as Map?)?.cast<String, dynamic>() ??
+                    {};
+            final effective = mess['scheduledEffectiveFrom'] != null
+                ? DateTime.tryParse(mess['scheduledEffectiveFrom'])
+                : null;
 
-              final imagePath = (mess['messImage'] as String?) ?? '';
-              final imageUrl = dio.resolveServerUrl(imagePath);
+            final imagePath = (mess['messImage'] as String?) ?? '';
+            final imageUrl = dio.resolveServerUrl(imagePath);
 
-              return Column(
-                children: [
-                  // Modern Header with Image
-                  _buildHeader(context, imageUrl, mess),
+            return Column(
+              children: [
+                // Modern Header with Image
+                _buildHeader(context, imageUrl, mess),
 
-                  // Scheduled Updates Banner (Moved here - above tabs)
-                  if (scheduled.isNotEmpty || effective != null)
-                    _buildScheduledBanner(context, scheduled, effective),
+                // Scheduled Updates Banner (Moved here - above tabs)
+                if (scheduled.isNotEmpty || effective != null)
+                  _buildScheduledBanner(context, scheduled, effective),
 
-                  // Tab Bar
-                  Container(
-                    margin:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
+                // Tab Bar
+                Container(
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    labelColor: AppTheme.primaryOrange,
+                    unselectedLabelColor: AppTheme.textSecondary,
+                    indicator: BoxDecoration(
+                      color: AppTheme.primaryOrange.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
                     ),
-                    child: TabBar(
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    dividerColor: Colors.transparent,
+                    labelStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    tabs: const [
+                      Tab(icon: Icon(Icons.info, size: 20), text: 'Basic'),
+                      Tab(
+                          icon: Icon(Icons.access_time, size: 20),
+                          text: 'Timings'),
+                      Tab(
+                          icon: Icon(Icons.restaurant, size: 20),
+                          text: 'Plans'),
+                      Tab(icon: Icon(Icons.rule, size: 20), text: 'Rules'),
+                    ],
+                  ),
+                ),
+
+                // Tab Content
+                Expanded(
+                  child: Form(
+                    key: _formKey,
+                    child: TabBarView(
                       controller: _tabController,
-                      labelColor: AppTheme.primaryOrange,
-                      unselectedLabelColor: AppTheme.textSecondary,
-                      indicator: BoxDecoration(
-                        color: AppTheme.primaryOrange.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      indicatorSize: TabBarIndicatorSize.tab,
-                      dividerColor: Colors.transparent,
-                      labelStyle: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      tabs: const [
-                        Tab(icon: Icon(Icons.info, size: 20), text: 'Basic'),
-                        Tab(
-                            icon: Icon(Icons.access_time, size: 20),
-                            text: 'Timings'),
-                        Tab(
-                            icon: Icon(Icons.restaurant, size: 20),
-                            text: 'Plans'),
-                        Tab(icon: Icon(Icons.rule, size: 20), text: 'Rules'),
+                      children: [
+                        _buildBasicTab(),
+                        _buildTimingsTab(context),
+                        _buildPlansTab(context),
+                        _buildRulesTab(),
                       ],
                     ),
                   ),
+                ),
 
-                  // Tab Content
-                  Expanded(
-                    child: Form(
-                      key: _formKey,
-                      child: TabBarView(
-                        controller: _tabController,
-                        children: [
-                          _buildBasicTab(),
-                          _buildTimingsTab(context),
-                          _buildPlansTab(context),
-                          _buildRulesTab(),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Save Button
-                  _buildSaveButton(context),
-                ],
-              );
-            },
-          ),
+                // Save Button
+                _buildSaveButton(context),
+              ],
+            );
+          },
         ),
       ),
     );

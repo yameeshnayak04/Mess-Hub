@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/manager_members_providers.dart';
+import 'package:flutter/services.dart';
 
 class MembersScreen extends ConsumerStatefulWidget {
   const MembersScreen({super.key});
@@ -116,6 +117,11 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
+      appBar: AppBar(
+        backgroundColor: AppTheme.primaryOrange,
+        foregroundColor: Colors.white,
+        toolbarHeight: 0,
+      ),
       body: SafeArea(
         child: Column(
           children: [

@@ -63,9 +63,9 @@ class _KioskLauncherScreenState extends ConsumerState<KioskLauncherScreen>
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        title: const Text('Kiosk Management'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+        backgroundColor: AppTheme.primaryOrange,
+        foregroundColor: Colors.white,
+        toolbarHeight: 0,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
