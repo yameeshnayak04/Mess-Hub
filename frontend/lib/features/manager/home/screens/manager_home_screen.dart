@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/loading_animation.dart';
@@ -22,399 +23,409 @@ class ManagerHomeScreen extends ConsumerWidget {
     final joinRequests = ref.watch(pendingJoinRequestsProvider);
     final todaysMenu = ref.watch(todaysMenuProvider);
 
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      body: RefreshIndicator(
-        color: AppTheme.primaryOrange,
-        onRefresh: () async {
-          await ref.read(dashboardStatsProvider.notifier).refresh();
-          ref.invalidate(pendingApprovalsProvider);
-          ref.invalidate(pendingJoinRequestsProvider);
-          ref.invalidate(todaysMenuProvider);
-        },
-        child: statsState.when(
-          loading: () =>
-              const LoadingAnimation(message: 'Loading dashboard...'),
-          error: (e, _) => _ErrorView(
-            message: 'Failed to load dashboard',
-            detail: e.toString(),
-            onRetry: () => ref.read(dashboardStatsProvider.notifier).refresh(),
-          ),
-          data: (stats) {
-            final meal = stats.currentMeal;
-            final mealTag = meal == 'None' ? '' : ' • $meal';
-            final eaten = stats.eaten;
-            final onLeave = stats.onLeave;
-            final skipped = stats.skipped;
-            final eligible = stats.totalActiveMembers;
-            final remaining =
-                (eligible - eaten - onLeave - skipped).clamp(0, 1 << 30);
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: AppTheme.primaryOrange,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        backgroundColor: AppTheme.backgroundColor,
+        body: RefreshIndicator(
+          color: AppTheme.primaryOrange,
+          onRefresh: () async {
+            await ref.read(dashboardStatsProvider.notifier).refresh();
+            ref.invalidate(pendingApprovalsProvider);
+            ref.invalidate(pendingJoinRequestsProvider);
+            ref.invalidate(todaysMenuProvider);
+          },
+          child: statsState.when(
+            loading: () =>
+                const LoadingAnimation(message: 'Loading dashboard...'),
+            error: (e, _) => _ErrorView(
+              message: 'Failed to load dashboard',
+              detail: e.toString(),
+              onRetry: () =>
+                  ref.read(dashboardStatsProvider.notifier).refresh(),
+            ),
+            data: (stats) {
+              final meal = stats.currentMeal;
+              final mealTag = meal == 'None' ? '' : ' • $meal';
+              final eaten = stats.eaten;
+              final onLeave = stats.onLeave;
+              final skipped = stats.skipped;
+              final eligible = stats.totalActiveMembers;
+              final remaining =
+                  (eligible - eaten - onLeave - skipped).clamp(0, 1 << 30);
 
-            return CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                // Modern App Bar with Live Status
-                SliverAppBar(
-                  expandedHeight: 200,
-                  floating: false,
-                  pinned: true,
-                  elevation: 0,
-                  backgroundColor: AppTheme.primaryOrange,
-                  flexibleSpace: FlexibleSpaceBar(
-                    background: _ModernLiveBanner(stats: stats),
-                  ),
-                  title: const Text(
-                    'Dashboard',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+              return CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  // Modern App Bar with Live Status
+                  SliverAppBar(
+                    expandedHeight: 200,
+                    floating: false,
+                    pinned: true,
+                    elevation: 0,
+                    backgroundColor: AppTheme.primaryOrange,
+                    flexibleSpace: FlexibleSpaceBar(
+                      background: _ModernLiveBanner(stats: stats),
                     ),
-                  ),
-                  actions: [
-                    IconButton(
-                      icon: const Icon(Icons.notifications_outlined,
-                          color: Colors.white),
-                      onPressed: () {
-                        // TODO: Navigate to notifications
-                      },
+                    title: const Text(
+                      'Dashboard',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
-                  ],
-                ),
-
-                // Main Content
-                SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 24),
-
-                      // Live Statistics Section
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryOrange.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.analytics_outlined,
-                                color: AppTheme.primaryOrange,
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Text(
-                              'Live Statistics',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
+                    actions: [
+                      IconButton(
+                        icon: const Icon(Icons.notifications_outlined,
+                            color: Colors.white),
+                        onPressed: () {
+                          // TODO: Navigate to notifications
+                        },
                       ),
-                      const SizedBox(height: 16),
-
-                      // Modern Stat Cards Grid
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Column(
-                          children: [
-                            // Row 1: Remaining & Eaten
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _ModernStatCard(
-                                    title: 'Remaining',
-                                    subtitle: mealTag.isNotEmpty
-                                        ? mealTag.substring(3)
-                                        : '',
-                                    value: remaining.toString(),
-                                    icon: Icons.groups_2_rounded,
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFF667EEA),
-                                        Color(0xFF764BA2)
-                                      ],
-                                    ),
-                                    onTap: () => _showMembersDialog(
-                                      context,
-                                      ref,
-                                      'Members remaining',
-                                      'remaining',
-                                      stats.currentMeal,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _ModernStatCard(
-                                    title: 'Eaten',
-                                    subtitle: mealTag.isNotEmpty
-                                        ? mealTag.substring(3)
-                                        : '',
-                                    value: eaten.toString(),
-                                    icon: Icons.restaurant_rounded,
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFF11998E),
-                                        Color(0xFF38EF7D)
-                                      ],
-                                    ),
-                                    onTap: () => _showMembersDialog(
-                                      context,
-                                      ref,
-                                      'Members eaten',
-                                      'eating',
-                                      stats.currentMeal,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Row 2: On Leave & Skipped
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _ModernStatCard(
-                                    title: 'On Leave',
-                                    subtitle: mealTag.isNotEmpty
-                                        ? mealTag.substring(3)
-                                        : '',
-                                    value: onLeave.toString(),
-                                    icon: Icons.beach_access_rounded,
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFFFFB347),
-                                        Color(0xFFFFCC33)
-                                      ],
-                                    ),
-                                    onTap: () => _showMembersDialog(
-                                      context,
-                                      ref,
-                                      'On leave',
-                                      'leave',
-                                      stats.currentMeal,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _ModernStatCard(
-                                    title: 'Skipped',
-                                    subtitle: mealTag.isNotEmpty
-                                        ? mealTag.substring(3)
-                                        : '',
-                                    value: skipped.toString(),
-                                    icon: Icons.remove_circle_outline,
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFFFF6B9D),
-                                        Color(0xFFC06C84)
-                                      ],
-                                    ),
-                                    onTap: () => _showMembersDialog(
-                                      context,
-                                      ref,
-                                      'Skipped',
-                                      'skipped',
-                                      stats.currentMeal,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Daily Members Card
-                            _ModernStatCard(
-                              title: 'Daily Members',
-                              subtitle: mealTag.isNotEmpty
-                                  ? mealTag.substring(3)
-                                  : '',
-                              value: (stats.dailyMembers ?? 0).toString(),
-                              icon: Icons.calendar_today_rounded,
-                              gradient: const LinearGradient(
-                                colors: [
-                                  AppTheme.primaryOrange,
-                                  AppTheme.secondaryOrange
-                                ],
-                              ),
-                              isWide: true,
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 32),
-
-                      // Today's Menu Section
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.teal.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.restaurant_menu,
-                                color: Colors.teal,
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Text(
-                              "Today's Menu",
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: _ModernMenuCard(
-                          todaysMenu: todaysMenu,
-                          onEdit: () =>
-                              context.pushNamed(RouteNames.managerMenu),
-                        ),
-                      ),
-
-                      const SizedBox(height: 32),
-
-                      // Action Center Section
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppTheme.errorRed.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.pending_actions,
-                                color: AppTheme.errorRed,
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Text(
-                              'Action Center',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: _ModernActionCenter(
-                          approvals: approvals,
-                          joinRequests: joinRequests,
-                          onApprovePayment: (billId) async {
-                            try {
-                              await ref
-                                  .read(dashboardRepositoryProvider)
-                                  .approvePayment(billId);
-                              if (context.mounted) {
-                                _showSuccessSnackBar(
-                                    context, 'Payment approved successfully');
-                              }
-                              ref.invalidate(pendingApprovalsProvider);
-                            } catch (e) {
-                              if (context.mounted) {
-                                _showErrorSnackBar(context, 'Failed: $e');
-                              }
-                            }
-                          },
-                          onRejectPayment: (billId) async {
-                            try {
-                              await ref
-                                  .read(dashboardRepositoryProvider)
-                                  .rejectPayment(billId);
-                              if (context.mounted) {
-                                _showWarningSnackBar(
-                                    context, 'Payment rejected');
-                              }
-                              ref.invalidate(pendingApprovalsProvider);
-                            } catch (e) {
-                              if (context.mounted) {
-                                _showErrorSnackBar(context, 'Failed: $e');
-                              }
-                            }
-                          },
-                          onApproveMember: (membershipId) async {
-                            try {
-                              await ref
-                                  .read(dashboardRepositoryProvider)
-                                  .approveMembership(membershipId);
-                              if (context.mounted) {
-                                _showSuccessSnackBar(
-                                    context, 'Member approved successfully');
-                              }
-                              ref.invalidate(pendingJoinRequestsProvider);
-                              await ref
-                                  .read(dashboardStatsProvider.notifier)
-                                  .refresh();
-                            } catch (e) {
-                              if (context.mounted) {
-                                _showErrorSnackBar(context, 'Failed: $e');
-                              }
-                            }
-                          },
-                          onRejectMember: (membershipId) async {
-                            try {
-                              await ref
-                                  .read(dashboardRepositoryProvider)
-                                  .rejectMembership(membershipId);
-                              if (context.mounted) {
-                                _showWarningSnackBar(
-                                    context, 'Member rejected');
-                              }
-                              ref.invalidate(pendingJoinRequestsProvider);
-                            } catch (e) {
-                              if (context.mounted) {
-                                _showErrorSnackBar(context, 'Failed: $e');
-                              }
-                            }
-                          },
-                        ),
-                      ),
-
-                      const SizedBox(height: 32),
                     ],
                   ),
-                ),
-              ],
-            );
-          },
+
+                  // Main Content
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 24),
+
+                        // Live Statistics Section
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color:
+                                      AppTheme.primaryOrange.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.analytics_outlined,
+                                  color: AppTheme.primaryOrange,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'Live Statistics',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Modern Stat Cards Grid
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Column(
+                            children: [
+                              // Row 1: Remaining & Eaten
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _ModernStatCard(
+                                      title: 'Remaining',
+                                      subtitle: mealTag.isNotEmpty
+                                          ? mealTag.substring(3)
+                                          : '',
+                                      value: remaining.toString(),
+                                      icon: Icons.groups_2_rounded,
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFF667EEA),
+                                          Color(0xFF764BA2)
+                                        ],
+                                      ),
+                                      onTap: () => _showMembersDialog(
+                                        context,
+                                        ref,
+                                        'Members remaining',
+                                        'remaining',
+                                        stats.currentMeal,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _ModernStatCard(
+                                      title: 'Eaten',
+                                      subtitle: mealTag.isNotEmpty
+                                          ? mealTag.substring(3)
+                                          : '',
+                                      value: eaten.toString(),
+                                      icon: Icons.restaurant_rounded,
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFF11998E),
+                                          Color(0xFF38EF7D)
+                                        ],
+                                      ),
+                                      onTap: () => _showMembersDialog(
+                                        context,
+                                        ref,
+                                        'Members eaten',
+                                        'eating',
+                                        stats.currentMeal,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+
+                              // Row 2: On Leave & Skipped
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _ModernStatCard(
+                                      title: 'On Leave',
+                                      subtitle: mealTag.isNotEmpty
+                                          ? mealTag.substring(3)
+                                          : '',
+                                      value: onLeave.toString(),
+                                      icon: Icons.beach_access_rounded,
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFFFFB347),
+                                          Color(0xFFFFCC33)
+                                        ],
+                                      ),
+                                      onTap: () => _showMembersDialog(
+                                        context,
+                                        ref,
+                                        'On leave',
+                                        'leave',
+                                        stats.currentMeal,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _ModernStatCard(
+                                      title: 'Skipped',
+                                      subtitle: mealTag.isNotEmpty
+                                          ? mealTag.substring(3)
+                                          : '',
+                                      value: skipped.toString(),
+                                      icon: Icons.remove_circle_outline,
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFFFF6B9D),
+                                          Color(0xFFC06C84)
+                                        ],
+                                      ),
+                                      onTap: () => _showMembersDialog(
+                                        context,
+                                        ref,
+                                        'Skipped',
+                                        'skipped',
+                                        stats.currentMeal,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+
+                              // Daily Members Card
+                              _ModernStatCard(
+                                title: 'Daily Members',
+                                subtitle: mealTag.isNotEmpty
+                                    ? mealTag.substring(3)
+                                    : '',
+                                value: (stats.dailyMembers ?? 0).toString(),
+                                icon: Icons.calendar_today_rounded,
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    AppTheme.primaryOrange,
+                                    AppTheme.secondaryOrange
+                                  ],
+                                ),
+                                isWide: true,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 32),
+
+                        // Today's Menu Section
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.teal.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.restaurant_menu,
+                                  color: Colors.teal,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                "Today's Menu",
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: _ModernMenuCard(
+                            todaysMenu: todaysMenu,
+                            onEdit: () =>
+                                context.pushNamed(RouteNames.managerMenu),
+                          ),
+                        ),
+
+                        const SizedBox(height: 32),
+
+                        // Action Center Section
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.errorRed.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.pending_actions,
+                                  color: AppTheme.errorRed,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'Action Center',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: _ModernActionCenter(
+                            approvals: approvals,
+                            joinRequests: joinRequests,
+                            onApprovePayment: (billId) async {
+                              try {
+                                await ref
+                                    .read(dashboardRepositoryProvider)
+                                    .approvePayment(billId);
+                                if (context.mounted) {
+                                  _showSuccessSnackBar(
+                                      context, 'Payment approved successfully');
+                                }
+                                ref.invalidate(pendingApprovalsProvider);
+                              } catch (e) {
+                                if (context.mounted) {
+                                  _showErrorSnackBar(context, 'Failed: $e');
+                                }
+                              }
+                            },
+                            onRejectPayment: (billId) async {
+                              try {
+                                await ref
+                                    .read(dashboardRepositoryProvider)
+                                    .rejectPayment(billId);
+                                if (context.mounted) {
+                                  _showWarningSnackBar(
+                                      context, 'Payment rejected');
+                                }
+                                ref.invalidate(pendingApprovalsProvider);
+                              } catch (e) {
+                                if (context.mounted) {
+                                  _showErrorSnackBar(context, 'Failed: $e');
+                                }
+                              }
+                            },
+                            onApproveMember: (membershipId) async {
+                              try {
+                                await ref
+                                    .read(dashboardRepositoryProvider)
+                                    .approveMembership(membershipId);
+                                if (context.mounted) {
+                                  _showSuccessSnackBar(
+                                      context, 'Member approved successfully');
+                                }
+                                ref.invalidate(pendingJoinRequestsProvider);
+                                await ref
+                                    .read(dashboardStatsProvider.notifier)
+                                    .refresh();
+                              } catch (e) {
+                                if (context.mounted) {
+                                  _showErrorSnackBar(context, 'Failed: $e');
+                                }
+                              }
+                            },
+                            onRejectMember: (membershipId) async {
+                              try {
+                                await ref
+                                    .read(dashboardRepositoryProvider)
+                                    .rejectMembership(membershipId);
+                                if (context.mounted) {
+                                  _showWarningSnackBar(
+                                      context, 'Member rejected');
+                                }
+                                ref.invalidate(pendingJoinRequestsProvider);
+                              } catch (e) {
+                                if (context.mounted) {
+                                  _showErrorSnackBar(context, 'Failed: $e');
+                                }
+                              }
+                            },
+                          ),
+                        ),
+
+                        const SizedBox(height: 32),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
+  // ...existing code...
   Future _showMembersDialog(
     BuildContext context,
     WidgetRef ref,
@@ -438,9 +449,8 @@ class ManagerHomeScreen extends ConsumerWidget {
       useRootNavigator: true,
       barrierDismissible: false,
       barrierColor: Colors.black54,
-      builder: (_) {
+      builder: (ctx) {
         return WillPopScope(
-          // prevent system back button from closing the loading dialog
           onWillPop: () async => false,
           child: Center(
             child: Container(
@@ -508,10 +518,12 @@ class ManagerHomeScreen extends ConsumerWidget {
           data = const <Map<String, dynamic>>[];
       }
 
-      // Safely dismiss loading dialog if it was shown.
+      // Dismiss loading dialog simply using Navigator.of(context, rootNavigator: true).pop()
       if (loadingVisible) {
         try {
-          await rootNav.maybePop();
+          if (rootNav.canPop()) {
+            Navigator.of(context, rootNavigator: true).pop();
+          }
         } catch (_) {}
         loadingVisible = false;
       }
@@ -523,20 +535,16 @@ class ManagerHomeScreen extends ConsumerWidget {
           .toList();
 
       if (membersList.isEmpty) {
-        if (context.mounted) {
+        if (context.mounted)
           _showInfoSnackBar(context, 'No members found for $effectiveMeal');
-        }
         return;
       }
 
-      // show as modal bottom sheet for better mobile UX
       if (!context.mounted) return;
-
       await showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        // use the local navigator; no nested Navigator inside the sheet
         useRootNavigator: false,
         builder: (ctx) {
           return SafeArea(
@@ -548,10 +556,12 @@ class ManagerHomeScreen extends ConsumerWidget {
         },
       );
     } catch (e) {
-      // ensure loading dismissed
+      // ensure loading dismissed (simple pop)
       if (loadingVisible) {
         try {
-          await rootNav.maybePop();
+          if (rootNav.canPop()) {
+            Navigator.of(context, rootNavigator: true).pop();
+          }
         } catch (_) {}
         loadingVisible = false;
       }
@@ -559,6 +569,7 @@ class ManagerHomeScreen extends ConsumerWidget {
       _showErrorSnackBar(context, 'Failed: $e');
     }
   }
+// ...existing code...
 
   void _showSuccessSnackBar(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1004,21 +1015,21 @@ class _ModernMenuCard extends StatelessWidget {
           runSpacing: 8,
           children: items.map((item) {
             return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: color.withOpacity(0.3)),
-              ),
-              child: Text(
-                item,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w500,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: color.withOpacity(0.3)),
                 ),
-              ),
-            );
+                child: Text(
+                  item,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ));
           }).toList(),
         ),
       ],
