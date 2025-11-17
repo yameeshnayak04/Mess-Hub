@@ -700,27 +700,37 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
           color: const Color(0xFF4ECDC4),
         ),
         const SizedBox(height: 24),
-        Container(
-          height: 320,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 20,
-                offset: const Offset(0, 4),
+
+        // Responsive Map Container
+        LayoutBuilder(
+          builder: (context, constraints) {
+            // Calculate height based on screen size - minimum 400, maximum 500
+            final screenHeight = MediaQuery.of(context).size.height;
+            final mapHeight = (screenHeight * 0.5).clamp(400.0, 500.0);
+
+            return Container(
+              height: mapHeight,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 20,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: LocationPickerMap(
-              initialLocation: initialMapLocation,
-              onLocationSelected: (LatLng latLng) {
-                notifier.setLocation(latLng);
-              },
-            ),
-          ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: LocationPickerMap(
+                  initialLocation: initialMapLocation,
+                  onLocationSelected: (LatLng latLng) {
+                    notifier.setLocation(latLng);
+                  },
+                ),
+              ),
+            );
+          },
         ),
         const SizedBox(height: 24),
         if (displayLat != null && displayLng != null) ...[
@@ -745,7 +755,7 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'Coordinates',
                         style: TextStyle(
                           fontSize: 12,

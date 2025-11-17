@@ -590,6 +590,7 @@ class _LocationPickerMapState extends State<LocationPickerMap>
 
   Widget _buildCustomMarker() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           padding: const EdgeInsets.all(8),
@@ -619,7 +620,7 @@ class _LocationPickerMapState extends State<LocationPickerMap>
         ),
         Container(
           width: 2,
-          height: 10,
+          height: 8,
           decoration: BoxDecoration(
             color: AppTheme.errorRed,
             boxShadow: [
@@ -631,8 +632,8 @@ class _LocationPickerMapState extends State<LocationPickerMap>
           ),
         ),
         Container(
-          width: 8,
-          height: 8,
+          width: 6,
+          height: 6,
           decoration: BoxDecoration(
             color: AppTheme.errorRed.withOpacity(0.3),
             shape: BoxShape.circle,
