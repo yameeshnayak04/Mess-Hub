@@ -69,36 +69,33 @@ class _CustomerShellState extends ConsumerState<CustomerShell> {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withOpacity(0.06),
               blurRadius: 20,
-              offset: const Offset(0, -4),
+              offset: const Offset(0, -5),
             ),
           ],
         ),
         child: SafeArea(
           top: false,
-          child: SizedBox(
-            height: 65,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _NavItem(
                   icon: Icons.home_outlined,
-                  activeIcon: Icons.home_rounded,
                   label: 'Home',
                   isSelected: _currentIndex == 0,
                   onTap: () => _onItemTapped(0),
                 ),
                 _NavItem(
                   icon: Icons.explore_outlined,
-                  activeIcon: Icons.explore_rounded,
                   label: 'Discover',
                   isSelected: _currentIndex == 1,
                   onTap: () => _onItemTapped(1),
                 ),
                 _NavItem(
                   icon: Icons.person_outline_rounded,
-                  activeIcon: Icons.person_rounded,
                   label: 'Profile',
                   isSelected: _currentIndex == 2,
                   onTap: () => _onItemTapped(2),
@@ -114,14 +111,12 @@ class _CustomerShellState extends ConsumerState<CustomerShell> {
 
 class _NavItem extends StatelessWidget {
   final IconData icon;
-  final IconData activeIcon;
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
 
   const _NavItem({
     required this.icon,
-    required this.activeIcon,
     required this.label,
     required this.isSelected,
     required this.onTap,
@@ -137,35 +132,48 @@ class _NavItem extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           splashColor: AppTheme.primaryOrange.withOpacity(0.1),
           highlightColor: AppTheme.primaryOrange.withOpacity(0.05),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Icon
-                Icon(
-                  isSelected ? activeIcon : icon,
-                  size: 26,
-                  color: isSelected
-                      ? AppTheme.primaryOrange
-                      : AppTheme.textSecondary.withOpacity(0.6),
+                // Icon with background
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppTheme.primaryOrange
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 24,
+                    color: isSelected
+                        ? Colors.white
+                        : AppTheme.textSecondary.withOpacity(0.6),
+                  ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 // Label
-                Text(
-                  label,
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
                   style: TextStyle(
                     fontSize: 11,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                     color: isSelected
                         ? AppTheme.primaryOrange
                         : AppTheme.textSecondary.withOpacity(0.7),
-                    letterSpacing: 0.2,
                   ),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),

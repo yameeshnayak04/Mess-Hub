@@ -145,23 +145,6 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                     child: Row(
                       children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: IconButton(
-                            icon: const Icon(Icons.arrow_back,
-                                color: Colors.white),
-                            onPressed: () {
-                              if (context.canPop()) {
-                                context.pop();
-                              } else {
-                                context.go('/manager/members');
-                              }
-                            },
-                          ),
-                        ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: Column(

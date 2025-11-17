@@ -94,17 +94,6 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
                     padding: const EdgeInsets.all(16),
                     child: Row(
                       children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: IconButton(
-                            icon: const Icon(Icons.arrow_back,
-                                color: Colors.white),
-                            onPressed: () => Navigator.of(context).pop(),
-                          ),
-                        ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: Column(

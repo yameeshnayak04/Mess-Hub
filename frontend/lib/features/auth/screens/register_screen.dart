@@ -315,13 +315,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ),
               child: Column(
                 children: [
-                  Row(
+                  const Row(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => context.pop(),
-                      ),
-                      const Spacer(),
+                      Spacer(),
                     ],
                   ),
                   const SizedBox(height: 10),

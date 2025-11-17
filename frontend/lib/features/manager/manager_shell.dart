@@ -110,7 +110,7 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
                   onTap: () => _onItemTapped(2),
                 ),
                 _NavItem(
-                  icon: Icons.store_rounded,
+                  icon: Icons.tablet_android_rounded,
                   label: 'Kiosk',
                   isSelected: _currentIndex == 3,
                   onTap: () => _onItemTapped(3),
