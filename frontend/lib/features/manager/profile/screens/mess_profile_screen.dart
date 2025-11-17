@@ -709,9 +709,9 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
                   'For issues like incorrect billing or attendance anomalies, verify timings and rules first, then reach out to technical support if needed.',
                 ),
                 const SizedBox(height: 16),
-                Center(
+                const Center(
                   child: Text(
-                    '© 2024 Mess Hub',
+                    '© 2025 Mess Hub',
                     style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,

@@ -1041,9 +1041,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   'Use Help & Support (coming soon) or contact your manager directly for urgent issues.',
                 ),
                 const SizedBox(height: 16),
-                Center(
+                const Center(
                   child: Text(
-                    '© 2024 Mess Hub',
+                    '© 2025 Mess Hub',
                     style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,
