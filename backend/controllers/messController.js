@@ -78,12 +78,25 @@ exports.createMess = async (req, res, next) => {
   }
 };
 
-// @desc Update manager's mess
-// @route PUT /api/mess/my-mess
-// @access Private (Manager only)
-// controllers/messController.js
+// @desc    Get manager's mess
+// @route   GET /api/mess/my-mess
+// @access  Private (Manager only)
+exports.getMyMess = async (req, res, next) => {
+  try {
+    const mess = await Mess.findOne({ owner: req.user.id });
+    if (!mess) {
+      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
+    }
 
-// @desc Update manager's mess
+    // Remove auto-apply scheduling (apply-now model)
+    return res.status(200).json({ success: true, data: mess });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+// @desc Update manager's mess (apply changes immediately)
 // @route PUT /api/mess/my-mess
 // @access Private (Manager only)
 exports.updateMyMess = async (req, res, next) => {
@@ -95,16 +108,7 @@ exports.updateMyMess = async (req, res, next) => {
         .json({ success: false, message: 'No mess found for this manager' });
     }
 
-    // Only allow non-structural fields to be changed:
-    // - address, contactPhone
-    // - maxCapacity
-    // - timings
-    // - plans (pricing and plan names)
-    // - dailyThaliRate
-    // - rules (minLeaveDaysForRebate, rebatePerThali, skipAllowancePercent, minMonthlyCharge, etc.)
-    // - tiffinService
-    // - basicThaliDetails
-    // messImage is handled separately from file upload.
+    // Only allow non-structural fields to be changed
     const allowedUpdates = [
       'address',
       'contactPhone',
@@ -117,97 +121,151 @@ exports.updateMyMess = async (req, res, next) => {
       'basicThaliDetails',
     ];
 
+    const body = req.body || {};
     const updates = {};
 
-    // Pick only allowed fields from body
+    // Pick allowed top-level fields only
     for (const field of allowedUpdates) {
-      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
-        updates[field] = req.body[field];
+      if (Object.prototype.hasOwnProperty.call(body, field)) {
+        updates[field] = body[field];
       }
     }
 
-    // Coerce tiffinService string to boolean if needed
-    if (Object.prototype.hasOwnProperty.call(req.body, 'tiffinService')) {
-      if (req.body.tiffinService === 'true') updates.tiffinService = true;
-      else if (req.body.tiffinService === 'false') updates.tiffinService = false;
-      // if body sends a real boolean, it is already in updates[field]
+    // Coerce types and validate fields
+
+    // Booleans
+    if (Object.prototype.hasOwnProperty.call(updates, 'tiffinService')) {
+      if (typeof updates.tiffinService === 'string') {
+        updates.tiffinService = updates.tiffinService.toLowerCase() === 'true';
+      } else {
+        updates.tiffinService = !!updates.tiffinService;
+      }
     }
 
-    // Use Cloudinary URL if a file was uploaded (mess image)
-    if (req.file && req.file.cloudinaryUrl) {
-      updates.messImage = req.file.cloudinaryUrl;
+    // Numbers
+    if (Object.prototype.hasOwnProperty.call(updates, 'maxCapacity')) {
+      const n = Number(updates.maxCapacity);
+      if (!Number.isFinite(n) || n < 0) {
+        return res.status(400).json({ success: false, message: 'maxCapacity must be a positive number' });
+      }
+      updates.maxCapacity = n;
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'dailyThaliRate')) {
+      const n = Number(updates.dailyThaliRate);
+      if (!Number.isFinite(n) || n < 0) {
+        return res.status(400).json({ success: false, message: 'dailyThaliRate must be a positive number' });
+      }
+      updates.dailyThaliRate = n;
     }
 
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No valid fields provided to update',
+    // Timings: accept flat keys (lunchStart, lunchEnd, dinnerStart, dinnerEnd)
+    // or nested { lunch: {start,end}, dinner: {start,end} } — persist as flat for consistency
+    if (Object.prototype.hasOwnProperty.call(updates, 'timings')) {
+      const t = updates.timings || {};
+      const hhmm = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+      let flat = {};
+      if (t && typeof t === 'object') {
+        if (typeof t.lunchStart === 'string') flat.lunchStart = t.lunchStart;
+        if (typeof t.lunchEnd === 'string') flat.lunchEnd = t.lunchEnd;
+        if (typeof t.dinnerStart === 'string') flat.dinnerStart = t.dinnerStart;
+        if (typeof t.dinnerEnd === 'string') flat.dinnerEnd = t.dinnerEnd;
+
+        // Support nested shape
+        if (t.lunch && typeof t.lunch.start === 'string') flat.lunchStart = t.lunch.start;
+        if (t.lunch && typeof t.lunch.end === 'string') flat.lunchEnd = t.lunch.end;
+        if (t.dinner && typeof t.dinner.start === 'string') flat.dinnerStart = t.dinner.start;
+        if (t.dinner && typeof t.dinner.end === 'string') flat.dinnerEnd = t.dinner.end;
+      }
+
+      for (const key of ['lunchStart', 'lunchEnd', 'dinnerStart', 'dinnerEnd']) {
+        if (flat[key] != null && !hhmm.test(String(flat[key]))) {
+          return res.status(400).json({ success: false, message: `timings.${key} must be HH:MM` });
+        }
+      }
+
+      updates.timings = { 
+        ...mess.timings?.toObject?.() ?? mess.timings ?? {}, 
+        ...flat 
+      };
+    }
+
+    // Rules object (coerce numeric where applicable)
+    if (Object.prototype.hasOwnProperty.call(updates, 'rules')) {
+      const r = updates.rules || {};
+      const numKeys = [
+        'minLeaveDaysForRebate',
+        'rebatePerThali',
+        'skipAllowancePercent',
+        'minMonthlyCharge',
+      ];
+      const coerced = { ...(mess.rules?.toObject?.() ?? mess.rules ?? {}), ...r };
+      for (const k of numKeys) {
+        if (Object.prototype.hasOwnProperty.call(coerced, k)) {
+          const n = Number(coerced[k]);
+          if (!Number.isFinite(n) || n < 0) {
+            return res.status(400).json({ success: false, message: `rules.${k} must be a positive number` });
+          }
+          coerced[k] = n;
+        }
+      }
+      updates.rules = coerced;
+    }
+
+    // Plans array (objects with name/rate or _id/rate)
+    if (Object.prototype.hasOwnProperty.call(updates, 'plans')) {
+      if (!Array.isArray(updates.plans)) {
+        return res.status(400).json({ success: false, message: 'plans must be an array' });
+      }
+      // If only rates updated, keep names; coerce rate number
+      const byId = new Map((mess.plans || []).map(p => [String(p._id || ''), p]));
+      const newPlans = updates.plans.map(p => {
+        const id = p._id ? String(p._id) : null;
+        const rateNum = Number(p.rate ?? 0);
+        if (!Number.isFinite(rateNum) || rateNum < 0) {
+          throw new Error('Plan rate must be a positive number');
+        }
+        if (id && byId.has(id)) {
+          const existing = byId.get(id);
+          return { ...existing.toObject?.() ?? existing, rate: rateNum, name: p.name ?? existing.name };
+        }
+        // If no id, accept name + rate
+        return { name: String(p.name || '').trim(), rate: rateNum };
       });
+      updates.plans = newPlans;
     }
 
-    // Schedule changes for next month (same logic as before)
-    const now = new Date();
-    const nextMonthStart = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0)
-    );
+    // Assign simple fields
+    if (Object.prototype.hasOwnProperty.call(updates, 'address')) mess.address = String(updates.address || '').trim();
+    if (Object.prototype.hasOwnProperty.call(updates, 'contactPhone')) mess.contactPhone = String(updates.contactPhone || '').trim();
+    if (Object.prototype.hasOwnProperty.call(updates, 'maxCapacity')) mess.maxCapacity = updates.maxCapacity;
+    if (Object.prototype.hasOwnProperty.call(updates, 'dailyThaliRate')) mess.dailyThaliRate = updates.dailyThaliRate;
+    if (Object.prototype.hasOwnProperty.call(updates, 'basicThaliDetails')) mess.basicThaliDetails = String(updates.basicThaliDetails || '').trim();
+    if (Object.prototype.hasOwnProperty.call(updates, 'tiffinService')) mess.tiffinService = updates.tiffinService;
+    if (Object.prototype.hasOwnProperty.call(updates, 'timings')) mess.timings = updates.timings;
+    if (Object.prototype.hasOwnProperty.call(updates, 'rules')) mess.rules = updates.rules;
+    if (Object.prototype.hasOwnProperty.call(updates, 'plans')) mess.plans = updates.plans;
 
-    const existing = mess.scheduledUpdates || {};
-    mess.scheduledUpdates = { ...existing, ...updates };
-
-    // If there was no scheduled date or it is earlier than the next month, move it
-    if (!mess.scheduledEffectiveFrom || mess.scheduledEffectiveFrom < nextMonthStart) {
-      mess.scheduledEffectiveFrom = nextMonthStart;
+    // Image (Cloudinary URL) if uploaded
+    if (req.file && req.file.cloudinaryUrl) {
+      mess.messImage = req.file.cloudinaryUrl;
     }
 
     await mess.save();
 
     return res.status(200).json({
       success: true,
-      data: {
-        current: mess,
-        scheduledUpdates: mess.scheduledUpdates,
-        scheduledEffectiveFrom: mess.scheduledEffectiveFrom,
-      },
-      message:
-        'Changes scheduled and will take effect from the next billing cycle (next month).',
+      data: mess,
+      message: 'Changes saved successfully',
     });
   } catch (error) {
+    if (error.message && error.message.includes('Plan rate')) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     if (error.code === 11000) {
-      // Unique index conflict (e.g., mess name + address)
-      return res.status(400).json({
-        success: false,
-        message: 'A mess with this name and address already exists',
-      });
+      return res.status(400).json({ success: false, message: 'A mess with this name and address already exists' });
     }
-
     return next(error);
-  }
-};
-
-
-
-// @desc    Get manager's mess
-// @route   GET /api/mess/my-mess
-// @access  Private (Manager only)
-exports.getMyMess = async (req, res, next) => {
-  try {
-    const mess = await Mess.findOne({ owner: req.user.id });
-    if (!mess) {
-      return res.status(404).json({ success: false, message: 'No mess found for this manager' });
-    }
-
-    // Auto-apply scheduled updates if due
-    if (mess.scheduledEffectiveFrom && new Date() >= mess.scheduledEffectiveFrom) {
-      const updates = mess.scheduledUpdates || {};
-      for (const [k, v] of Object.entries(updates)) mess[k] = v;
-      mess.scheduledUpdates = {};
-      mess.scheduledEffectiveFrom = undefined;
-      await mess.save();
-    }
-
-    return res.status(200).json({ success: true, data: mess });
-  } catch (error) {
-    next(error);
   }
 };
 
