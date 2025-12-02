@@ -9,10 +9,13 @@ class AuthRepository {
 
   String _serverMessage(Response res) {
     final data = res.data;
-    if (data is Map &&
-        data['message'] is String &&
-        (data['message'] as String).isNotEmpty) {
-      return data['message'] as String;
+    if (data is Map) {
+      // Prefer explicit server message
+      if (data['message'] is String && (data['message'] as String).isNotEmpty) {
+        return data['message'] as String;
+      }
+      // Fallbacks
+      if (data['error'] is String) return data['error'] as String;
     }
     return 'Something went wrong. Please try again.';
   }
@@ -64,10 +67,13 @@ class AuthRepository {
     );
     if (response.statusCode == 201)
       return response.data as Map<String, dynamic>;
+
+    // For non-201 (e.g., 409 USER_EXISTS), throw with server message
     throw DioException(
-        requestOptions: response.requestOptions,
-        response: response,
-        message: _serverMessage(response));
+      requestOptions: response.requestOptions,
+      response: response,
+      message: _serverMessage(response),
+    );
   }
 
   Future<User> getProfile() async {

@@ -182,6 +182,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
   }
 
+  // Show server error (e.g., user already exists) from authProvider on failure.
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -227,7 +228,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         );
         return;
       }
-
       if (_location == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -264,31 +264,32 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             pin: _selectedRole == 'Customer' ? _pinController.text : null,
             location: _selectedRole == 'Customer' ? _location : null,
           );
-    } catch (e) {
-      if (mounted) {
-        final err = ref.read(authProvider.notifier).errorMessage;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline_rounded, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(err ?? 'Registration failed: ${e.toString()}'),
-                ),
-              ],
-            ),
-            backgroundColor: AppTheme.errorRed,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
-      }
+      // On success, auth state becomes logged-in; routing stays as-is per app guards
+    } catch (_) {
+      // Not used; errors are handled inside notifier
     } finally {
       if (mounted) {
         setState(() => _isRegistering = false);
+        final err = ref.read(authProvider.notifier).errorMessage;
+        if (err != null) {
+          // Show clear error like “User already exists”
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(err)),
+                ],
+              ),
+              backgroundColor: AppTheme.errorRed,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
       }
     }
   }

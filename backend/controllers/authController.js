@@ -51,8 +51,10 @@ exports.register = async (req, res) => {
     // Unique phone
     const existingUser = await User.findOne({ phone });
     if (existingUser) {
-      return res.status(400).json({
+      // Use 409 Conflict + machine-readable code so frontend can detect duplicate
+      return res.status(409).json({
         success: false,
+        code: 'USER_EXISTS',
         message: 'User with this phone number already exists',
       });
     }
@@ -73,17 +75,14 @@ exports.register = async (req, res) => {
       }
     }
 
-    // Assemble create payload
     const userData = { name, phone, password, role };
     if (role === 'Customer') {
       userData.pin = pin;
       userData.location = location;
     }
 
-    // Create
     const user = await User.create(userData);
 
-    // Token + payload
     const token = generateToken(user._id);
     const payload = await buildUserPayload(user);
 

@@ -44,13 +44,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  // Login with phone + password
+  // Login with phone + password (unchanged)
   Future<void> login(String phone, String password) async {
     try {
       _errorMessage = null;
       final resp = await _repository.login(phone, password);
       if (resp == null) {
-        // 401
         state = const AsyncValue.data(null);
         _errorMessage = 'Invalid credentials';
         return;
@@ -62,7 +61,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     } catch (e, st) {
       _errorMessage =
           e is DioException && e.message != null ? e.message : e.toString();
-      state = AsyncValue.error(e, st);
+      // Keep state stable to avoid route churn on login failure
+      state = const AsyncValue.data(null);
     }
   }
 
@@ -87,10 +87,11 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     } catch (e, st) {
       _errorMessage =
           e is DioException && e.message != null ? e.message : e.toString();
-      state = AsyncValue.error(e, st);
+      state = const AsyncValue.data(null);
     }
   }
 
+  // Register new user: on failure, keep state = data(null) and expose message
   Future<void> register({
     required String name,
     required String phone,
@@ -113,24 +114,32 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       final user = User.fromJson(resp['data'] as Map<String, dynamic>);
       await _storage.write(StorageKeys.accessToken, token);
       state = AsyncValue.data(user);
-    } catch (e, st) {
-      _errorMessage =
-          e is DioException && e.message != null ? e.message : e.toString();
-      state = AsyncValue.error(e, st);
+    } catch (e) {
+      // Extract server message (handles 409 USER_EXISTS cleanly)
+      if (e is DioException) {
+        final data = e.response?.data;
+        if (data is Map && data['message'] is String) {
+          _errorMessage = data['message'] as String;
+        } else {
+          _errorMessage = e.message ?? 'Registration failed';
+        }
+      } else {
+        _errorMessage = e.toString();
+      }
+      // IMPORTANT: keep state stable so UI stays on Register screen
+      state = const AsyncValue.data(null);
     }
   }
 
-  // Refresh profile (after app resume or profile update)
   Future<void> refreshProfile() async {
     try {
       final user = await _repository.getProfile();
       state = AsyncValue.data(user);
     } catch (_) {
-      // Don't log out, just keep old state if refresh fails
+      // Keep old state on refresh failure
     }
   }
 
-  // Clear last auth error (call on input change)
   void clearError() {
     _errorMessage = null;
   }
