@@ -13,11 +13,32 @@ import '../../../../core/utils/constants.dart';
 import '../providers/dashboard_provider.dart';
 import '../../../../models/dashboard_stats.dart';
 
-class ManagerHomeScreen extends ConsumerWidget {
+class ManagerHomeScreen extends ConsumerStatefulWidget {
   const ManagerHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ManagerHomeScreen> createState() => _ManagerHomeScreenState();
+}
+
+class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
+  bool _refreshedOnce = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-refresh once when the screen is first shown (no build-loop).
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _refreshedOnce) return;
+      _refreshedOnce = true;
+      await ref.read(dashboardStatsProvider.notifier).refresh();
+      ref.invalidate(pendingApprovalsProvider);
+      ref.invalidate(pendingJoinRequestsProvider);
+      ref.invalidate(todaysMenuProvider);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final statsState = ref.watch(dashboardStatsProvider);
     final approvals = ref.watch(pendingApprovalsProvider);
     final joinRequests = ref.watch(pendingJoinRequestsProvider);

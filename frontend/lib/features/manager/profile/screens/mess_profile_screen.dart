@@ -12,10 +12,12 @@ import 'package:flutter/services.dart';
 
 import 'package:mess_management_app/core/api/dio_client_provider.dart';
 import 'package:mess_management_app/features/auth/widgets/logout_action.dart';
+import '../../../auth/providers/auth_provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../providers/mess_profile_providers.dart';
 
+// Convert to ConsumerStatefulWidget (already is). Implement robust refresh without build-trigger loops.
 class MessProfileScreen extends ConsumerStatefulWidget {
   const MessProfileScreen({super.key});
 
@@ -24,7 +26,7 @@ class MessProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   late TabController _tabController;
 
@@ -64,10 +66,24 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    WidgetsBinding.instance.addObserver(this);
+    // Trigger an initial fetch by invalidating provider once after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.invalidate(messProfileProvider);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Auto-refresh when app returns to foreground
+    if (state == AppLifecycleState.resumed) {
+      ref.invalidate(messProfileProvider);
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tabController.dispose();
     _name.dispose();
     _city.dispose();
@@ -150,6 +166,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
 
   @override
   Widget build(BuildContext context) {
+    final auth = ref.watch(authProvider);
     final messAsync = ref.watch(messProfileProvider);
     final dio = ref.read(dioClientProvider);
 
@@ -160,107 +177,92 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
         foregroundColor: Colors.white,
         toolbarHeight: 0,
       ),
-      body: SafeArea(
+      body: RefreshIndicator(
+        color: AppTheme.primaryOrange,
+        onRefresh: () async {
+          _initialized = false; // force reseed after pull-to-refresh
+          ref.invalidate(messProfileProvider);
+          // Give provider a tick to refetch
+          await Future.delayed(const Duration(milliseconds: 200));
+        },
         child: messAsync.when(
           loading: () => _buildLoadingState(),
           error: (e, _) =>
               _Error(message: 'Failed to load', detail: e.toString()),
           data: (mess) {
-            // One-time initialization from backend data
+            // If auth not ready, show loading
+            if (auth == null) {
+              return _buildLoadingState();
+            }
+            // Handle empty data (e.g., manager has no mess yet)
+            if (mess.isEmpty) {
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 120),
+                  Center(child: Text('No mess found for this manager')),
+                ],
+              );
+            }
+
+            // One-time initialization from backend data per fetch
             if (!_initialized) {
-              _name.text = (mess['messName'] ?? '').toString();
-              _city.text = (mess['city'] ?? '').toString();
-              _serviceType.text = (mess['serviceType'] ?? '').toString();
-              _cuisine.text = (mess['cuisine'] ?? '').toString();
-
-              _address.text = (mess['address'] ?? '').toString();
-              _phone.text = (mess['contactPhone'] ?? '').toString();
-              _maxCapacity.text = (mess['maxCapacity'] ?? '').toString();
-              _dailyRate.text = (mess['dailyThaliRate'] ?? '').toString();
-
-              final rules =
-                  (mess['rules'] as Map?)?.cast<String, dynamic>() ?? {};
-              _minLeaveDays.text =
-                  (rules['minLeaveDaysForRebate'] ?? '').toString();
-              _rebatePerThali.text = (rules['rebatePerThali'] ?? '').toString();
-              _skipPercent.text =
-                  (rules['skipAllowancePercent'] ?? '').toString();
-              _minMonthlyCharge.text =
-                  (rules['minMonthlyCharge'] ?? '').toString();
-
-              _basicThali.text = (mess['basicThaliDetails'] ?? '').toString();
-              _tiffinService = mess['tiffinService'] == true;
-
-              // Seed timings from server response (flat keys)
-              final timings =
-                  (mess['timings'] as Map?)?.cast<String, dynamic>() ?? {};
-              _lunchStart = _parseHHMM(timings['lunchStart'] as String?);
-              _lunchEnd = _parseHHMM(timings['lunchEnd'] as String?);
-              _dinnerStart = _parseHHMM(timings['dinnerStart'] as String?);
-              _dinnerEnd = _parseHHMM(timings['dinnerEnd'] as String?);
-
-              final rawPlans = mess['plans'] as List? ?? const [];
-              _plans = rawPlans
-                  .whereType<Map>()
-                  .map((e) => Map<String, dynamic>.from(e))
-                  .toList();
-
+              _seedFormFromMess(mess);
               _initialized = true;
             }
 
             final imagePath = (mess['messImage'] as String?) ?? '';
             final imageUrl = dio.resolveServerUrl(imagePath);
 
-            return Column(
-              children: [
-                _buildHeader(context, imageUrl, mess),
-
-                // Remove scheduled updates banner (no scheduling anymore)
-
-                // Tab Bar
-                Container(
-                  margin:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: TabBar(
-                    controller: _tabController,
-                    labelColor: AppTheme.primaryOrange,
-                    unselectedLabelColor: AppTheme.textSecondary,
-                    indicator: BoxDecoration(
-                      color: AppTheme.primaryOrange.withOpacity(0.1),
+            return CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                    child: _buildHeader(context, imageUrl, mess)),
+                SliverToBoxAdapter(
+                  child: Container(
+                    margin:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                    indicatorSize: TabBarIndicatorSize.tab,
-                    dividerColor: Colors.transparent,
-                    labelStyle: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                    child: TabBar(
+                      controller: _tabController,
+                      labelColor: AppTheme.primaryOrange,
+                      unselectedLabelColor: AppTheme.textSecondary,
+                      indicator: BoxDecoration(
+                        color: AppTheme.primaryOrange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      dividerColor: Colors.transparent,
+                      labelStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      tabs: const [
+                        Tab(icon: Icon(Icons.info, size: 20), text: 'Basic'),
+                        Tab(
+                            icon: Icon(Icons.access_time, size: 20),
+                            text: 'Timings'),
+                        Tab(
+                            icon: Icon(Icons.restaurant, size: 20),
+                            text: 'Plans'),
+                        Tab(icon: Icon(Icons.rule, size: 20), text: 'Rules'),
+                      ],
                     ),
-                    tabs: const [
-                      Tab(icon: Icon(Icons.info, size: 20), text: 'Basic'),
-                      Tab(
-                          icon: Icon(Icons.access_time, size: 20),
-                          text: 'Timings'),
-                      Tab(
-                          icon: Icon(Icons.restaurant, size: 20),
-                          text: 'Plans'),
-                      Tab(icon: Icon(Icons.rule, size: 20), text: 'Rules'),
-                    ],
                   ),
                 ),
-
-                // Tab Content
-                Expanded(
+                SliverFillRemaining(
+                  hasScrollBody: true,
                   child: Form(
                     key: _formKey,
                     child: TabBarView(
@@ -274,15 +276,46 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
                     ),
                   ),
                 ),
-
-                // Save Button
-                _buildSaveButton(context),
+                SliverToBoxAdapter(child: _buildSaveButton(context)),
               ],
             );
           },
         ),
       ),
     );
+  }
+
+  void _seedFormFromMess(Map<String, dynamic> mess) {
+    _name.text = (mess['messName'] ?? '').toString();
+    _city.text = (mess['city'] ?? '').toString();
+    _serviceType.text = (mess['serviceType'] ?? '').toString();
+    _cuisine.text = (mess['cuisine'] ?? '').toString();
+
+    _address.text = (mess['address'] ?? '').toString();
+    _phone.text = (mess['contactPhone'] ?? '').toString();
+    _maxCapacity.text = (mess['maxCapacity'] ?? '').toString();
+    _dailyRate.text = (mess['dailyThaliRate'] ?? '').toString();
+
+    final rules = (mess['rules'] as Map?)?.cast<String, dynamic>() ?? {};
+    _minLeaveDays.text = (rules['minLeaveDaysForRebate'] ?? '').toString();
+    _rebatePerThali.text = (rules['rebatePerThali'] ?? '').toString();
+    _skipPercent.text = (rules['skipAllowancePercent'] ?? '').toString();
+    _minMonthlyCharge.text = (rules['minMonthlyCharge'] ?? '').toString();
+
+    _basicThali.text = (mess['basicThaliDetails'] ?? '').toString();
+    _tiffinService = mess['tiffinService'] == true;
+
+    final timings = (mess['timings'] as Map?)?.cast<String, dynamic>() ?? {};
+    _lunchStart = _parseHHMM(timings['lunchStart'] as String?);
+    _lunchEnd = _parseHHMM(timings['lunchEnd'] as String?);
+    _dinnerStart = _parseHHMM(timings['dinnerStart'] as String?);
+    _dinnerEnd = _parseHHMM(timings['dinnerEnd'] as String?);
+
+    final rawPlans = mess['plans'] as List? ?? const [];
+    _plans = rawPlans
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
   Future<void> _handleSave(BuildContext context) async {
