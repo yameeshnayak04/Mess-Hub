@@ -64,8 +64,20 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
       ref.invalidate(membersByStatusProvider('Inactive'));
     } catch (e) {
       if (!context.mounted) return;
-      _showSnackBar('Failed: ${e.toString().replaceAll('Exception: ', '')}',
-          isError: true);
+      final msg = e.toString();
+      // Detect backend structured error code
+      if (msg.contains('OUTSTANDING_BILLS') ||
+          msg.toLowerCase().contains('outstanding bills')) {
+        _showSnackBar(
+          'Cannot approve. Member still has unpaid bills (Due/Pending).',
+          isError: true,
+        );
+      } else {
+        _showSnackBar(
+          'Failed: ${msg.replaceAll('Exception: ', '')}',
+          isError: true,
+        );
+      }
     }
   }
 

@@ -3,7 +3,7 @@ const Mess = require('../models/Mess');
 const Bill = require('../models/Bill');
 const Attendance = require('../models/Attendance'); // for summaries
 const Menu = require('../models/Menu');             // today’s menu
-const { getStartAndEndOfMonth } = require('../utils/billCalculation'); // month window
+const { getStartAndEndOfMonth, calculateMonthlyBillForMember } = require('../utils/billCalculation');
 const Leave = require('../models/Leave');
 
 // @desc   Get membership details for customer dashboard
@@ -472,14 +472,6 @@ exports.requestDiscontinueMembership = async (req, res, next) => {
       });
     }
 
-    // Avoid duplicate requests
-    if (membership.leaveRequested) {
-      return res.status(400).json({
-        success: false,
-        message: 'You already have a pending discontinuation request for this membership.',
-      });
-    }
-
     // Block if any outstanding bills exist
     const outstandingBill = await Bill.findOne({
       user: req.user.id,
@@ -494,13 +486,72 @@ exports.requestDiscontinueMembership = async (req, res, next) => {
       });
     }
 
+    // Mark request
     membership.leaveRequested = true;
     await membership.save();
+
+    // Generate partial month bill up to discontinue date (inclusive)
+    const discontinueDate = new Date(); // current date/time of request
+    const month = discontinueDate.getMonth() + 1;
+    const year = discontinueDate.getFullYear();
+    const { startOfMonth } = getStartAndEndOfMonth(month, year);
+
+    // Load mess (owner not required in customer workflow)
+    const mess = await Mess.findById(membership.mess);
+
+    // Shared attendance-based calculation limited to startOfMonth..discontinueDate
+    const breakdown = await calculateMonthlyBillForMember({
+      member: membership,
+      mess,
+      month,
+      year,
+      AttendanceModel: Attendance,
+      customStart: startOfMonth,
+      customEnd: discontinueDate, // inclusive window
+    });
+
+    // If base is zero, skip bill creation (no plan rate)
+    if (breakdown.baseAmount) {
+      // Upsert current-month bill for this membership
+      let bill = await Bill.findOne({
+        user: membership.user,
+        mess: membership.mess,
+        month,
+        year,
+      });
+
+      if (bill) {
+        bill.baseAmount = breakdown.baseAmount;
+        bill.rebateAmount = breakdown.rebateAmount;
+        bill.totalAmount = breakdown.finalAmount;
+        if (!['Paid', 'Pending Approval'].includes(bill.status)) {
+          bill.status = 'Due';
+        }
+        await bill.save();
+      } else {
+        await Bill.create({
+          user: membership.user,
+          mess: membership.mess,
+          month,
+          year,
+          baseAmount: breakdown.baseAmount,
+          rebateAmount: breakdown.rebateAmount,
+          totalAmount: breakdown.finalAmount,
+          status: 'Due',
+        });
+      }
+
+      // Optionally set billingRate for future consistency if missing
+      if (!membership.billingRate && breakdown.baseAmount) {
+        membership.billingRate = breakdown.baseAmount;
+        await membership.save();
+      }
+    }
 
     return res.status(200).json({
       success: true,
       message:
-        'Your request to permanently discontinue this membership has been sent to the mess manager for approval.',
+        'Your request to permanently discontinue this membership has been sent. A partial bill for the current month has been generated and marked Due.',
     });
   } catch (error) {
     next(error);
@@ -530,7 +581,7 @@ exports.approveDiscontinueMembership = async (req, res, next) => {
       });
     }
 
-    // Require a pending discontinuation request or an active membership
+    // Require a pending discontinuation request OR an active membership
     if (!membership.leaveRequested && membership.status !== 'Active') {
       return res.status(400).json({
         success: false,
@@ -538,22 +589,37 @@ exports.approveDiscontinueMembership = async (req, res, next) => {
       });
     }
 
-    // Double-check for outstanding bills before deactivation
-    const outstanding = await Bill.exists({
+    // Fetch all bills (not cancelled) for this member & mess
+    const bills = await Bill.find({
       user: membership.user,
       mess: membership.mess,
-      status: { $in: ['Due', 'Pending Approval'] },
-    });
+    }).select('_id status totalAmount month year');
 
-    if (outstanding) {
-      return res.status(400).json({
+    // Identify outstanding (Due or Pending Approval)
+    const outstanding = bills.filter(
+      (b) => ['Due', 'Pending', 'Pending Approval'].includes(b.status)
+    );
+
+    if (outstanding.length > 0) {
+      // Block approval, return structured error with code + minimal summary
+      return res.status(422).json({
         success: false,
-        message: 'Outstanding dues found; cannot deactivate membership.',
+        code: 'OUTSTANDING_BILLS',
+        message:
+          'Cannot approve discontinue. Member has outstanding bills that are Due or Pending.',
+        outstandingBills: outstanding.map((b) => ({
+          id: b._id,
+          status: b.status,
+          amount: b.totalAmount,
+          period: `${b.month || '-'}-${b.year || '-'}`,
+        })),
       });
     }
 
+    // All bills are Paid -> allow discontinuation
     membership.status = 'Inactive';
     membership.leaveRequested = false;
+    membership.endDate = new Date(); // optional explicit end marker
     await membership.save();
 
     const populated = await Membership.findById(membership._id)

@@ -95,12 +95,19 @@ class ManagerMembersRepository {
     throw _msg(res, 'Failed to load bills');
   }
 
-  Future<Map<String, dynamic>> approveDiscontinue(String membershipId) async {
-    final res = await _dio.put('/membership/approve-discontinue/$membershipId');
-    if (res.statusCode == 200 && res.data is Map) {
-      return Map<String, dynamic>.from(res.data as Map);
+  Future<void> approveDiscontinue(String membershipId) async {
+    try {
+      final res =
+          await _dio.put('/membership/approve-discontinue/$membershipId');
+      if (res.statusCode != 200)
+        throw Exception(res.data?['message'] ?? 'Approve failed');
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (data is Map && data['code'] == 'OUTSTANDING_BILLS') {
+        throw Exception('OUTSTANDING_BILLS: ${data['message']}');
+      }
+      throw Exception(data?['message'] ?? 'Approve failed');
     }
-    throw _msg(res, 'Failed to approve discontinuation');
   }
 
   Future<Map<String, dynamic>> rejectDiscontinue(String membershipId) async {
