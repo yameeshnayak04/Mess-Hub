@@ -15,7 +15,7 @@ This project is built with a focus on **clean architecture**, **scalability**, a
 - 💳 **Multi-Membership:** Join multiple messes (e.g., lunch at one, dinner at another).  
 - 📅 **Leave Management:** Mark leaves for any membership to get rebates.  
 - 🧾 **Transparent Billing:** View detailed, automated monthly invoices.  
-- 🔒 **Secure OTP Login:** Password-less authentication via phone number.  
+- 🔒 **Secure Password Login:** Password authentication via phone number.  
 
 ### 🧑‍💼 For Mess Owners
 - 📈 **Business Dashboard:** Live stats on meals served and members.  
