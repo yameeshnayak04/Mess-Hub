@@ -1,43 +1,32 @@
 // utils/billCalculation.js
-
-// All exported function names/signatures are unchanged to maintain compatibility across controllers, jobs, and routes.
+// Existing utilities retained; new calculateMonthlyBillForMember added.
 
 const DEFAULT_TZ_OFFSET_MIN = parseInt(process.env.TZ_OFFSET_MINUTES || '330', 10); // IST by default
 
-// Internal: normalize offset into [0, 1439] minutes
 const normOffset = (min) => ((min % 1440) + 1440) % 1440;
-
-// Internal: minutes since local (offset) midnight from a Date
 const getLocalMinutes = (now = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) => {
   const utcMin = now.getUTCHours() * 60 + now.getUTCMinutes();
   return (utcMin + normOffset(offsetMin)) % 1440;
 };
 
-// Exported: startOfDay — compute the local (IST) day start as a UTC instant Date
 function startOfDay(date = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) {
   const d = new Date(date);
-  // Construct the UTC midnight for the calendar day of 'd'
   const utcMidnight = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  // Shift that instant backward by the offset to get the local midnight as a UTC instant
   return new Date(utcMidnight - offsetMin * 60 * 1000);
 }
 
-// Exported: endOfDay — compute the local (IST) day end as a UTC instant Date
 function endOfDay(date = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) {
   const s = startOfDay(date, offsetMin);
   return new Date(s.getTime() + 24 * 60 * 60 * 1000 - 1);
 }
 
-// Exported: getStartAndEndOfDay — wrapper returning { startOfDay, endOfDay } with same naming
 function getStartAndEndOfDay(date = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) {
   return { startOfDay: startOfDay(date, offsetMin), endOfDay: endOfDay(date, offsetMin) };
 }
 
-// Internal: strip time for inclusive day arithmetic (local calendar, not offset-corrected)
 const stripTime = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const dayMs = 24 * 60 * 60 * 1000;
 
-// Exported: calculateDaysDifference — inclusive whole-day count
 function calculateDaysDifference(startDate, endDate) {
   const s = stripTime(new Date(startDate));
   const e = stripTime(new Date(endDate));
@@ -45,22 +34,16 @@ function calculateDaysDifference(startDate, endDate) {
   return Math.floor((e - s) / dayMs) + 1;
 }
 
-// Exported: getStartAndEndOfMonth — inclusive local (IST) month bounds as UTC instants.
-// month is 1..12; returns Dates suitable for querying with $gte/$lte on UTC timestamps.
 function getStartAndEndOfMonth(month, year, offsetMin = DEFAULT_TZ_OFFSET_MIN) {
   const m0 = month - 1;
-  // Local first-of-month midnight as a UTC instant
   const startUTC = Date.UTC(year, m0, 1);
   const startOfMonth = new Date(startUTC - offsetMin * 60 * 1000);
-  // Local last millisecond of month: local first-of-next-month midnight minus 1 ms
   const nextMonthUTC = Date.UTC(year, m0 + 1, 1);
   const startOfNextLocal = new Date(nextMonthUTC - offsetMin * 60 * 1000);
   const endOfMonth = new Date(startOfNextLocal.getTime() - 1);
   return { startOfMonth, endOfMonth };
 }
 
-// Exported: checkMealTiming — evaluates HH:MM windows in IST (or configured offset).
-// timings: { lunch: { start: '12:00', end: '14:00' }, dinner: { start: '20:00', end: '22:00' } }
 function checkMealTiming(timings, mealType, offsetMin = DEFAULT_TZ_OFFSET_MIN, now = new Date()) {
   const t = timings || {};
   const parseHM = (s) => {
@@ -75,12 +58,10 @@ function checkMealTiming(timings, mealType, offsetMin = DEFAULT_TZ_OFFSET_MIN, n
 
   const lunchSlot = t.lunch || {};
   const dinnerSlot = t.dinner || {};
-
   const lunchStart = parseHM(lunchSlot.start);
   const lunchEnd = parseHM(lunchSlot.end);
   const dinnerStart = parseHM(dinnerSlot.start);
   const dinnerEnd = parseHM(dinnerSlot.end);
-
   const localNow = getLocalMinutes(now, offsetMin);
 
   const lunchHas = Number.isInteger(lunchStart) && Number.isInteger(lunchEnd);
@@ -89,7 +70,6 @@ function checkMealTiming(timings, mealType, offsetMin = DEFAULT_TZ_OFFSET_MIN, n
   const lunchWithin = lunchHas && localNow >= lunchStart && localNow <= lunchEnd;
   const dinnerWithin = dinnerHas && localNow >= dinnerStart && localNow <= dinnerEnd;
 
-  // Resolve currentMeal preference: explicit mealType first, else whichever window is active.
   const requested = String(mealType || '').toLowerCase();
   let currentMeal = 'None';
   if (requested === 'lunch' && lunchWithin) currentMeal = 'Lunch';
@@ -97,45 +77,36 @@ function checkMealTiming(timings, mealType, offsetMin = DEFAULT_TZ_OFFSET_MIN, n
   else if (lunchWithin) currentMeal = 'Lunch';
   else if (dinnerWithin) currentMeal = 'Dinner';
 
-  const hasWindow = (requested === 'lunch' ? lunchHas : requested === 'dinner' ? dinnerHas : lunchHas || dinnerHas);
-  const isWithin = currentMeal !== 'None';
-  const isPast =
-    requested === 'lunch'
-      ? lunchHas && localNow > lunchEnd
-      : requested === 'dinner'
-      ? dinnerHas && localNow > dinnerEnd
-      : (lunchHas && localNow > lunchEnd) && (!dinnerHas || localNow > dinnerEnd);
+  const hasWindow = (requested === 'lunch'
+    ? lunchHas
+    : requested === 'dinner'
+    ? dinnerHas
+    : lunchHas || dinnerHas);
 
   return {
     hasWindow,
-    isWithin,
-    isPast,
+    isWithin: currentMeal !== 'None',
+    isPast:
+      requested === 'lunch'
+        ? lunchHas && localNow > lunchEnd
+        : requested === 'dinner'
+        ? dinnerHas && localNow > dinnerEnd
+        : (lunchHas && localNow > lunchEnd) && (!dinnerHas || localNow > dinnerEnd),
     startMin: currentMeal === 'Lunch' ? lunchStart : currentMeal === 'Dinner' ? dinnerStart : null,
     endMin: currentMeal === 'Lunch' ? lunchEnd : currentMeal === 'Dinner' ? dinnerEnd : null,
     nowMin: localNow,
-    currentMeal, // added to help dashboards resolve the active meal string
+    currentMeal,
   };
 }
 
-// Compatible helpers already referenced in code (names preserved)
-
-// Limit a membership’s active window to the billing month for proration.
-// utils/billCalculation.js
-
-// Limit a membership’s active window to the billing month for proration.
 function getActiveWindowForMonth(membership, startOfMonth, endOfMonth) {
-  // Prefer explicit startDate/endDate if present (legacy), otherwise use effectiveFrom/joinedDate.
   const memberStartRaw =
     membership?.startDate ||
     membership?.effectiveFrom ||
     membership?.joinedDate ||
     startOfMonth;
 
-  // If there is an explicit endDate, use it.
-  // Else, if membership is inactive, treat updatedAt as the last active day.
-  // Else, assume active through endOfMonth.
   let memberEndRaw = membership?.endDate || null;
-
   if (!memberEndRaw) {
     if (membership && membership.status === 'Inactive' && membership.updatedAt) {
       memberEndRaw = membership.updatedAt;
@@ -167,8 +138,6 @@ function getActiveWindowForMonth(membership, startOfMonth, endOfMonth) {
   };
 }
 
-
-// Meals covered by a plan string
 function getMealsFromPlan(planName) {
   const p = String(planName || '').toLowerCase();
   if (p.includes('both')) return ['Lunch', 'Dinner'];
@@ -177,17 +146,162 @@ function getMealsFromPlan(planName) {
   return [];
 }
 
+/**
+ * Shared billing calculation (attendance-based only).
+ * Returns plain object with breakdown.
+ * skipMealRebatePercent is mapped from existing skipAllowancePercent.
+ */
+async function calculateMonthlyBillForMember({
+  member,
+  mess,
+  month,
+  year,
+  AttendanceModel,
+}) {
+  const { startOfMonth, endOfMonth } = getStartAndEndOfMonth(month, year);
+  const window = getActiveWindowForMonth(member, startOfMonth, endOfMonth);
+  if (!window.activeStart || !window.activeEnd) {
+    return {
+      baseAmount: 0,
+      rebateAmount: 0,
+      finalAmount: 0,
+      presentCount: 0,
+      absentCount: 0,
+      leaveCount: 0,
+      skipCount: 0,
+      noRecordMeals: 0,
+    };
+  }
+
+  const includedMeals = getMealsFromPlan(member.planName);
+  if (!includedMeals.length) {
+    return {
+      baseAmount: 0,
+      rebateAmount: 0,
+      finalAmount: 0,
+      presentCount: 0,
+      absentCount: 0,
+      leaveCount: 0,
+      skipCount: 0,
+      noRecordMeals: 0,
+    };
+  }
+
+  // Resolve baseAmount.
+  let baseAmount = Number(member.billingRate || 0);
+  if (!baseAmount && Array.isArray(mess.plans)) {
+    const planMatch = mess.plans.find(
+      (p) => String(p.name || '').toLowerCase() === String(member.planName || '').toLowerCase()
+    );
+    if (planMatch && typeof planMatch.rate === 'number') {
+      baseAmount = Number(planMatch.rate);
+      // Persist back so future months use it (optional outside this pure function).
+    }
+  }
+  if (!baseAmount) {
+    return {
+      baseAmount: 0,
+      rebateAmount: 0,
+      finalAmount: 0,
+      presentCount: 0,
+      absentCount: 0,
+      leaveCount: 0,
+      skipCount: 0,
+      noRecordMeals: 0,
+    };
+  }
+
+  const rules = mess.rules || {};
+  const rebatePerThali = Number(rules.rebatePerThali || 0);
+  const skipMealRebatePercent = Number(rules.skipAllowancePercent || 0); // mapped
+  const minMonthlyCharge = Number(rules.minMonthlyCharge || 0);
+
+  // Fetch all attendance rows in active window for included meals.
+  const attendanceRows = await AttendanceModel.find({
+    membership: member._id,
+    mess: mess._id,
+    mealType: { $in: includedMeals },
+    date: { $gte: window.activeStart, $lte: window.activeEnd },
+  }).select('date mealType status');
+
+  // Count by status.
+  let presentCount = 0;
+  let absentCount = 0;
+  let leaveCount = 0;
+  let skipCount = 0;
+
+  // Build lookup for (day, meal) combinations.
+  const recordedKeySet = new Set();
+  for (const row of attendanceRows) {
+    const d = new Date(row.date);
+    const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}|${row.mealType}`;
+    recordedKeySet.add(key);
+    switch (row.status) {
+      case 'Present':
+        presentCount++;
+        break;
+      case 'Absent':
+        absentCount++;
+        break;
+      case 'Leave':
+        leaveCount++;
+        break;
+      case 'Skipped':
+        skipCount++;
+        break;
+      default:
+        break;
+    }
+  }
+
+  // Iterate days in active window to find missing (no-record) meals.
+  let noRecordMeals = 0;
+  const cursor = new Date(window.activeStart);
+  while (cursor <= window.activeEnd) {
+    for (const meal of includedMeals) {
+      const key = `${cursor.getUTCFullYear()}-${cursor.getUTCMonth()}-${cursor.getUTCDate()}|${meal}`;
+      if (!recordedKeySet.has(key)) {
+        noRecordMeals++;
+      }
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  // Deductions.
+  const leaveDeduction = leaveCount * rebatePerThali;
+  const skipDeduction =
+    skipCount * (skipMealRebatePercent / 100) * rebatePerThali;
+  const noRecordDeduction = noRecordMeals * rebatePerThali;
+
+  const rebateAmount = Math.max(
+    0,
+    Math.round((leaveDeduction + skipDeduction + noRecordDeduction) * 100) / 100
+  );
+
+  const provisional = Math.round((baseAmount - rebateAmount) * 100) / 100;
+  const finalAmount = provisional < minMonthlyCharge ? minMonthlyCharge : provisional;
+
+  return {
+    baseAmount: Math.round(baseAmount * 100) / 100,
+    rebateAmount,
+    finalAmount: Math.round(finalAmount * 100) / 100,
+    presentCount,
+    absentCount,
+    leaveCount,
+    skipCount,
+    noRecordMeals,
+  };
+}
+
 module.exports = {
-  // Original exports (unchanged names)
   checkMealTiming,
   getStartAndEndOfDay,
   getStartAndEndOfMonth,
   startOfDay,
   endOfDay,
   calculateDaysDifference,
-  // Also exported previously/used elsewhere
   getActiveWindowForMonth,
   getMealsFromPlan,
-  // Expose default offset for consumers that need it
   DEFAULT_TZ_OFFSET_MIN,
+  calculateMonthlyBillForMember, // new export
 };

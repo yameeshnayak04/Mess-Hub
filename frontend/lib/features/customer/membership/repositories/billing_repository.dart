@@ -26,8 +26,13 @@ class BillingRepository {
     required File file,
   }) async {
     final form = FormData.fromMap({
-      'proof': await MultipartFile.fromFile(file.path,
-          filename: file.uri.pathSegments.last),
+      // IMPORTANT: match Multer field name expected by uploadPaymentProof
+      // If your middleware uses a different key (e.g., 'proof' or 'file'),
+      // change this name to match exactly.
+      'paymentProof': await MultipartFile.fromFile(
+        file.path,
+        filename: file.uri.pathSegments.last,
+      ),
     });
     final res = await _dio.post('/billing/submit-proof/$billId', data: form);
     if (res.statusCode != 200) throw _msg(res);
