@@ -20,7 +20,7 @@ class DiscoverScreen extends ConsumerStatefulWidget {
 class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
     with SingleTickerProviderStateMixin {
   String? _selectedCuisine;
-  String? _selectedServiceType;
+  // Removed service type filter to avoid buggy combined-filter behavior.
   bool _isMapView = false;
   final TextEditingController _searchCtrl = TextEditingController();
   Timer? _debounce;
@@ -86,7 +86,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
     _debounce = Timer(const Duration(milliseconds: 400), () {
       ref.read(discoverProvider.notifier).loadMesses(
             cuisine: _selectedCuisine,
-            serviceType: _selectedServiceType,
+            // serviceType removed
             search: text.trim().isEmpty ? null : text.trim(),
           );
     });
@@ -249,7 +249,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
             ),
           ),
 
-          // Filters
+          // Filters (only cuisine retained)
           SliverToBoxAdapter(
             child: Container(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -296,59 +296,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                             setState(() => _selectedCuisine = value);
                             ref.read(discoverProvider.notifier).loadMesses(
                                   cuisine: value,
-                                  serviceType: _selectedServiceType,
-                                  search: _searchCtrl.text.trim().isEmpty
-                                      ? null
-                                      : _searchCtrl.text.trim(),
-                                );
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedServiceType,
-                          isExpanded: true,
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded,
-                              color: AppTheme.primaryOrange),
-                          hint: Row(
-                            children: [
-                              const Icon(Icons.room_service_rounded,
-                                  size: 18, color: AppTheme.textSecondary),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Service',
-                                style: TextStyle(
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                                value: null, child: Text('All Services')),
-                            DropdownMenuItem(
-                                value: 'Monthly Only',
-                                child: Text('Monthly Only')),
-                            DropdownMenuItem(
-                                value: 'Both Daily & Monthly',
-                                child: Text('Daily & Monthly')),
-                          ],
-                          onChanged: (value) {
-                            setState(() => _selectedServiceType = value);
-                            ref.read(discoverProvider.notifier).loadMesses(
-                                  cuisine: _selectedCuisine,
-                                  serviceType: value,
+                                  // serviceType removed
                                   search: _searchCtrl.text.trim().isEmpty
                                       ? null
                                       : _searchCtrl.text.trim(),
@@ -364,7 +312,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
           ),
 
           // Active Filters Badge
-          if (_selectedCuisine != null || _selectedServiceType != null)
+          if (_selectedCuisine != null)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -385,7 +333,6 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                           setState(() => _selectedCuisine = null);
                           ref.read(discoverProvider.notifier).loadMesses(
                                 cuisine: null,
-                                serviceType: _selectedServiceType,
                                 search: _searchCtrl.text.trim().isEmpty
                                     ? null
                                     : _searchCtrl.text.trim(),
@@ -393,23 +340,6 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                         },
                       ),
                       const SizedBox(width: 6),
-                    ],
-                    if (_selectedServiceType != null) ...[
-                      _buildFilterChip(
-                        _selectedServiceType == 'Monthly Only'
-                            ? 'Monthly'
-                            : 'Daily & Monthly',
-                        () {
-                          setState(() => _selectedServiceType = null);
-                          ref.read(discoverProvider.notifier).loadMesses(
-                                cuisine: _selectedCuisine,
-                                serviceType: null,
-                                search: _searchCtrl.text.trim().isEmpty
-                                    ? null
-                                    : _searchCtrl.text.trim(),
-                              );
-                        },
-                      ),
                     ],
                   ],
                 ),
@@ -554,17 +484,16 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            if (_selectedCuisine != null || _selectedServiceType != null)
+            if (_selectedCuisine != null)
               OutlinedButton.icon(
                 onPressed: () {
                   setState(() {
                     _selectedCuisine = null;
-                    _selectedServiceType = null;
                   });
                   ref.read(discoverProvider.notifier).loadMesses();
                 },
                 icon: const Icon(Icons.clear_all_rounded),
-                label: const Text('Clear All Filters'),
+                label: const Text('Clear Filters'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.primaryOrange,
                   side: const BorderSide(color: AppTheme.primaryOrange),
@@ -771,8 +700,8 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
             label,
             style: const TextStyle(
               color: AppTheme.primaryOrange,
-              fontSize: 12,
               fontWeight: FontWeight.w600,
+              fontSize: 12,
             ),
           ),
         ],
@@ -1012,11 +941,8 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                             ),
                             child: Column(
                               children: [
-                                const Icon(
-                                  Icons.star_rounded,
-                                  color: Colors.amber,
-                                  size: 20,
-                                ),
+                                const Icon(Icons.star_rounded,
+                                    color: Colors.amber, size: 20),
                                 const SizedBox(height: 4),
                                 Text(
                                   mess.averageRating!.toStringAsFixed(1),
