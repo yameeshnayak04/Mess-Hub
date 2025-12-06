@@ -2,13 +2,13 @@ name: Cron Triggers
 
 on:
   schedule:
-    - cron: '0 */6 * * *'         # Absent every 6 hours (UTC)
+    - cron: '0 * * * *'         # Absent every 1 hour (UTC) <- changed
     - cron: '30 18 28-31 * *'     # Window that maps to 00:00 IST on the 1st
   workflow_dispatch: {}
 
 jobs:
   absent:
-    if: github.event_name == 'schedule' && github.event.schedule == '0 */6 * * *'
+    if: github.event_name == 'schedule' && github.event.schedule == '0 * * * *'  # updated check
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Absent Job
