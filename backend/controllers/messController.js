@@ -388,29 +388,49 @@ exports.getDashboardStats = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'No mess found for this manager' });
     }
 
-    const { currentMeal, liveStatus } = checkMealTiming(mess.timings);
-    const { startOfDay, endOfDay } = getStartAndEndOfDay();
+    // Use configured timezone offset to decide current meal window
+    const { currentMeal, liveStatus } = checkMealTiming(mess.timings, null, DEFAULT_TZ_OFFSET_MIN);
+    const { startOfDay, endOfDay } = getStartAndEndOfDay(undefined, DEFAULT_TZ_OFFSET_MIN);
 
-    const eatingNow = currentMeal !== 'None' ? await Attendance.countDocuments({
-      mess: mess._id,
-      date: { $gte: startOfDay, $lte: endOfDay },
-      mealType: currentMeal,
-      status: 'Present',
-      memberType: 'Monthly'
-    }) : 0;
+    // Default zeros (required: when no meal is active, show zeros)
+    let eatingNow = 0;
+    let onLeave = 0;
+    let notEating = 0;
+    let dailyMembers = 0;
 
-    const onLeave = await Leave.countDocuments({
-      mess: mess._id,
-      startDate: { $lte: endOfDay },
-      endDate: { $gte: startOfDay }
-    });
+    // Only compute attendance/leave/skipped counts while a meal window is active
+    if (currentMeal !== 'None') {
+      eatingNow = await Attendance.countDocuments({
+        mess: mess._id,
+        date: { $gte: startOfDay, $lte: endOfDay },
+        mealType: currentMeal,
+        status: 'Present',
+        memberType: 'Monthly'
+      });
 
-    const notEating = currentMeal !== 'None' ? await Attendance.countDocuments({
-      mess: mess._id,
-      date: { $gte: startOfDay, $lte: endOfDay },
-      mealType: currentMeal,
-      status: 'Skipped'
-    }) : 0;
+      onLeave = await Leave.countDocuments({
+        mess: mess._id,
+        startDate: { $lte: endOfDay },
+        endDate: { $gte: startOfDay }
+      });
+
+      notEating = await Attendance.countDocuments({
+        mess: mess._id,
+        date: { $gte: startOfDay, $lte: endOfDay },
+        mealType: currentMeal,
+        status: 'Skipped'
+      });
+
+      // dailyMembers only makes sense during an active meal window
+      if (mess.serviceType === 'Both Daily & Monthly') {
+        dailyMembers = await Attendance.countDocuments({
+          mess: mess._id,
+          date: { $gte: startOfDay, $lte: endOfDay },
+          status: 'Present',
+          memberType: 'Daily'
+        });
+      }
+    }
 
     const totalActiveMembers = await Membership.countDocuments({
       mess: mess._id,
@@ -418,18 +438,14 @@ exports.getDashboardStats = async (req, res, next) => {
     });
 
     const dashboardData = {
-      liveStatus, currentMeal, eatingNow, onLeave, notEating, totalActiveMembers
+      liveStatus,
+      currentMeal,
+      eatingNow,
+      onLeave,
+      notEating,
+      totalActiveMembers,
+      dailyMembers
     };
-
-    if (mess.serviceType === 'Both Daily & Monthly') {
-      const dailyMembers = await Attendance.countDocuments({
-        mess: mess._id,
-        date: { $gte: startOfDay, $lte: endOfDay },
-        status: 'Present',
-        memberType: 'Daily'
-      });
-      dashboardData.dailyMembers = dailyMembers;
-    }
 
     res.status(200).json({ success: true, data: dashboardData });
   } catch (error) {
