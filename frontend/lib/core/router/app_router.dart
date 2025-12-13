@@ -38,12 +38,26 @@ import '../../features/manager/create_mess/screens/create_mess_wizard_screen.dar
 import '../../core/utils/constants.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
+  // This makes the router accessible anywhere in the app via Riverpod
+  // Declares a global configuration object (appRouterProvider) that supplies the application's entire routing logic.
+
   final authState = ref.watch(authProvider);
+  // authProvider: A Riverpod StateProvider (likely) holding the user's authentication status (User object, loading state, error state).
+  // Crucial for implementing "guarded routes"—restricting access to certain pages based on whether a user is logged in or not.
 
   return GoRouter(
-    initialLocation: RouteNames.splash,
+    // Provides the instantiated GoRouter object back to the appRouterProvider.
+    // GoRouter: The main configuration object for the go_router package.
+    // This defines the structure and rules of all application navigation.
+
+    initialLocation: RouteNames
+        .splash, // Sets the initial URL path the app loads when it first starts.
     debugLogDiagnostics: true,
     redirect: (context, state) {
+      // Redirect function: A function go_router runs before navigating to a destination.
+      // Checks conditions (like login status, user role) and decides if the user should stay on their intended path (return null) or be sent to a different path (return '/login').
+      // Prevents unauthorized access to screens and manages complex role-based navigation flows seamlessly.
+
       final user = authState.valueOrNull;
       final isLoading = authState.isLoading && !authState.hasValue;
 
@@ -85,6 +99,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      // Defines all possible screens and paths the application can navigate to.
       // Auth
       GoRoute(
           path: RouteNames.splash, builder: (_, __) => const SplashScreen()),
@@ -94,6 +109,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           builder: (_, __) => const RegisterScreen()),
 
       // Customer tabs
+      // ShellRoute: A go_router feature for persistent UI elements (like a navigation bar/scaffold).
+      // Wraps a group of nested routes (home, discover, profile) within a common parent widget
+      // Ensures the bottom navigation bar remains visible and doesn't rebuild when switching between the main customer tabs.
       ShellRoute(
         builder: (_, __, child) => CustomerShell(child: child),
         routes: [

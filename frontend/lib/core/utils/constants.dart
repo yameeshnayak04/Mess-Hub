@@ -24,13 +24,19 @@ class ApiConstants {
 
 class StorageKeys {
   static const String accessToken = 'access_token';
+  // User data can be stored as JSON string
+  // Defines the exact string key used to save/read the user's access token in local storage.
+  // Prevents typos when interacting with storage. Using a constant prevents errors like writing to 'access_token' but reading from 'acces_token'.
   static const String userData = 'user_data';
+  // Defines the key for storing the complete user profile data locally.
+  // Same benefits as the access token key; ensures consistency when serializing/deserializing user data.
 }
 
 // lib/core/utils/constants.dart (excerpt)
 class RouteNames {
   // Auth
   static const String splash = '/splash';
+  // Decouples navigation calls from raw strings. Instead of router.go('/login'), you use router.go(RouteNames.login).
   static const String login = '/login';
   static const String register = '/register';
 
@@ -50,16 +56,10 @@ class RouteNames {
   static const String managerHome = '/manager';
   static const String managerMembers = '/manager/members';
   static const String managerPayments = '/manager/payments';
-  // Back-compat alias to fix "managerBillingApprovals" not defined
-  static const String managerBillingApprovals = managerPayments;
 
   static const String kioskLauncher = '/manager/kiosk';
   static const String kioskMode = '/manager/kiosk/mode';
   static const String managerMenu = '/manager/menu-editor';
   static const String createMessWizard = '/manager/create-mess';
   static const managerProfile = '/manager/profile';
-
-  // Helper
-  static String managerMemberDetails(String membershipId) =>
-      '/manager/member/$membershipId';
 }
