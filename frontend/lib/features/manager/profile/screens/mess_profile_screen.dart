@@ -1,5 +1,6 @@
 // lib/features/manager/profile/screens/mess_profile_screen.dart
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -62,12 +63,20 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
   File? _picked;
   bool _initialized = false; // seed form once per fresh fetch
   bool _isSaving = false;
+  bool _suppressAutoSave = false;
+  Timer? _autoSaveTimer;
+  bool _autoSaving = false;
+  final Set<String> _dirtyFields = <String>{};
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addObserver(this);
+
+    // Auto-save listeners (debounced) for "update every detail" requirement.
+    _attachControllerListeners();
+
     // Trigger an initial fetch by invalidating provider once after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.invalidate(messProfileProvider);
@@ -86,6 +95,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _tabController.dispose();
+    _autoSaveTimer?.cancel();
     _name.dispose();
     _city.dispose();
     _serviceType.dispose();
@@ -100,6 +110,212 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
     _minMonthlyCharge.dispose();
     _basicThali.dispose();
     super.dispose();
+  }
+
+  void _attachControllerListeners() {
+    void bind(TextEditingController c, String fieldKey) {
+      c.addListener(() {
+        if (_suppressAutoSave) return;
+        if (!_initialized) return;
+        _dirtyFields.add(fieldKey);
+        _scheduleAutoSave();
+      });
+    }
+
+    bind(_address, 'address');
+    bind(_phone, 'contactPhone');
+    bind(_maxCapacity, 'maxCapacity');
+    bind(_dailyRate, 'dailyThaliRate');
+
+    bind(_minLeaveDays, 'rules');
+    bind(_rebatePerThali, 'rules');
+    bind(_skipPercent, 'rules');
+    bind(_minMonthlyCharge, 'rules');
+    bind(_basicThali, 'basicThaliDetails');
+  }
+
+  void _scheduleAutoSave() {
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = Timer(const Duration(milliseconds: 700), () {
+      if (!mounted) return;
+      _performAutoSave();
+    });
+  }
+
+  bool _validateTimingConstraints({bool showSnack = false}) {
+    if (_lunchStart == null ||
+        _lunchEnd == null ||
+        _dinnerStart == null ||
+        _dinnerEnd == null) {
+      if (showSnack) {
+        _showSnackBar('Please set start and end times for lunch and dinner',
+            isError: true);
+      }
+      return false;
+    }
+
+    int toMinutes(TimeOfDay t) => t.hour * 60 + t.minute;
+
+    final ls = toMinutes(_lunchStart!);
+    final le = toMinutes(_lunchEnd!);
+    final ds = toMinutes(_dinnerStart!);
+    final de = toMinutes(_dinnerEnd!);
+
+    final lunchValid = ls < le;
+    final dinnerValid = ds < de;
+    final lunchStartsBeforeDinner = ls < ds;
+    final lunchEndBeforeDinnerStart = le <= ds;
+
+    if (!lunchValid || !dinnerValid) {
+      if (showSnack) {
+        _showSnackBar('Start time must be before end time for each meal',
+            isError: true);
+      }
+      return false;
+    }
+
+    // Times are selected via TimePicker so they are always within 00:00..23:59.
+    // Still enforce ordering and non-overlap:
+    if (!lunchStartsBeforeDinner || !lunchEndBeforeDinnerStart) {
+      if (showSnack) {
+        _showSnackBar(
+            'Lunch must finish before dinner starts; no overlap allowed',
+            isError: true);
+      }
+      return false;
+    }
+
+    // Dinner end is always within day; lunch after dinner not possible with above checks.
+    return true;
+  }
+
+  Future<void> _performAutoSave() async {
+    if (_autoSaving || _isSaving) return;
+    if (_dirtyFields.isEmpty) return;
+
+    // Build a minimal payload containing only changed sections.
+    final fields = <String, dynamic>{};
+
+    // Basic/contact fields
+    if (_dirtyFields.contains('address')) {
+      final v = _address.text.trim();
+      if (v.length >= 5) fields['address'] = v;
+    }
+    if (_dirtyFields.contains('contactPhone')) {
+      final v = _phone.text.trim();
+      if (RegExp(r'^[0-9]{10}$').hasMatch(v)) fields['contactPhone'] = v;
+    }
+    if (_dirtyFields.contains('maxCapacity')) {
+      final v = _maxCapacity.text.trim();
+      if (v.isEmpty) {
+        // Skip sending empty; keep existing backend value.
+      } else {
+        final n = int.tryParse(v);
+        if (n != null && n >= 1) fields['maxCapacity'] = n;
+      }
+    }
+    if (_dirtyFields.contains('dailyThaliRate')) {
+      final v = _dailyRate.text.trim();
+      if (v.isEmpty) {
+        // Skip sending empty.
+      } else {
+        final n = double.tryParse(v);
+        if (n != null && n >= 0) fields['dailyThaliRate'] = n;
+      }
+    }
+
+    // Tiffin + thali details
+    if (_dirtyFields.contains('tiffinService')) {
+      fields['tiffinService'] = _tiffinService;
+    }
+    if (_dirtyFields.contains('basicThaliDetails')) {
+      final v = _basicThali.text.trim();
+      if (v.isNotEmpty) fields['basicThaliDetails'] = v;
+    }
+
+    // Rules
+    if (_dirtyFields.contains('rules')) {
+      final rulePatch = <String, dynamic>{};
+      final minLeave = int.tryParse(_minLeaveDays.text.trim());
+      if (minLeave != null && minLeave >= 1) {
+        rulePatch['minLeaveDaysForRebate'] = minLeave;
+      }
+      final rebate = double.tryParse(_rebatePerThali.text.trim());
+      if (rebate != null && rebate >= 0) rulePatch['rebatePerThali'] = rebate;
+      final skip = double.tryParse(_skipPercent.text.trim());
+      if (skip != null && skip >= 0 && skip <= 100) {
+        rulePatch['skipAllowancePercent'] = skip;
+      }
+      final mmc = double.tryParse(_minMonthlyCharge.text.trim());
+      if (mmc != null && mmc >= 0) rulePatch['minMonthlyCharge'] = mmc;
+      rulePatch['allowAbsentRebate'] = _allowAbsentRebate;
+
+      if (rulePatch.isNotEmpty) fields['rules'] = rulePatch;
+    }
+
+    // Plans
+    if (_dirtyFields.contains('plans')) {
+      final plansPayload = <Map<String, dynamic>>[];
+      for (final p in _plans) {
+        final id = p['_id']?.toString();
+        final name = (p['name'] ?? '').toString();
+        final rateRaw = (p['rate'] ?? '').toString().trim();
+        final rate = double.tryParse(rateRaw);
+        if (rate == null || rate < 0) {
+          // If any rate is invalid, do not auto-save plans.
+          return;
+        }
+        plansPayload.add({
+          if (id != null && id.isNotEmpty) '_id': id,
+          'name': name,
+          'rate': rate,
+        });
+      }
+      if (plansPayload.isNotEmpty) fields['plans'] = plansPayload;
+    }
+
+    // Timings (only save when complete and valid)
+    if (_dirtyFields.contains('timings')) {
+      if (_validateTimingConstraints(showSnack: false)) {
+        fields['timings'] = {
+          'lunchStart': _formatHHMM(_lunchStart),
+          'lunchEnd': _formatHHMM(_lunchEnd),
+          'dinnerStart': _formatHHMM(_dinnerStart),
+          'dinnerEnd': _formatHHMM(_dinnerEnd),
+          'lunch': {
+            'start': _formatHHMM(_lunchStart),
+            'end': _formatHHMM(_lunchEnd),
+          },
+          'dinner': {
+            'start': _formatHHMM(_dinnerStart),
+            'end': _formatHHMM(_dinnerEnd),
+          },
+        };
+      } else {
+        // Don’t push invalid partial timings to backend.
+      }
+    }
+
+    if (fields.isEmpty) {
+      // Nothing valid to send.
+      _dirtyFields.clear();
+      return;
+    }
+
+    setState(() => _autoSaving = true);
+    try {
+      await ref.read(messProfileUpdaterProvider)(fields);
+      if (!mounted) return;
+      // Clear only the fields we attempted to send.
+      _dirtyFields.removeAll(fields.keys);
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar(
+          'Auto-save failed: ${e.toString().replaceAll('Exception: ', '')}',
+          isError: true);
+    } finally {
+      if (mounted) setState(() => _autoSaving = false);
+    }
   }
 
   TimeOfDay? _parseHHMM(String? s) {
@@ -139,6 +355,8 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
     );
     if (picked != null) {
       setState(() => setter(picked));
+      _dirtyFields.add('timings');
+      _scheduleAutoSave();
     }
   }
 
@@ -287,6 +505,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
   }
 
   void _seedFormFromMess(Map<String, dynamic> mess) {
+    _suppressAutoSave = true;
     _name.text = (mess['messName'] ?? '').toString();
     _city.text = (mess['city'] ?? '').toString();
     _serviceType.text = (mess['serviceType'] ?? '').toString();
@@ -308,31 +527,56 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
     _tiffinService = mess['tiffinService'] == true;
 
     final timings = (mess['timings'] as Map?)?.cast<String, dynamic>() ?? {};
-    _lunchStart = _parseHHMM(timings['lunchStart'] as String?);
-    _lunchEnd = _parseHHMM(timings['lunchEnd'] as String?);
-    _dinnerStart = _parseHHMM(timings['dinnerStart'] as String?);
-    _dinnerEnd = _parseHHMM(timings['dinnerEnd'] as String?);
+    final lunchMap = (timings['lunch'] as Map?)?.cast<String, dynamic>();
+    final dinnerMap = (timings['dinner'] as Map?)?.cast<String, dynamic>();
+    _lunchStart = _parseHHMM(
+      (timings['lunchStart'] ?? lunchMap?['start']) as String?,
+    );
+    _lunchEnd = _parseHHMM(
+      (timings['lunchEnd'] ?? lunchMap?['end']) as String?,
+    );
+    _dinnerStart = _parseHHMM(
+      (timings['dinnerStart'] ?? dinnerMap?['start']) as String?,
+    );
+    _dinnerEnd = _parseHHMM(
+      (timings['dinnerEnd'] ?? dinnerMap?['end']) as String?,
+    );
 
     final rawPlans = mess['plans'] as List? ?? const [];
     _plans = rawPlans
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
+
+    _dirtyFields.clear();
+    _suppressAutoSave = false;
   }
 
   Future<void> _handleSave(BuildContext context) async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Enforce timing constraints before sending
+    if (!_validateTimingConstraints(showSnack: true)) return;
+
     setState(() => _isSaving = true);
 
     try {
       // Build payload with HH:mm strings
-      final timings = <String, String>{};
+      final timings = <String, dynamic>{};
       if (_lunchStart != null) timings['lunchStart'] = _formatHHMM(_lunchStart);
       if (_lunchEnd != null) timings['lunchEnd'] = _formatHHMM(_lunchEnd);
       if (_dinnerStart != null)
         timings['dinnerStart'] = _formatHHMM(_dinnerStart);
       if (_dinnerEnd != null) timings['dinnerEnd'] = _formatHHMM(_dinnerEnd);
+      // Also send nested shape to keep parity with create payloads
+      timings['lunch'] = {
+        'start': _formatHHMM(_lunchStart),
+        'end': _formatHHMM(_lunchEnd),
+      };
+      timings['dinner'] = {
+        'start': _formatHHMM(_dinnerStart),
+        'end': _formatHHMM(_dinnerEnd),
+      };
 
       final rules = <String, dynamic>{
         'minLeaveDaysForRebate': _minLeaveDays.text.trim(),
@@ -379,7 +623,8 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
       setState(() {
         _initialized = false;
       });
-      ref.invalidate(messProfileProvider);
+      // Refresh provider and wait so UI reflects backend values
+      await ref.refresh(messProfileProvider.future);
     } catch (e) {
       if (!mounted) return;
       _showSnackBar('Failed: ${e.toString().replaceAll('Exception: ', '')}',
@@ -563,6 +808,25 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
                             );
                             if (x != null) {
                               setState(() => _picked = File(x.path));
+
+                              try {
+                                final mf = await MultipartFile.fromFile(
+                                  x.path,
+                                  filename: x.path.split('/').last,
+                                );
+                                await ref.read(messProfileUpdaterProvider)({},
+                                    image: mf);
+                                if (!mounted) return;
+                                setState(() => _initialized = false);
+                                await ref.refresh(messProfileProvider.future);
+                                _showSnackBar('Image updated successfully!');
+                              } catch (e) {
+                                if (!mounted) return;
+                                _showSnackBar(
+                                  'Image update failed: ${e.toString().replaceAll('Exception: ', '')}',
+                                  isError: true,
+                                );
+                              }
                             }
                           },
                           padding: const EdgeInsets.all(8),
@@ -956,6 +1220,10 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
                 Icons.event_available, TextInputType.number),
             _modernField('Rebate per Thali', _rebatePerThali, Icons.money_off,
                 TextInputType.number),
+            _modernField('Skip Allowance Percent', _skipPercent, Icons.percent,
+                TextInputType.number),
+            _modernField('Min Monthly Charge', _minMonthlyCharge,
+                Icons.attach_money, TextInputType.number),
             Container(
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
@@ -980,7 +1248,11 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
                 ),
                 value: _allowAbsentRebate,
                 activeColor: AppTheme.successGreen,
-                onChanged: (v) => setState(() => _allowAbsentRebate = v),
+                onChanged: (v) {
+                  setState(() => _allowAbsentRebate = v);
+                  _dirtyFields.add('rules');
+                  _scheduleAutoSave();
+                },
                 secondary: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -1000,10 +1272,6 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
                 ),
               ),
             ),
-            _modernField('Skip Allowance Percent', _skipPercent, Icons.percent,
-                TextInputType.number),
-            _modernField('Min Monthly Charge', _minMonthlyCharge,
-                Icons.attach_money, TextInputType.number),
           ],
         ),
         const SizedBox(height: 16),
@@ -1035,7 +1303,11 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
                 ),
                 value: _tiffinService,
                 activeColor: AppTheme.successGreen,
-                onChanged: (v) => setState(() => _tiffinService = v),
+                onChanged: (v) {
+                  setState(() => _tiffinService = v);
+                  _dirtyFields.add('tiffinService');
+                  _scheduleAutoSave();
+                },
                 secondary: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -1417,7 +1689,11 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
-                onChanged: (v) => plan['rate'] = v.trim(),
+                onChanged: (v) {
+                  plan['rate'] = v.trim();
+                  _dirtyFields.add('plans');
+                  _scheduleAutoSave();
+                },
               ),
             ),
           ],

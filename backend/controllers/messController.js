@@ -159,7 +159,7 @@ exports.updateMyMess = async (req, res, next) => {
     }
 
     // Timings: accept flat keys (lunchStart, lunchEnd, dinnerStart, dinnerEnd)
-    // or nested { lunch: {start,end}, dinner: {start,end} } — persist as flat for consistency
+    // or nested { lunch: {start,end}, dinner: {start,end} } — persist in nested schema shape
     if (Object.prototype.hasOwnProperty.call(updates, 'timings')) {
       const t = updates.timings || {};
       const hhmm = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -184,10 +184,46 @@ exports.updateMyMess = async (req, res, next) => {
         }
       }
 
-      updates.timings = { 
-        ...mess.timings?.toObject?.() ?? mess.timings ?? {}, 
-        ...flat 
+      // Server-side constraints:
+      // - lunch must be start < end
+      // - dinner must be start < end
+      // - lunch must start before dinner and end before (or at) dinner start (no overlap)
+      const toMin = (s) => {
+        if (!s || typeof s !== 'string' || !hhmm.test(s)) return null;
+        const [h, m] = s.split(':').map(Number);
+        return h * 60 + m;
       };
+
+      const current = mess.timings?.toObject?.() ?? mess.timings ?? {};
+      const next = {
+        lunch: { ...(current.lunch || {}) },
+        dinner: { ...(current.dinner || {}) },
+      };
+
+      if (flat.lunchStart != null) next.lunch.start = String(flat.lunchStart);
+      if (flat.lunchEnd != null) next.lunch.end = String(flat.lunchEnd);
+      if (flat.dinnerStart != null) next.dinner.start = String(flat.dinnerStart);
+      if (flat.dinnerEnd != null) next.dinner.end = String(flat.dinnerEnd);
+
+      const ls = toMin(next.lunch.start);
+      const le = toMin(next.lunch.end);
+      const ds = toMin(next.dinner.start);
+      const de = toMin(next.dinner.end);
+
+      if ([ls, le, ds, de].some((v) => v == null)) {
+        return res.status(400).json({ success: false, message: 'timings.lunch and timings.dinner must include valid start/end times' });
+      }
+      if (!(ls < le)) {
+        return res.status(400).json({ success: false, message: 'Lunch start must be before lunch end' });
+      }
+      if (!(ds < de)) {
+        return res.status(400).json({ success: false, message: 'Dinner start must be before dinner end' });
+      }
+      if (!(ls < ds && le <= ds)) {
+        return res.status(400).json({ success: false, message: 'Lunch must end before dinner starts (no overlap)' });
+      }
+
+      updates.timings = next;
     }
 
     // Rules object (coerce numeric where applicable)
