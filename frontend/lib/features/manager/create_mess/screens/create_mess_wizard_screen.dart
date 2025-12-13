@@ -988,6 +988,8 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
   }
 
   Widget _buildStep4Rules(CreateMessState state, CreateMessNotifier notifier) {
+    final allowAbsentRebate =
+        (state.formData['rules']?['allowAbsentRebate'] as bool?) ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1032,6 +1034,49 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
           },
           onChanged: (value) => notifier.updateNestedFormData(
               ['rules', 'rebatePerThali'], double.tryParse(value) ?? 0.0),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: AppTheme.backgroundColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: allowAbsentRebate
+                  ? AppTheme.successGreen.withOpacity(0.4)
+                  : AppTheme.borderColor.withOpacity(0.3),
+            ),
+          ),
+          child: SwitchListTile(
+            title: const Text(
+              'Give rebate when member is absent',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              allowAbsentRebate
+                  ? 'Absent meals will subtract rebate per thali.'
+                  : 'Absent meals will not be rebated.',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
+            value: allowAbsentRebate,
+            activeColor: AppTheme.successGreen,
+            onChanged: (v) => notifier
+                .updateNestedFormData(['rules', 'allowAbsentRebate'], v),
+            secondary: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: allowAbsentRebate
+                    ? AppTheme.successGreen.withOpacity(0.1)
+                    : AppTheme.textSecondary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                allowAbsentRebate ? Icons.check_circle : Icons.do_not_disturb,
+                color: allowAbsentRebate
+                    ? AppTheme.successGreen
+                    : AppTheme.textSecondary,
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: 20),
         _buildModernTextField(

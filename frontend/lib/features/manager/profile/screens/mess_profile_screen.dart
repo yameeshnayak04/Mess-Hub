@@ -47,6 +47,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
   final _rebatePerThali = TextEditingController();
   final _skipPercent = TextEditingController();
   final _minMonthlyCharge = TextEditingController();
+  bool _allowAbsentRebate = false;
 
   // Thali / tiffin
   final _basicThali = TextEditingController();
@@ -301,6 +302,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
     _rebatePerThali.text = (rules['rebatePerThali'] ?? '').toString();
     _skipPercent.text = (rules['skipAllowancePercent'] ?? '').toString();
     _minMonthlyCharge.text = (rules['minMonthlyCharge'] ?? '').toString();
+    _allowAbsentRebate = rules['allowAbsentRebate'] == true;
 
     _basicThali.text = (mess['basicThaliDetails'] ?? '').toString();
     _tiffinService = mess['tiffinService'] == true;
@@ -336,6 +338,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
         'minLeaveDaysForRebate': _minLeaveDays.text.trim(),
         'rebatePerThali': _rebatePerThali.text.trim(),
         'skipAllowancePercent': _skipPercent.text.trim(),
+        'allowAbsentRebate': _allowAbsentRebate,
         'minMonthlyCharge': _minMonthlyCharge.text.trim(),
       };
 
@@ -953,6 +956,50 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
                 Icons.event_available, TextInputType.number),
             _modernField('Rebate per Thali', _rebatePerThali, Icons.money_off,
                 TextInputType.number),
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.backgroundColor,
+                borderRadius: BorderRadius.circular(12),
+                border:
+                    Border.all(color: AppTheme.borderColor.withOpacity(0.3)),
+              ),
+              child: SwitchListTile(
+                title: const Text(
+                  'Give rebate when absent',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  _allowAbsentRebate
+                      ? 'Absent meals will reduce the bill.'
+                      : 'Absent meals will not reduce the bill.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                value: _allowAbsentRebate,
+                activeColor: AppTheme.successGreen,
+                onChanged: (v) => setState(() => _allowAbsentRebate = v),
+                secondary: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _allowAbsentRebate
+                        ? AppTheme.successGreen.withOpacity(0.12)
+                        : AppTheme.textSecondary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    _allowAbsentRebate
+                        ? Icons.check_circle_outline
+                        : Icons.do_not_disturb,
+                    color: _allowAbsentRebate
+                        ? AppTheme.successGreen
+                        : AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+            ),
             _modernField('Skip Allowance Percent', _skipPercent, Icons.percent,
                 TextInputType.number),
             _modernField('Min Monthly Charge', _minMonthlyCharge,

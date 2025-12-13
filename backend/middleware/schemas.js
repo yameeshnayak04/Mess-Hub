@@ -83,6 +83,7 @@ exports.createMessSchema = Joi.object({
     minLeaveDaysForRebate: Joi.number().integer().min(1).required(),
     rebatePerThali: Joi.number().min(0).required(),
     skipAllowancePercent: Joi.number().min(0).max(100).default(0),
+    allowAbsentRebate: Joi.boolean().default(false),
     securityDeposit: Joi.number().min(0).optional(),
     minMonthlyCharge: Joi.number().min(0).optional()
   }).required()
@@ -120,6 +121,7 @@ exports.updateMessSchema = Joi.object({
     minLeaveDaysForRebate: Joi.number().integer().min(1).optional(),
     rebatePerThali: Joi.number().min(0).optional(),
     skipAllowancePercent: Joi.number().min(0).max(100).optional(),
+    allowAbsentRebate: Joi.boolean().optional(),
     securityDeposit: Joi.number().min(0).optional(),
     minMonthlyCharge: Joi.number().min(0).optional()
   }).optional()

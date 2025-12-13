@@ -199,6 +199,7 @@ exports.updateMyMess = async (req, res, next) => {
         'skipAllowancePercent',
         'minMonthlyCharge',
       ];
+      const boolKeys = ['allowAbsentRebate'];
       const coerced = { ...(mess.rules?.toObject?.() ?? mess.rules ?? {}), ...r };
       for (const k of numKeys) {
         if (Object.prototype.hasOwnProperty.call(coerced, k)) {
@@ -207,6 +208,12 @@ exports.updateMyMess = async (req, res, next) => {
             return res.status(400).json({ success: false, message: `rules.${k} must be a positive number` });
           }
           coerced[k] = n;
+        }
+      }
+      for (const k of boolKeys) {
+        if (Object.prototype.hasOwnProperty.call(coerced, k)) {
+          const v = coerced[k];
+          coerced[k] = v === true || v === 'true';
         }
       }
       updates.rules = coerced;

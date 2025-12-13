@@ -214,6 +214,7 @@ async function calculateMonthlyBillForMember({
   const rules = mess.rules || {};
   const rebatePerThali = Number(rules.rebatePerThali || 0);
   const skipMealRebatePercent = Number(rules.skipAllowancePercent || 0); // mapped
+  const allowAbsentRebate = rules.allowAbsentRebate === true;
   const minMonthlyCharge = Number(rules.minMonthlyCharge || 0);
 
   // Fetch all attendance rows in active window for included meals.
@@ -272,10 +273,11 @@ async function calculateMonthlyBillForMember({
   const skipDeduction =
     skipCount * (skipMealRebatePercent / 100) * rebatePerThali;
   const noRecordDeduction = noRecordMeals * rebatePerThali;
+  const absentDeduction = allowAbsentRebate ? absentCount * rebatePerThali : 0;
 
   const rebateAmount = Math.max(
     0,
-    Math.round((leaveDeduction + skipDeduction + noRecordDeduction) * 100) / 100
+    Math.round((leaveDeduction + skipDeduction + noRecordDeduction + absentDeduction) * 100) / 100
   );
 
   const provisional = Math.round((baseAmount - rebateAmount) * 100) / 100;

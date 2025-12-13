@@ -88,6 +88,8 @@ const messSchema = new mongoose.Schema(
       minLeaveDaysForRebate: { type: Number, required: true, min: 1 },
       rebatePerThali: { type: Number, required: true, min: 0 },
       skipAllowancePercent: { type: Number, default: 0, min: 0, max: 100 },
+      // Managers can decide if absences also earn rebatePerThali
+      allowAbsentRebate: { type: Boolean, default: false },
       securityDeposit: { type: Number, min: 0 },
       minMonthlyCharge: { type: Number, min: 0 },
     },

@@ -239,6 +239,7 @@ class MessRules {
   final int minLeaveDaysForRebate;
   final double rebatePerThali;
   final double skipAllowancePercent;
+  final bool allowAbsentRebate;
   final double? securityDeposit;
   final double? minMonthlyCharge;
 
@@ -246,6 +247,7 @@ class MessRules {
     required this.minLeaveDaysForRebate,
     required this.rebatePerThali,
     required this.skipAllowancePercent,
+    this.allowAbsentRebate = false,
     this.securityDeposit,
     this.minMonthlyCharge,
   });
@@ -256,11 +258,14 @@ class MessRules {
         : (v is num ? v.toDouble() : double.tryParse(v.toString()));
     int _toInt(dynamic v) =>
         v is num ? v.toInt() : int.tryParse(v.toString()) ?? 99;
+    bool _toBool(dynamic v) =>
+        v == true || (v is String && v.toLowerCase() == 'true');
 
     return MessRules(
       minLeaveDaysForRebate: _toInt(json['minLeaveDaysForRebate']),
       rebatePerThali: _toDouble(json['rebatePerThali']) ?? 0,
       skipAllowancePercent: _toDouble(json['skipAllowancePercent']) ?? 0,
+      allowAbsentRebate: _toBool(json['allowAbsentRebate']),
       securityDeposit: _toDouble(json['securityDeposit']),
       minMonthlyCharge: _toDouble(json['minMonthlyCharge']),
     );
@@ -270,6 +275,7 @@ class MessRules {
         'minLeaveDaysForRebate': minLeaveDaysForRebate,
         'rebatePerThali': rebatePerThali,
         'skipAllowancePercent': skipAllowancePercent,
+        'allowAbsentRebate': allowAbsentRebate,
         if (securityDeposit != null) 'securityDeposit': securityDeposit,
         if (minMonthlyCharge != null) 'minMonthlyCharge': minMonthlyCharge,
       };
