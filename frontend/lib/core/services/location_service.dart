@@ -13,9 +13,13 @@ class LocationService {
     // Check if location services are enabled
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      return null;
+      Geolocator.openLocationSettings();
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        return null;
+      }
     }
 
+    // Check location permissions
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
@@ -34,12 +38,12 @@ class LocationService {
     );
   }
 
-  Future<double> getDistanceBetween(
+  double getDistanceBetween(
     double startLat,
     double startLng,
     double endLat,
     double endLng,
-  ) async {
+  ) {
     return Geolocator.distanceBetween(startLat, startLng, endLat, endLng);
   }
 }

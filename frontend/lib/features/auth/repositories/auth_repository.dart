@@ -32,20 +32,6 @@ class AuthRepository {
         message: _serverMessage(response));
   }
 
-  Future<Map<String, dynamic>?> kioskLogin(String phone, String pin) async {
-    final response = await _dioClient
-        .post('/auth/kiosk-login', data: {'phone': phone, 'pin': pin});
-    if (response.statusCode == 200)
-      return response.data as Map<String, dynamic>;
-    if (response.statusCode == 401 || response.statusCode == 403) {
-      return {'error': _serverMessage(response)};
-    }
-    throw DioException(
-        requestOptions: response.requestOptions,
-        response: response,
-        message: _serverMessage(response));
-  }
-
   Future<Map<String, dynamic>> register({
     required String name,
     required String phone,

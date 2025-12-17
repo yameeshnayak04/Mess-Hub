@@ -66,31 +66,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  Future<void> kioskLogin(String phone, String pin) async {
-    try {
-      _errorMessage = null;
-      final resp = await _repository.kioskLogin(phone, pin);
-      if (resp != null && resp.containsKey('error')) {
-        state = const AsyncValue.data(null);
-        _errorMessage = resp['error'] as String? ?? 'Invalid credentials';
-        return;
-      }
-      if (resp == null) {
-        state = const AsyncValue.data(null);
-        _errorMessage = 'Invalid credentials';
-        return;
-      }
-      final token = resp['token'] as String;
-      final user = User.fromJson(resp['data'] as Map<String, dynamic>);
-      await _storage.write(StorageKeys.accessToken, token);
-      state = AsyncValue.data(user);
-    } catch (e, st) {
-      _errorMessage =
-          e is DioException && e.message != null ? e.message : e.toString();
-      state = const AsyncValue.data(null);
-    }
-  }
-
   // Register new user: on failure, keep state = data(null) and expose message
   Future<void> register({
     required String name,
