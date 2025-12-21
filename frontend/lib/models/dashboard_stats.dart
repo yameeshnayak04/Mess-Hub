@@ -2,6 +2,7 @@
 class DashboardStats {
   final String liveStatus; // "Open" | "Closed"
   final String currentMeal; // "Lunch" | "Dinner" | "None"
+  final String? nextMeal; // "Lunch" | "Dinner" when currentMeal == "None"
   final int eaten; // members who have eaten this meal window
   final int onLeave; // members on leave for current meal
   final int skipped; // members who skipped current meal
@@ -11,6 +12,7 @@ class DashboardStats {
   const DashboardStats({
     required this.liveStatus,
     required this.currentMeal,
+    this.nextMeal,
     required this.eaten,
     required this.onLeave,
     required this.skipped,
@@ -22,6 +24,7 @@ class DashboardStats {
     return DashboardStats(
       liveStatus: (json['liveStatus'] ?? 'Closed') as String,
       currentMeal: (json['currentMeal'] ?? 'None') as String,
+      nextMeal: json['nextMeal'] is String ? json['nextMeal'] as String : null,
       eaten: (json['eaten'] ?? json['eatingNow'] ?? 0) as int,
       onLeave: (json['onLeave'] ?? 0) as int,
       skipped: (json['skipped'] ?? json['notEating'] ?? 0) as int,
@@ -34,6 +37,7 @@ class DashboardStats {
   Map<String, dynamic> toJson() => {
         'liveStatus': liveStatus,
         'currentMeal': currentMeal,
+        if (nextMeal != null) 'nextMeal': nextMeal,
         'eaten': eaten,
         'onLeave': onLeave,
         'skipped': skipped,

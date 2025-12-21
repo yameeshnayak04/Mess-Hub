@@ -431,63 +431,135 @@ exports.getDashboardStats = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'No mess found for this manager' });
     }
 
-    // Use configured timezone offset to decide current meal window
-    const { currentMeal, liveStatus } = checkMealTiming(mess.timings, null, DEFAULT_TZ_OFFSET_MIN);
-    const { startOfDay, endOfDay } = getStartAndEndOfDay(undefined, DEFAULT_TZ_OFFSET_MIN);
+    const tz = DEFAULT_TZ_OFFSET_MIN;
+    const now = new Date();
 
-    // Default zeros (required: when no meal is active, show zeros)
-    let eatingNow = 0;
-    let onLeave = 0;
-    let notEating = 0;
-    let dailyMembers = 0;
+    // Determine current meal window in configured timezone
+    const timingCheck = checkMealTiming(mess.timings, null, tz, now);
+    const currentMeal = timingCheck.currentMeal;
 
-    // Only compute attendance/leave/skipped counts while a meal window is active
-    if (currentMeal !== 'None') {
-      eatingNow = await Attendance.countDocuments({
+    // Determine the next meal when no meal is currently active.
+    const parseHM = (s) => {
+      if (!s || typeof s !== 'string') return null;
+      const parts = s.split(':');
+      if (parts.length < 2) return null;
+      const hh = parseInt(parts[0], 10);
+      const mm = parseInt(parts[1], 10);
+      if (Number.isNaN(hh) || Number.isNaN(mm)) return null;
+      return (hh % 24) * 60 + (mm % 60);
+    };
+
+    const localNow = Number.isFinite(timingCheck.nowMin) ? timingCheck.nowMin : null;
+    const lunchStart = parseHM(mess.timings?.lunch?.start);
+    const lunchEnd = parseHM(mess.timings?.lunch?.end);
+    const dinnerStart = parseHM(mess.timings?.dinner?.start);
+    const dinnerEnd = parseHM(mess.timings?.dinner?.end);
+
+    const resolveNextMeal = () => {
+      // Default to Lunch if timings are missing.
+      if (!Number.isInteger(localNow)) return { meal: 'Lunch', dayOffset: 0 };
+
+      // If both meals exist
+      if (Number.isInteger(lunchStart) && Number.isInteger(dinnerStart)) {
+        if (localNow < lunchStart) return { meal: 'Lunch', dayOffset: 0 };
+        if (localNow < dinnerStart) return { meal: 'Dinner', dayOffset: 0 };
+        // After dinner start: if dinnerEnd exists and we're after it, next is tomorrow's Lunch
+        if (Number.isInteger(dinnerEnd) && localNow > dinnerEnd) {
+          return { meal: 'Lunch', dayOffset: 1 };
+        }
+        // Otherwise (between dinnerStart and dinnerEnd) we'd be within dinner; fallback
+        return { meal: 'Dinner', dayOffset: 0 };
+      }
+
+      // Only lunch configured
+      if (Number.isInteger(lunchStart)) {
+        if (localNow < lunchStart) return { meal: 'Lunch', dayOffset: 0 };
+        if (Number.isInteger(lunchEnd) && localNow > lunchEnd) return { meal: 'Lunch', dayOffset: 1 };
+        return { meal: 'Lunch', dayOffset: 0 };
+      }
+
+      // Only dinner configured
+      if (Number.isInteger(dinnerStart)) {
+        if (localNow < dinnerStart) return { meal: 'Dinner', dayOffset: 0 };
+        if (Number.isInteger(dinnerEnd) && localNow > dinnerEnd) return { meal: 'Dinner', dayOffset: 1 };
+        return { meal: 'Dinner', dayOffset: 0 };
+      }
+
+      return { meal: 'Lunch', dayOffset: 0 };
+    };
+
+    const nextMealInfo = currentMeal === 'None' ? resolveNextMeal() : null;
+    const nextMeal = nextMealInfo?.meal;
+
+    const statsMeal = currentMeal !== 'None' ? currentMeal : (nextMeal || 'Lunch');
+    const statsDate = nextMealInfo?.dayOffset ? new Date(now.getTime() + nextMealInfo.dayOffset * 24 * 60 * 60 * 1000) : now;
+    const { startOfDay, endOfDay } = getStartAndEndOfDay(statsDate, tz);
+
+    // Eligible monthly members for this meal (plan-based)
+    const allActiveMembers = await Membership.find({ mess: mess._id, status: 'Active' }).select('_id planName');
+    const eligibleMembershipIds = allActiveMembers
+      .filter((m) => {
+        const plan = String(m.planName || '').toLowerCase();
+        if (plan.includes('both')) return true;
+        if (statsMeal === 'Lunch') return plan.includes('lunch');
+        if (statsMeal === 'Dinner') return plan.includes('dinner');
+        return false;
+      })
+      .map((m) => m._id);
+
+    const totalActiveMembers = eligibleMembershipIds.length;
+
+    // Counts (include pre-meal skips / leave that are already marked for the meal)
+    const [eatingNow, notEating, onLeave] = await Promise.all([
+      Attendance.countDocuments({
         mess: mess._id,
-        date: { $gte: startOfDay, $lte: endOfDay },
+        date: startOfDay,
+        mealType: statsMeal,
+        status: 'Present',
+        memberType: 'Monthly',
+        membership: { $in: eligibleMembershipIds },
+      }),
+      Attendance.countDocuments({
+        mess: mess._id,
+        date: startOfDay,
+        mealType: statsMeal,
+        status: 'Skipped',
+        memberType: 'Monthly',
+        membership: { $in: eligibleMembershipIds },
+      }),
+      Attendance.countDocuments({
+        mess: mess._id,
+        date: startOfDay,
+        mealType: statsMeal,
+        status: 'Leave',
+        memberType: 'Monthly',
+        membership: { $in: eligibleMembershipIds },
+      }),
+    ]);
+
+    // Daily members only makes sense during an active meal window
+    let dailyMembers = 0;
+    if (currentMeal !== 'None' && mess.serviceType === 'Both Daily & Monthly') {
+      dailyMembers = await Attendance.countDocuments({
+        mess: mess._id,
+        date: startOfDay,
         mealType: currentMeal,
         status: 'Present',
-        memberType: 'Monthly'
+        memberType: 'Daily',
       });
-
-      onLeave = await Leave.countDocuments({
-        mess: mess._id,
-        startDate: { $lte: endOfDay },
-        endDate: { $gte: startOfDay }
-      });
-
-      notEating = await Attendance.countDocuments({
-        mess: mess._id,
-        date: { $gte: startOfDay, $lte: endOfDay },
-        mealType: currentMeal,
-        status: 'Skipped'
-      });
-
-      // dailyMembers only makes sense during an active meal window
-      if (mess.serviceType === 'Both Daily & Monthly') {
-        dailyMembers = await Attendance.countDocuments({
-          mess: mess._id,
-          date: { $gte: startOfDay, $lte: endOfDay },
-          status: 'Present',
-          memberType: 'Daily'
-        });
-      }
     }
 
-    const totalActiveMembers = await Membership.countDocuments({
-      mess: mess._id,
-      status: 'Active'
-    });
+    const liveStatus = currentMeal !== 'None' ? 'Open' : 'Closed';
 
     const dashboardData = {
       liveStatus,
       currentMeal,
+      nextMeal,
       eatingNow,
       onLeave,
       notEating,
       totalActiveMembers,
-      dailyMembers
+      dailyMembers,
     };
 
     res.status(200).json({ success: true, data: dashboardData });

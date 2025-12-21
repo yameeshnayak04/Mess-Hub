@@ -71,6 +71,9 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
             ),
             data: (stats) {
               final meal = stats.currentMeal;
+              final mealForDialogs = (meal == 'Lunch' || meal == 'Dinner')
+                  ? meal
+                  : (stats.nextMeal == 'Dinner' ? 'Dinner' : 'Lunch');
               final mealTag = meal == 'None' ? '' : ' • $meal';
               final eaten = stats.eaten;
               final onLeave = stats.onLeave;
@@ -177,7 +180,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                         ref,
                                         'Members remaining',
                                         'remaining',
-                                        stats.currentMeal,
+                                        mealForDialogs,
                                       ),
                                     ),
                                   ),
@@ -201,7 +204,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                         ref,
                                         'Members eaten',
                                         'eating',
-                                        stats.currentMeal,
+                                        mealForDialogs,
                                       ),
                                     ),
                                   ),
@@ -231,7 +234,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                         ref,
                                         'On leave',
                                         'leave',
-                                        stats.currentMeal,
+                                        mealForDialogs,
                                       ),
                                     ),
                                   ),
@@ -255,7 +258,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                         ref,
                                         'Skipped',
                                         'skipped',
-                                        stats.currentMeal,
+                                        mealForDialogs,
                                       ),
                                     ),
                                   ),
