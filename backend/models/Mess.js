@@ -82,8 +82,6 @@ const messSchema = new mongoose.Schema(
         return this.serviceType === 'Both Daily & Monthly';
       },
     },
-    scheduledUpdates: { type: Object, default: {} }, 
-    scheduledEffectiveFrom: { type: Date }, 
     rules: {
       minLeaveDaysForRebate: { type: Number, required: true, min: 1 },
       rebatePerThali: { type: Number, required: true, min: 0 },
@@ -109,11 +107,14 @@ messSchema.pre('validate', function (next) {
   const ds = parse(this.timings?.dinner?.start);
   const de = parse(this.timings?.dinner?.end);
 
-  if (ls != null && le != null && ls >= le) {
+  if (ls != null && le != null && ls > le) {
     this.invalidate('timings.lunch.end', 'Lunch end must be after start');
   }
-  if (ds != null && de != null && ds >= de) {
+  if (ds != null && de != null && ds > de) {
     this.invalidate('timings.dinner.end', 'Dinner end must be after start');
+  }
+  if (le != null && ds != null && le >= ds) {
+    this.invalidate('timings.dinner.start', 'Dinner start must be after lunch end');
   }
   next();
 });
@@ -122,6 +123,6 @@ messSchema.pre('validate', function (next) {
 messSchema.index({ location: '2dsphere' });
 messSchema.index({ messName: 1, address: 1 }, { unique: true });
 messSchema.index({ owner: 1 });
-messSchema.index({ cuisine: 1, serviceType: 1 });
+messSchema.index({ cuisine: 1 });
 
 module.exports = mongoose.model('Mess', messSchema);

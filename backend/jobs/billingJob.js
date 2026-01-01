@@ -7,6 +7,15 @@ const Attendance = require('../models/Attendance');
 const connectDB = require('../config/db');
 const { getStartAndEndOfMonth, calculateMonthlyBillForMember } = require('../utils/billCalculation');
 
+const TZ_OFFSET_MINUTES = parseInt(process.env.TZ_OFFSET_MINUTES || '330', 10);
+
+function getLocalYearMonth(offsetMin = TZ_OFFSET_MINUTES, now = new Date()) {
+  // Shift the current instant by offsetMin and read as UTC fields.
+  // This yields a stable "local" year/month regardless of server timezone.
+  const local = new Date(now.getTime() + offsetMin * 60 * 1000);
+  return { year: local.getUTCFullYear(), monthIndex0: local.getUTCMonth() };
+}
+
 async function upsertBill({ member, mess, month, year, breakdown, session }) {
   const existing = await Bill.findOne({
     user: member.user,
@@ -105,10 +114,11 @@ async function runBillingJob() {
   console.log('--- JOB: Monthly Billing (Attendance-Based) ---');
 
   const now = new Date();
-  // Previous month reference (day 0 of current month gives last day prev month)
-  const prevMonthDate = new Date(now.getFullYear(), now.getMonth(), 0);
-  const billingMonth = prevMonthDate.getMonth() + 1;
-  const billingYear = prevMonthDate.getFullYear();
+  // Compute previous month using "local" calendar (IST by default), not server timezone.
+  const { year: localYear, monthIndex0: localMonth0 } = getLocalYearMonth(TZ_OFFSET_MINUTES, now);
+  const prevMonthDateLocal = new Date(Date.UTC(localYear, localMonth0, 0));
+  const billingMonth = prevMonthDateLocal.getUTCMonth() + 1; // 1..12
+  const billingYear = prevMonthDateLocal.getUTCFullYear();
   const { startOfMonth, endOfMonth } = getStartAndEndOfMonth(billingMonth, billingYear);
 
   const messes = await Mess.find({});
