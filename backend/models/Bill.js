@@ -51,5 +51,7 @@ const billSchema = new mongoose.Schema({
 // Compound indexes for efficient queries
 billSchema.index({ user: 1, mess: 1, month: 1, year: 1 }, { unique: true });
 billSchema.index({ mess: 1, status: 1 });
+billSchema.index({ mess: 1, status: 1, year: -1, month: -1, updatedAt: -1 });
+billSchema.index({ user: 1, mess: 1, year: -1, month: -1, createdAt: -1 });
 
 module.exports = mongoose.model('Bill', billSchema);

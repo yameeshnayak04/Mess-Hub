@@ -69,19 +69,18 @@ exports.getReviews = async (req, res, next) => {
     const { messId } = req.params;
     const { page = 1, limit = 10 } = req.query;
 
-    const reviews = await Review.find({ mess: messId })
-      .populate('user', 'name')
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
+    const [reviews, meta] = await Promise.all([
+      Review.find({ mess: messId }).populate('user', 'name').sort({ createdAt: -1 }).limit(lim).skip(skip).lean(),
+      Review.aggregate([
+        { $match: { mess: new mongoose.Types.ObjectId(messId) } },
+        { $group: { _id: null, total: { $sum: 1 }, averageRating: { $avg: '$rating' } } }
+      ])
+    ]);
 
-    const total = await Review.countDocuments({ mess: messId });
+    const total = meta[1].total;
 
     // Calculate average rating
-    const allReviews = await Review.find({ mess: messId });
-    const averageRating = allReviews.length > 0
-      ? allReviews.reduce((sum, review) => sum + review.rating, 0) / allReviews.length
-      : 0;
+    const averageRating = meta[1].averageRating;
 
     res.status(200).json({
       success: true,

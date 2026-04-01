@@ -201,21 +201,17 @@ exports.getMessMembers = async (req, res, next) => {
     }
     const members = await Membership.find(query)
       .populate('user', 'name phone location')
-      .sort({ createdAt: -1 });
-    const membersWithPaymentStatus = await Promise.all(
-      members.map(async (member) => {
-        const memberObj = member.toObject();
-        if (member.status === 'Active') {
-          const recentBill = await Bill.findOne({
-            user: member.user._id,
-            mess: mess._id
-          }).sort({ year: -1, month: -1 });
-          memberObj.paymentStatus = recentBill ? recentBill.status : 'No Bills';
-        }
-        return memberObj;
-      })
-    );
-    res.status(200).json({ success: true, count: membersWithPaymentStatus.length, data: membersWithPaymentStatus });
+      .select('user mess status planName createdAt')
+      .lean();
+
+const keys = members.map(m => ({ user: m.user._id, mess: m.mess }));
+const latestBills = await Bill.aggregate([
+  { $match: { $or: keys } },
+  { $sort: { year: -1, month: -1, createdAt: -1 } },
+  { $group: { _id: { user: '$user', mess: '$mess' }, status: { $first: '$status' } } }
+]);
+
+    res.status(200).json({ success: true, count: members.length, data: members });
   } catch (error) { next(error); }
 };
 

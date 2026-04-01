@@ -57,5 +57,7 @@ membershipSchema.pre('save', function (next) {
 // Indexes
 membershipSchema.index({ user: 1, mess: 1 });
 membershipSchema.index({ mess: 1, status: 1 });
+membershipSchema.index({ mess: 1, status: 1, createdAt: -1 });
+membershipSchema.index({ user: 1, status: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Membership', membershipSchema);

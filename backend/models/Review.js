@@ -27,5 +27,7 @@ const reviewSchema = new mongoose.Schema({
 
 // Compound unique index (one review per user per mess)
 reviewSchema.index({ user: 1, mess: 1 }, { unique: true });
+reviewSchema.index({ mess: 1, createdAt: -1 });
+reviewSchema.index({ mess: 1, rating: 1 });
 
 module.exports = mongoose.model('Review', reviewSchema);

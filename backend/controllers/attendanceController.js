@@ -317,7 +317,10 @@ exports.getMyAttendance = async (req, res, next) => {
     };
 
     // Raw records (kept for compatibility)
-    const records = await Attendance.find(query).sort({ date: 1, mealType: 1 });
+    const records = await Attendance.find(query)
+      .select('date mealType status membership user')
+      .sort({ date: 1, mealType: 1 })
+      .lean();
 
     // Day-level grouping to avoid duplicate dots for one-day leave spanning multiple meals
     const dayMap = new Map();

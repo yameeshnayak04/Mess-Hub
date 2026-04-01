@@ -332,47 +332,38 @@ exports.discoverMesses = async (req, res, next) => {
     }
 
     // 2) Build optional filters
-    const matchConditions = {};
-    if (typeof cuisine === 'string' && cuisine.trim()) matchConditions.cuisine = cuisine.trim();
-    if (typeof serviceType === 'string' && serviceType.trim()) matchConditions.serviceType = serviceType.trim();
+    const match = {};
+    if (cuisine) match.cuisine = cuisine;
+    if (serviceType) match.serviceType = serviceType;
 
-    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
-    const lim = parseInt(limit, 10);
-
-    // *** FIX: Ensure all messes have valid location before geoNear ***
-    // First check if there are any invalid locations
-    const invalidCount = await Mess.countDocuments({
-      $or: [
-        { 'location.coordinates': { $exists: false } },
-        { 'location.coordinates': { $not: { $size: 2 } } },
-        { 'location.type': { $ne: 'Point' } }
-      ]
-    });
-
-    // Add location validation to match conditions
-    matchConditions['location.coordinates'] = { $exists: true, $size: 2 };
-    matchConditions['location.type'] = 'Point';
-
-    // 3) Aggregate: $geoNear with validated locations
     const messes = await Mess.aggregate([
       {
         $geoNear: {
           near: { type: 'Point', coordinates: userLocation },
           distanceField: 'distance',
           spherical: true,
-          key: 'location'
-          // no maxDistance so we list all messes
+          key: 'location',
+          query: match // push filter into geo stage
         }
       },
-      { $match: matchConditions },
-      { $lookup: { from: 'reviews', localField: '_id', foreignField: 'mess', as: 'reviews' } },
-      { $addFields: { 
-          averageRating: { $avg: '$reviews.rating' }, 
-          reviewCount: { $size: '$reviews' } 
-        } 
+      {
+        $lookup: {
+          from: 'reviews',
+          let: { messId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$mess', '$$messId'] } } },
+            { $group: { _id: null, avg: { $avg: '$rating' }, count: { $sum: 1 } } }
+          ],
+          as: 'reviewStats'
+        }
       },
-      { $project: { reviews: 0 } },
-      { $skip: skip },
+      {
+        $addFields: {
+          averageRating: { $ifNull: [{ $arrayElemAt: ['$reviewStats.avg', 0] }, 0] },
+          reviewCount: { $ifNull: [{ $arrayElemAt: ['$reviewStats.count', 0] }, 0] }
+        }
+      },
+      { $project: { reviewStats: 0, plans: 0, rules: 0 } },
       { $limit: lim }
     ]);
 

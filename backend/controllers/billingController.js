@@ -270,9 +270,15 @@ exports.getAllMessBills = async (req, res, next) => {
     if (month) query.month = parseInt(month);
     if (year) query.year = parseInt(year);
 
+    const lim = Math.min(Number(req.query.limit) || 20, 50);
+    const page = Math.max(Number(req.query.page) || 1, 1);
     const bills = await Bill.find(query)
+      .select('user mess month year totalAmount status updatedAt')
       .populate('user', 'name phone')
-      .sort({ year: -1, month: -1, updatedAt: -1 });
+      .sort({ year: -1, month: -1, updatedAt: -1 })
+      .skip((page - 1) * lim)
+      .limit(lim)
+      .lean();
 
     res.status(200).json({
       success: true,
