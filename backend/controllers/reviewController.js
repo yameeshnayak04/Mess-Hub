@@ -1,6 +1,7 @@
 const Review = require('../models/Review');
 const Mess = require('../models/Mess');
 const Membership = require('../models/Membership');
+const mongoose = require('mongoose');
 
 // @desc    Add review for a mess
 // @route   POST /api/reviews/:messId
@@ -68,19 +69,28 @@ exports.getReviews = async (req, res, next) => {
   try {
     const { messId } = req.params;
     const { page = 1, limit = 10 } = req.query;
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.max(parseInt(limit, 10) || 10, 1);
+    const skip = (pageNum - 1) * limitNum;
 
     const [reviews, meta] = await Promise.all([
-      Review.find({ mess: messId }).populate('user', 'name').sort({ createdAt: -1 }).limit(lim).skip(skip).lean(),
+      Review.find({ mess: messId })
+        .populate('user', 'name')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
       Review.aggregate([
         { $match: { mess: new mongoose.Types.ObjectId(messId) } },
         { $group: { _id: null, total: { $sum: 1 }, averageRating: { $avg: '$rating' } } }
       ])
     ]);
 
-    const total = meta[1].total;
+    const summary = meta[0] || { total: 0, averageRating: 0 };
+    const total = summary.total || 0;
 
     // Calculate average rating
-    const averageRating = meta[1].averageRating;
+    const averageRating = Number(summary.averageRating || 0);
 
     res.status(200).json({
       success: true,

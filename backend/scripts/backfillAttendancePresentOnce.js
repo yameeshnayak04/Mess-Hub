@@ -20,9 +20,13 @@ const { backfillMissingAttendanceAsPresent } = require('../services/attendanceBa
 
 async function main() {
   await connectDB();
+  const offsetMinutes = parseInt(process.env.TZ_OFFSET_MINUTES || '330', 10);
 
   console.log('--- SCRIPT: Attendance Backfill (Present) ---');
-  const result = await backfillMissingAttendanceAsPresent({ includeToday: false });
+  const result = await backfillMissingAttendanceAsPresent({
+    includeToday: false,
+    offsetMinutes,
+  });
   console.log('--- SCRIPT: Completed ---');
   console.log(JSON.stringify(result, null, 2));
 }

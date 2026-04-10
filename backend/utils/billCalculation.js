@@ -10,9 +10,16 @@ const getLocalMinutes = (now = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) =>
 };
 
 function startOfDay(date = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) {
+  // Shift into target local timezone, take its calendar day, then shift back to UTC.
+  // This avoids off-by-one-day issues when server UTC date differs from local date (e.g., IST).
   const d = new Date(date);
-  const utcMidnight = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  return new Date(utcMidnight - offsetMin * 60 * 1000);
+  const shifted = new Date(d.getTime() + offsetMin * 60 * 1000);
+  const utcMidnightOfLocalDay = Date.UTC(
+    shifted.getUTCFullYear(),
+    shifted.getUTCMonth(),
+    shifted.getUTCDate()
+  );
+  return new Date(utcMidnightOfLocalDay - offsetMin * 60 * 1000);
 }
 
 function endOfDay(date = new Date(), offsetMin = DEFAULT_TZ_OFFSET_MIN) {

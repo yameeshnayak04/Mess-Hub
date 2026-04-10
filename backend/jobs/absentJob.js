@@ -10,8 +10,8 @@ const TZ_OFFSET_MINUTES = parseInt(process.env.TZ_OFFSET_MINUTES || '330', 10);
 
 async function markAbsentForMeal(mealType) {
   const today = new Date();
-  const dayStart = startOfDay(today);
-  const dayEnd = endOfDay(today);
+  const dayStart = startOfDay(today, TZ_OFFSET_MINUTES);
+  const dayEnd = endOfDay(today, TZ_OFFSET_MINUTES);
 
   const messes = await Mess.find({});
   for (const mess of messes) {

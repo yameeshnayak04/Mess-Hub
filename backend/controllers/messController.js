@@ -319,12 +319,15 @@ exports.updateMyMess = async (req, res, next) => {
 exports.discoverMesses = async (req, res, next) => {
   try {
     const { cuisine, serviceType, page = 1, limit = 10 } = req.query;
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.max(parseInt(limit, 10) || 10, 1);
+    const skip = (pageNum - 1) * limitNum;
 
     // 1) Get user location or fallback
     let userLocation = req.user?.location?.coordinates;
     const hasValidPoint = Array.isArray(userLocation) && userLocation.length === 2 &&
-                          userLocation.every(v => !Number.isNaN(Number(v)));
-    
+      userLocation.every((v) => !Number.isNaN(Number(v)));
+
     if (!hasValidPoint) {
       userLocation = [73.8567, 18.5204]; // [lng, lat] - Pune center
     } else {
@@ -343,8 +346,8 @@ exports.discoverMesses = async (req, res, next) => {
           distanceField: 'distance',
           spherical: true,
           key: 'location',
-          query: match // push filter into geo stage
-        }
+          query: match,
+        },
       },
       {
         $lookup: {
@@ -352,24 +355,24 @@ exports.discoverMesses = async (req, res, next) => {
           let: { messId: '$_id' },
           pipeline: [
             { $match: { $expr: { $eq: ['$mess', '$$messId'] } } },
-            { $group: { _id: null, avg: { $avg: '$rating' }, count: { $sum: 1 } } }
+            { $group: { _id: null, avg: { $avg: '$rating' }, count: { $sum: 1 } } },
           ],
-          as: 'reviewStats'
-        }
+          as: 'reviewStats',
+        },
       },
       {
         $addFields: {
           averageRating: { $ifNull: [{ $arrayElemAt: ['$reviewStats.avg', 0] }, 0] },
-          reviewCount: { $ifNull: [{ $arrayElemAt: ['$reviewStats.count', 0] }, 0] }
-        }
+          reviewCount: { $ifNull: [{ $arrayElemAt: ['$reviewStats.count', 0] }, 0] },
+        },
       },
       { $project: { reviewStats: 0, plans: 0, rules: 0 } },
-      { $limit: lim }
+      { $skip: skip },
+      { $limit: limitNum },
     ]);
 
     // 4) Total count for pagination
-    const total = await Mess.countDocuments(matchConditions);
-
+    const total = await Mess.countDocuments(match);
 
     return res.status(200).json({ success: true, count: messes.length, total, data: messes });
   } catch (error) {

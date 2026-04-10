@@ -869,99 +869,90 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
     final menuAsync =
         ref.watch(messDetailsProvider(widget.messId).select((s) => s.menu));
     return menuAsync.when(
-      loading: () => const Center(
-        child: Padding(
-          padding: EdgeInsets.all(48.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation(AppTheme.primaryOrange),
-              ),
-              SizedBox(height: 16),
-              Text(
-                'Loading menu...',
-                style: TextStyle(color: AppTheme.textSecondary),
-              ),
-            ],
-          ),
+      loading: () => _buildMenuStateContainer(
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation(AppTheme.primaryOrange),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Loading menu...',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          ],
         ),
       ),
-      error: (e, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(48.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppTheme.errorRed.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.restaurant_menu_rounded,
-                  size: 48,
-                  color: AppTheme.errorRed,
-                ),
+      error: (e, _) => _buildMenuStateContainer(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.errorRed.withOpacity(0.1),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(height: 20),
-              const Text(
-                'Could not load menu',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+              child: const Icon(
+                Icons.restaurant_menu_rounded,
+                size: 48,
+                color: AppTheme.errorRed,
               ),
-              const SizedBox(height: 8),
-              Text(
-                e.toString(),
-                style: const TextStyle(color: AppTheme.textSecondary),
-                textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Could not load menu',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              e.toString(),
+              style: const TextStyle(color: AppTheme.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
       data: (menus) {
         if (menus.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(48.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.restaurant_menu_rounded,
-                      size: 64,
-                      color: AppTheme.textSecondary.withOpacity(0.5),
-                    ),
+          return _buildMenuStateContainer(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(32),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'No Menus Scheduled',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Icon(
+                    Icons.restaurant_menu_rounded,
+                    size: 64,
+                    color: AppTheme.textSecondary.withOpacity(0.5),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'The mess hasn\'t added any upcoming menus yet',
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'No Menus Scheduled',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'The mess hasn\'t added any upcoming menus yet',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           );
         }
@@ -1291,6 +1282,20 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  Widget _buildMenuStateContainer({required Widget child}) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(48),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(child: child),
+          ),
         );
       },
     );
