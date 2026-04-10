@@ -204,7 +204,11 @@ exports.getMessMembers = async (req, res, next) => {
       .select('user mess status planName createdAt')
       .lean();
 
-const keys = members.map(m => ({ user: m.user._id, mess: m.mess }));
+    if (members.length === 0) {
+      return res.status(200).json({ success: true, count: 0, data: [] });
+    }
+
+    const keys = members.map(m => ({ user: m.user._id, mess: m.mess }));
 const latestBills = await Bill.aggregate([
   { $match: { $or: keys } },
   { $sort: { year: -1, month: -1, createdAt: -1 } },

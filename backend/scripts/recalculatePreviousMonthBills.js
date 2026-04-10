@@ -13,7 +13,7 @@
  *   node scripts/recalculatePreviousMonthBills.js --month=11 --year=2025   (override, month=1..12)
  */
 
-require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const mongoose = require('mongoose');
 const connectDB = require('../config/db');
 const Mess = require('../models/Mess');
