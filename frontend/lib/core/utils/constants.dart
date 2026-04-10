@@ -1,5 +1,5 @@
 class ApiConstants {
-  static const String baseUrl = 'https://mess-hub-backend.onrender.com';
+  static const String baseUrl = 'http://https://mess-hub-backend.onrender.com';
   static const String apiPrefix = '/api';
   static const Duration connectionTimeout = Duration(seconds: 60);
   static const Duration receiveTimeout = Duration(seconds: 60);
