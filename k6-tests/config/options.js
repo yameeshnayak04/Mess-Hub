@@ -6,10 +6,10 @@ export const options = {
     customer_journey: {
       executor: 'ramping-vus',
       stages: [
-        { duration: '1m', target: 10 },
-        { duration: '1m', target: 40 },
-        { duration: '2m', target: 40 },
-        { duration: '1m', target: 0 },
+       { duration: '2m', target: 50 },
+       { duration: '2m', target: 100 },
+       { duration: '2m', target: 100 },
+       { duration: '1m', target: 0 }
       ],
       gracefulRampDown: '30s',
       tags: { scenario: 'customer_journey' },

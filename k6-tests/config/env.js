@@ -5,7 +5,7 @@ function required(name, fallback = null) {
   return v;
 }
 
-export const BASE_URL = required('BASE_URL');  // Base URL of your backend, e.g., "https://your-app.onrender.com"
+export const BASE_URL = required('BASE_URL') || 'https://mess-hub-backend.onrender.com';  // Base URL of your backend, e.g., "https://your-app.onrender.com"
 export const API_PREFIX = __ENV.API_PREFIX || '/api';
 
 export const CUSTOMER_PHONE = required('CUSTOMER_PHONE');

@@ -12,3 +12,39 @@ export function getManagerDashboardStats(managerToken) {
   expect2xx(res, 'manager_dashboard');
   return body;
 }
+
+export function getMembersEating(managerToken) {
+  const url = `${BASE_URL}${API_PREFIX}/mess/dashboard/members-eating`;
+  const params = { ...jsonHeaders(managerToken), tags: { name: 'GET /mess/dashboard/members-eating' } };
+
+  const { res, body } = get(url, params, 'members_eating');
+  expect2xx(res, 'members_eating');
+  return body;
+}
+
+export function getMembersOnLeave(managerToken) {
+  const url = `${BASE_URL}${API_PREFIX}/mess/dashboard/members-on-leave`;
+  const params = { ...jsonHeaders(managerToken), tags: { name: 'GET /mess/dashboard/members-on-leave' } };
+
+  const { res, body } = get(url, params, 'members_on_leave');
+  expect2xx(res, 'members_on_leave');
+  return body;
+}
+
+export function getMembersSkipped(managerToken) {
+  const url = `${BASE_URL}${API_PREFIX}/mess/dashboard/members-skipped`;
+  const params = { ...jsonHeaders(managerToken), tags: { name: 'GET /mess/dashboard/members-skipped' } };
+
+  const { res, body } = get(url, params, 'members_skipped');
+  expect2xx(res, 'members_skipped');
+  return body;
+}
+
+export function getMembersRemaining(managerToken) {
+  const url = `${BASE_URL}${API_PREFIX}/mess/dashboard/members-remaining`;
+  const params = { ...jsonHeaders(managerToken), tags: { name: 'GET /mess/dashboard/members-remaining' } };
+
+  const { res, body } = get(url, params, 'members_remaining');
+  expect2xx(res, 'members_remaining');
+  return body;
+}

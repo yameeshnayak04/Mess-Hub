@@ -1,0 +1,165 @@
+{
+    "metrics": {
+        "http_req_receiving": {
+            "avg": 2.856839901574802,
+            "min": 0,
+            "med": 1.35785,
+            "max": 412.2935,
+            "p(90)": 6.515930000000002,
+            "p(95)": 7.6802600000000005
+        },
+        "data_sent": {
+            "count": 335016,
+            "rate": 1105.1448772225576
+        },
+        "http_req_duration{scenario:customer_journey}": {
+            "avg": 556.7196749212584,
+            "min": 299.9874,
+            "med": 438.5571,
+            "max": 4494.4275,
+            "p(90)": 991.65428,
+            "p(95)": 1105.860355,
+            "thresholds": {
+                "p(95)<2000": false
+            }
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 5080,
+            "thresholds": {
+                "rate<0.01": false
+            },
+            "value": 0
+        },
+        "http_req_sending": {
+            "med": 0.46575,
+            "max": 3.1773,
+            "p(90)": 0.8674300000000011,
+            "p(95)": 1.0239200000000002,
+            "avg": 0.41431982283464563,
+            "min": 0
+        },
+        "http_req_tls_handshaking": {
+            "max": 218.8451,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0.7483284055118108,
+            "min": 0,
+            "med": 0
+        },
+        "iteration_duration": {
+            "p(95)": 6305.4610999999995,
+            "avg": 4693.421926726191,
+            "min": 3950.0575,
+            "med": 4496.05705,
+            "max": 8963.1696,
+            "p(90)": 5906.108660000001
+        },
+        "vus": {
+            "value": 1,
+            "min": 1,
+            "max": 40
+        },
+        "data_received": {
+            "count": 11189939,
+            "rate": 36913.17358658365
+        },
+        "http_req_blocked": {
+            "avg": 1.3184840354330705,
+            "min": 0,
+            "med": 0,
+            "max": 400.1264,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "http_req_waiting": {
+            "max": 4492.4738,
+            "p(90)": 988.9828100000001,
+            "p(95)": 1104.0123700000001,
+            "avg": 553.4485151968505,
+            "min": 298.6389,
+            "med": 434.4488
+        },
+        "checks": {
+            "passes": 5080,
+            "fails": 0,
+            "value": 1
+        },
+        "vus_max": {
+            "max": 40,
+            "value": 40,
+            "min": 40
+        },
+        "http_req_duration": {
+            "avg": 556.7196749212584,
+            "min": 299.9874,
+            "med": 438.5571,
+            "max": 4494.4275,
+            "p(90)": 991.65428,
+            "p(95)": 1105.860355,
+            "thresholds": {
+                "p(95)<2000": false
+            }
+        },
+        "iterations": {
+            "count": 1680,
+            "rate": 5.541954395413642
+        },
+        "http_req_duration{expected_response:true}": {
+            "max": 4494.4275,
+            "p(90)": 991.65428,
+            "p(95)": 1105.860355,
+            "avg": 556.7196749212584,
+            "min": 299.9874,
+            "med": 438.5571
+        },
+        "http_reqs": {
+            "count": 5080,
+            "rate": 16.757814481369824
+        },
+        "http_req_connecting": {
+            "min": 0,
+            "med": 0,
+            "max": 180.5583,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0.5644423818897638
+        }
+    },
+    "root_group": {
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "auth_login status is 2xx": {
+                    "fails": 0,
+                    "name": "auth_login status is 2xx",
+                    "path": "::auth_login status is 2xx",
+                    "id": "dd580c603ef19eae2d8a5e2aced9a029",
+                    "passes": 40
+                },
+                "discover_messes status is 2xx": {
+                    "name": "discover_messes status is 2xx",
+                    "path": "::discover_messes status is 2xx",
+                    "id": "2a66dd9a6002ea2bce493a9619877004",
+                    "passes": 1680,
+                    "fails": 0
+                },
+                "get_mess_by_id status is 2xx": {
+                    "name": "get_mess_by_id status is 2xx",
+                    "path": "::get_mess_by_id status is 2xx",
+                    "id": "10689a6fbd13f5f6c3cfa2a783610f31",
+                    "passes": 1680,
+                    "fails": 0
+                },
+                "my_memberships status is 2xx": {
+                    "name": "my_memberships status is 2xx",
+                    "path": "::my_memberships status is 2xx",
+                    "id": "2677d442e27c839437599482c5f9563e",
+                    "passes": 1680,
+                    "fails": 0
+                }
+            },
+        "name": "",
+        "path": ""
+    }
+}
