@@ -33,7 +33,7 @@ class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.light(
+      colorScheme: const ColorScheme.light(
         primary: primaryOrange, // Using old name with blue color
         secondary: secondaryOrange,
         tertiary: accentBlue,
@@ -43,7 +43,6 @@ class AppTheme {
         onPrimary: Colors.white,
         onSecondary: Colors.white,
         onSurface: textPrimary,
-        onBackground: textPrimary,
       ),
       scaffoldBackgroundColor: backgroundColor,
       textTheme: GoogleFonts.interTextTheme().copyWith(
@@ -104,7 +103,7 @@ class AppTheme {
           color: textPrimary,
         ),
       ),
-      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: surfaceColor,
         selectedItemColor: primaryOrange, // Blue color with orange name
         unselectedItemColor: textSecondary,
@@ -155,7 +154,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: primaryOrange, width: 2), // Blue
+          borderSide: const BorderSide(color: primaryOrange, width: 2), // Blue
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -195,7 +194,7 @@ class AppTheme {
 
   static ThemeData get darkTheme {
     return lightTheme.copyWith(
-      colorScheme: ColorScheme.dark(
+      colorScheme: const ColorScheme.dark(
         primary: primaryOrange, // Blue color
         secondary: secondaryOrange, // Blue color
         tertiary: accentBlue,
@@ -205,7 +204,6 @@ class AppTheme {
         onPrimary: Colors.white,
         onSecondary: Colors.white,
         onSurface: Colors.white,
-        onBackground: Colors.white,
       ),
       scaffoldBackgroundColor: const Color(0xFF0F172A),
       textTheme:

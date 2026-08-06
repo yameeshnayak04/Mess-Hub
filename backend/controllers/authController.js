@@ -29,9 +29,11 @@ const buildUserPayload = async (user) => {
 };
 
 const generateToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '30d',
-  });
+  jwt.sign(
+    { id }, 
+    process.env.JWT_SECRET, 
+    { expiresIn: process.env.JWT_EXPIRES_IN || '30d', }
+  );
 
 // @desc Register a new user
 // @route POST /api/auth/register
@@ -133,60 +135,6 @@ exports.login = async (req, res, next) => {
   }
 };
 
-// @desc Kiosk login with phone and PIN (customers only)
-// @route POST /api/auth/kiosk-login
-// @access Public
-exports.kioskLogin = async (req, res) => {
-  try {
-    const { phone, pin } = req.body;
-
-    if (!phone || !pin) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide phone number and PIN',
-      });
-    }
-
-    // Include PIN field
-    const user = await User.findOne({ phone }).select('+pin');
-    if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
-
-    if (user.role !== 'Customer') {
-      return res.status(403).json({
-        success: false,
-        message: 'PIN login is only available for customers',
-      });
-    }
-
-    if (user.pin !== pin) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
-
-    const token = generateToken(user._id);
-
-    return res.json({
-      success: true,
-      message: 'Login successful',
-      token,
-      data: {
-        _id: user._id,
-        name: user.name,
-        phone: user.phone,
-        role: user.role,
-        location: user.location,
-      },
-    });
-  } catch (error) {
-    console.error('Kiosk login error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error during login',
-      error: error.message,
-    });
-  }
-};
 
 exports.logout = (req, res) => {
   return res.status(200).json({ success: true, message: 'Logged out' });

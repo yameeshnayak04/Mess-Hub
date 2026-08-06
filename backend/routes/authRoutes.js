@@ -16,10 +16,6 @@ router.post('/register', validate(registerSchema), authController.register);
 // FIX: Added validation
 router.post('/login', validate(loginSchema), authController.login);
 
-// Kiosk login with phone + PIN
-// FIX: Use the correct schema name
-router.post('/kiosk-login', validate(kioskLoginSchema), authController.kioskLogin);
-
 // Optional: Logout endpoint
 router.post('/logout', protect, authController.logout);
 
