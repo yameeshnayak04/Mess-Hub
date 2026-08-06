@@ -14,7 +14,9 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 // the billing query), Postgres will kill it after 30 seconds instead of
 // freezing the whole app.
 const afterCreate = (conn, done) => {
-  conn.query("SET TIME ZONE 'Asia/Kolkata'; SET statement_timeout = '30s';", (err) => done(err, conn));
+  conn.query("SET TIME ZONE 'Asia/Kolkata'; SET statement_timeout = '30s';", (err) =>
+    done(err, conn)
+  );
 };
 
 const basePoolSettings = {

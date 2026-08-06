@@ -15,7 +15,7 @@
     "migrate:make": "knex --knexfile db/knexfile.js migrate:make",
     "migrate:latest": "knex --knexfile db/knexfile.js migrate:latest",
     "migrate:rollback": "knex --knexfile db/knexfile.js migrate:rollback",
-    "test": "node --test services"
+    "test": "node --test"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
