@@ -1,95 +1,88 @@
-// routes/membershipRoutes.js
-
+// new_backend/routes/membershipRoutes.js
 const express = require('express');
+
+const asyncHandler = require('../middleware/asyncHandler');
+const { protect, authorize } = require('../middleware/auth');
+const { requireManagerMess } = require('../middleware/loadMess');
+const { loadMembership } = require('../middleware/loadMembership');
+const { validateBody, validateQuery } = require('../middleware/validate');
+const schemas = require('../middleware/schemas');
+const membershipController = require('../controllers/membershipController');
+
 const router = express.Router();
 
-const membershipController = require('../controllers/membershipController');
-const { protect, authorize } = require('../middleware/auth');
-const validate = require('../middleware/validate');
-const { joinMessSchema } = require('../middleware/schemas');
-
-// Customer
+// --- customer ---
 router.post(
   '/join/:messId',
   protect,
   authorize('Customer'),
-  validate(joinMessSchema),
-  membershipController.joinMess
+  validateBody(schemas.joinMess),
+  asyncHandler(membershipController.joinMess)
 );
-
-// NEW: customer requests permanent discontinuation
-router.put(
-  '/request-discontinue/:membershipId',
-  protect,
-  authorize('Customer'),
-  membershipController.requestDiscontinueMembership
-);
-
 router.get(
-  '/my-memberships',
+  '/mine',
   protect,
   authorize('Customer'),
-  membershipController.getMyMemberships
+  asyncHandler(membershipController.listMyMemberships)
 );
 
-router.get(
-  '/details/:membershipId',
-  protect,
-  authorize('Customer'),
-  membershipController.getMembershipDetails
-);
-
-// Manager
+// --- manager ---
+// Declared before '/:membershipId' so "mess" is not read as an id.
 router.get(
   '/mess',
   protect,
   authorize('Manager'),
-  membershipController.getMessMembers
+  requireManagerMess,
+  validateQuery(schemas.membersQuery),
+  asyncHandler(membershipController.listMessMembers)
 );
 
-router.put(
-  '/approve/:membershipId',
-  protect,
-  authorize('Manager'),
-  membershipController.approveMembership
-);
-
-router.put(
-  '/reject/:membershipId',
-  protect,
-  authorize('Manager'),
-  membershipController.rejectMembership
-);
-
-// NEW: manager approves/rejects discontinuation
-router.put(
-  '/approve-discontinue/:membershipId',
-  protect,
-  authorize('Manager'),
-  membershipController.approveDiscontinueMembership
-);
-
-router.put(
-  '/reject-discontinue/:membershipId',
-  protect,
-  authorize('Manager'),
-  membershipController.rejectDiscontinueMembership
-);
-
-// Backward-compatible alias: verify-leave → approve-discontinue
-router.put(
-  '/verify-leave/:membershipId',
-  protect,
-  authorize('Manager'),
-  membershipController.verifyLeaveMembership
-);
-
-// Existing manager route for single member details
+// --- either role, depending on who owns what ---
+// loadMembership lets a customer through for their own membership and a
+// manager through for anyone in their mess, so one route serves both.
 router.get(
-  '/member/:membershipId',
+  '/:membershipId',
+  protect,
+  loadMembership,
+  asyncHandler(membershipController.getMembershipDetails)
+);
+
+router.post(
+  '/:membershipId/approve',
   protect,
   authorize('Manager'),
-  membershipController.getMemberDetails
+  loadMembership,
+  asyncHandler(membershipController.approveMembership)
+);
+router.post(
+  '/:membershipId/reject',
+  protect,
+  authorize('Manager'),
+  loadMembership,
+  asyncHandler(membershipController.rejectMembership)
+);
+
+// Leaving the mess for good. The customer asks; the manager decides.
+router.post(
+  '/:membershipId/discontinue',
+  protect,
+  authorize('Customer'),
+  loadMembership,
+  asyncHandler(membershipController.requestDiscontinuation)
+);
+router.post(
+  '/:membershipId/discontinue/approve',
+  protect,
+  authorize('Manager'),
+  loadMembership,
+  asyncHandler(membershipController.approveDiscontinuation)
+);
+router.post(
+  '/:membershipId/discontinue/reject',
+  protect,
+  authorize('Manager'),
+  loadMembership,
+  asyncHandler(membershipController.rejectDiscontinuation)
 );
 
 module.exports = router;

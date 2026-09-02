@@ -1,6 +1,7 @@
 // lib/features/manager/billing/providers/manager_payments_providers.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/api/dio_client_provider.dart';
+import '../../../../models/bill.dart';
 import '../repositories/manager_payments_repository.dart';
 
 // Repository
@@ -11,13 +12,13 @@ final managerPaymentsRepositoryProvider =
 
 // Pending approvals
 final pendingApprovalsProvider =
-    FutureProvider.autoDispose<List<dynamic>>((ref) async {
+    FutureProvider.autoDispose<List<Bill>>((ref) async {
   ref.keepAlive();
   return ref.watch(managerPaymentsRepositoryProvider).getPendingApprovals();
 });
 
 // Dues
-final dueBillsProvider = FutureProvider.autoDispose<List<dynamic>>((ref) async {
+final dueBillsProvider = FutureProvider.autoDispose<List<Bill>>((ref) async {
   ref.keepAlive();
   return ref.watch(managerPaymentsRepositoryProvider).getDueBills();
 });
@@ -82,14 +83,24 @@ class PaymentsHistoryFilter {
 
 // Payment history (stable family provider)
 final paymentsHistoryProvider = FutureProvider.family
-    .autoDispose<List<dynamic>, PaymentsHistoryFilter>((ref, filter) async {
+    .autoDispose<List<Bill>, PaymentsHistoryFilter>((ref, filter) async {
   ref.keepAlive();
-  return ref.watch(managerPaymentsRepositoryProvider).getAllBills(
+  final bills = await ref.watch(managerPaymentsRepositoryProvider).getAllBills(
         status: filter.status,
         month: filter.month,
         year: filter.year,
-        memberNameOrPhone: filter.query,
         page: filter.page,
         limit: filter.limit,
       );
+
+  // The bills endpoint filters by status/month/year only - there is no member
+  // search on the server - so the name/phone box narrows the page we already
+  // fetched. It does not search bills on other pages.
+  final needle = filter.query?.trim().toLowerCase();
+  if (needle == null || needle.isEmpty) return bills;
+  return bills.where((bill) {
+    final name = bill.memberName?.toLowerCase() ?? '';
+    final phone = bill.memberPhone?.toLowerCase() ?? '';
+    return name.contains(needle) || phone.contains(needle);
+  }).toList();
 });

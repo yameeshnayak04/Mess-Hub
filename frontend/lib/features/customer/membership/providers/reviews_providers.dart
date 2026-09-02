@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/api/dio_client.dart';
+import '../../../../models/review.dart';
 import '../repositories/reviews_repository.dart';
 import '../../../../core/api/dio_client_provider.dart';
 
@@ -8,6 +9,6 @@ final reviewsRepositoryProvider = Provider<ReviewsRepository>((ref) {
 });
 
 final myReviewProvider =
-    FutureProvider.family<Map?, String>((ref, messId) async {
+    FutureProvider.family<Review?, String>((ref, messId) async {
   return ref.read(reviewsRepositoryProvider).getMyReview(messId);
 });

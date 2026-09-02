@@ -42,8 +42,8 @@ class _ReviewEditorScreenState extends ConsumerState<ReviewEditorScreen>
     if (!mounted) return;
     if (existing != null) {
       setState(() {
-        _rating = (existing['rating'] as num?)?.toInt() ?? 0;
-        _commentCtrl.text = (existing['comment'] as String?) ?? '';
+        _rating = existing.rating;
+        _commentCtrl.text = existing.comment ?? '';
       });
     }
   }

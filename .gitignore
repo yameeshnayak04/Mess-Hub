@@ -73,3 +73,5 @@ uploads/payment-proofs/*
 !uploads/payment-proofs/.gitkeep
 *.log
 .DS_Store
+./docker-compose
+

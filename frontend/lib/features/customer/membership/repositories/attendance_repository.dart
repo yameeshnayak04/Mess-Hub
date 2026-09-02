@@ -1,44 +1,53 @@
-// lib/features/attendance/repositories/attendance_repository.dart
+// lib/features/customer/membership/repositories/attendance_repository.dart
 import '../../../../core/api/dio_client.dart';
-import 'package:dio/dio.dart';
+import '../../../../models/attendance.dart';
 
 class AttendanceRepository {
   final DioClient _dio;
   AttendanceRepository(this._dio);
 
-  String _msg(Response res) {
-    final d = res.data;
-    if (d is Map &&
-        d['message'] is String &&
-        (d['message'] as String).isNotEmpty) return d['message'];
-    return 'Failed to perform attendance action';
-  }
-
-  Future<Map<String, dynamic>> skipMeal({
+  /// Skips a meal for TODAY only.
+  ///
+  /// The old API took an arbitrary `date`, which let a customer add skips to
+  /// past days and manufacture rebates. The backend now derives the date
+  /// itself and refuses once the meal window has closed, so there is no date
+  /// to pass.
+  Future<AttendanceRecord> skipMeal({
     required String membershipId,
-    required String mealType,
-    DateTime? date,
+    required String meal, // 'Lunch' | 'Dinner'
   }) async {
-    final res = await _dio.post('/attendance/skip', data: {
-      'membershipId': membershipId,
-      'mealType': mealType,
-      if (date != null) 'date': date.toIso8601String(),
-    });
-    if (res.statusCode != 200) throw _msg(res);
-    return res.data as Map<String, dynamic>;
+    try {
+      final res = await _dio.post(
+        '/attendance/$membershipId/skip',
+        data: {'meal': meal},
+      );
+      return AttendanceRecord.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
   }
 
-  Future<List<dynamic>> getMyCalendar({
+  /// One month of attendance, already grouped per day by the backend.
+  /// Serves both the customer viewing their own calendar and a manager
+  /// viewing a member's - the same route covers both.
+  Future<AttendanceCalendar> getCalendar({
     required String membershipId,
     int? month,
     int? year,
   }) async {
-    final res = await _dio
-        .get('/attendance/my-calendar/$membershipId', queryParameters: {
-      if (month != null) 'month': month,
-      if (year != null) 'year': year,
-    });
-    if (res.statusCode != 200) throw _msg(res);
-    return (res.data['data'] as List);
+    try {
+      final res = await _dio.get(
+        '/attendance/$membershipId/calendar',
+        queryParameters: {
+          if (month != null) 'month': month,
+          if (year != null) 'year': year,
+        },
+      );
+      return AttendanceCalendar.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
   }
 }

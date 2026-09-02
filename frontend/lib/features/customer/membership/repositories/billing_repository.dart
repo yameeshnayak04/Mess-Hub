@@ -1,41 +1,52 @@
 // lib/features/customer/membership/repositories/billing_repository.dart
-import 'dart:io';
 import 'package:dio/dio.dart';
 import '../../../../core/api/dio_client.dart';
+import '../../../../models/bill.dart';
 
 class BillingRepository {
   final DioClient _dio;
   BillingRepository(this._dio);
 
-  String _msg(Response res) {
-    final d = res.data;
-    if (d is Map &&
-        d['message'] is String &&
-        (d['message'] as String).isNotEmpty) return d['message'];
-    return 'Failed to load billing';
-  }
-
-  Future<List<dynamic>> getMyBills(String membershipId) async {
-    final res = await _dio.get('/billing/my-bills/$membershipId');
-    if (res.statusCode != 200) throw _msg(res);
-    return (res.data['data'] as List);
-  }
-
-  Future<Map<String, dynamic>> submitPaymentProof({
-    required String billId,
-    required File file,
+  /// A membership's bills, newest period first.
+  Future<List<Bill>> getMyBills(
+    String membershipId, {
+    int page = 1,
+    int limit = 20,
   }) async {
-    final form = FormData.fromMap({
-      // IMPORTANT: match Multer field name expected by uploadPaymentProof
-      // If your middleware uses a different key (e.g., 'proof' or 'file'),
-      // change this name to match exactly.
-      'paymentProof': await MultipartFile.fromFile(
-        file.path,
-        filename: file.uri.pathSegments.last,
-      ),
-    });
-    final res = await _dio.post('/billing/submit-proof/$billId', data: form);
-    if (res.statusCode != 200) throw _msg(res);
-    return res.data as Map<String, dynamic>;
+    try {
+      final res = await _dio.get(
+        '/billing/membership/$membershipId',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      return (DioClient.unwrap(res) as List)
+          .whereType<Map>()
+          .map((e) => Bill.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
+  }
+
+  /// Uploads the payment screenshot and moves the bill to 'Pending Approval'.
+  /// The multipart field name is `paymentProof`; the image is stored privately
+  /// on Cloudinary, so it is never readable from a plain URL afterwards.
+  Future<Bill> submitPaymentProof({
+    required String billId,
+    required String filePath,
+    String? fileName,
+  }) async {
+    try {
+      final form = FormData.fromMap({
+        'paymentProof': await MultipartFile.fromFile(
+          filePath,
+          filename: fileName,
+        ),
+      });
+      final res = await _dio.post('/billing/$billId/proof', data: form);
+      return Bill.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
   }
 }

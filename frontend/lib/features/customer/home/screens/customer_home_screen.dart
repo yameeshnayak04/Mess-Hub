@@ -20,13 +20,13 @@ class CustomerHomeScreen extends ConsumerWidget {
   }
 
   // Get current meal status
-  Map<String, dynamic> _getMealStatus(Membership membership) {
+  Map<String, dynamic> _getMealStatus(MembershipWithMess entry) {
     final now = DateTime.now();
     final hour = now.hour;
     final minute = now.minute;
     final currentMinutes = hour * 60 + minute;
 
-    final mess = membership.messObject;
+    final mess = entry.mess;
     if (mess == null) {
       return {
         'isActive': false,
@@ -37,20 +37,24 @@ class CustomerHomeScreen extends ConsumerWidget {
     }
 
     // Parse lunch timings
-    final lunchStart = mess.timings.lunch.start;
-    final lunchEnd = mess.timings.lunch.end;
+    final lunchStart = mess.timings.lunchStart;
+    final lunchEnd = mess.timings.lunchEnd;
     final lunchStartMinutes = _parseTimeToMinutes(lunchStart);
     final lunchEndMinutes = _parseTimeToMinutes(lunchEnd);
 
     // Parse dinner timings
-    final dinnerStart = mess.timings.dinner.start;
-    final dinnerEnd = mess.timings.dinner.end;
+    final dinnerStart = mess.timings.dinnerStart;
+    final dinnerEnd = mess.timings.dinnerEnd;
     final dinnerStartMinutes = _parseTimeToMinutes(dinnerStart);
     final dinnerEndMinutes = _parseTimeToMinutes(dinnerEnd);
 
-    final planName = membership.planName.toLowerCase();
-    final hasLunch = planName.contains('both') || planName.contains('lunch');
-    final hasDinner = planName.contains('both') || planName.contains('dinner');
+    // Which meals the plan covers is a real field on the plan now. It used to
+    // be guessed from the plan's NAME here - the same mistake the backend used
+    // to make - which silently covered no meals for a plan called anything
+    // else, e.g. "Deluxe".
+    final plan = mess.plans.where((p) => p.id == entry.membership.planId);
+    final hasLunch = plan.isNotEmpty ? plan.first.includesLunch : false;
+    final hasDinner = plan.isNotEmpty ? plan.first.includesDinner : false;
 
     // Active windows
     final isLunchActive = hasLunch &&
@@ -157,7 +161,8 @@ class CustomerHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.listen<AsyncValue<List<Membership>>>(membershipProvider, (prev, next) {
+    ref.listen<AsyncValue<List<MembershipWithMess>>>(membershipProvider,
+        (prev, next) {
       next.whenOrNull(error: (e, st) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -360,7 +365,7 @@ class CustomerHomeScreen extends ConsumerWidget {
                   }
 
                   final activeCount =
-                      memberships.where((m) => m.status == 'Active').length;
+                      memberships.where((m) => m.membership.isActive).length;
 
                   return Column(
                     children: [
@@ -527,13 +532,14 @@ class CustomerHomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _membershipCard(BuildContext context, Membership m) {
-    final mess = m.messObject;
-    final joined = m.joinedDate != null
-        ? DateFormat('MMM d, y').format(m.joinedDate!)
-        : '-';
-    final bool isActive = m.status == 'Active';
-    final mealStatus = _getMealStatus(m);
+  Widget _membershipCard(BuildContext context, MembershipWithMess entry) {
+    final m = entry.membership;
+    final mess = entry.mess;
+    // joinedDate is a plain calendar day; parse it as a date, not an instant.
+    final joinedOn = m.joinedDateTime;
+    final joined = joinedOn != null ? DateFormat('MMM d, y').format(joinedOn) : '-';
+    final bool isActive = m.isActive;
+    final mealStatus = _getMealStatus(entry);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -597,25 +603,24 @@ class CustomerHomeScreen extends ConsumerWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 4),
-                          if (mess?.averageRating != null &&
-                              mess!.averageRating! > 0)
+                          if (mess != null && mess.rating.count > 0)
                             Row(
                               children: [
                                 ...List.generate(
                                   5,
                                   (index) => Icon(
-                                    index < mess.averageRating!.round()
+                                    index < mess.rating.average.round()
                                         ? Icons.star_rounded
                                         : Icons.star_border_rounded,
                                     size: 16,
-                                    color: index < mess.averageRating!.round()
+                                    color: index < mess.rating.average.round()
                                         ? Colors.amber
                                         : Colors.grey.shade300,
                                   ),
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
-                                  mess.averageRating!.toStringAsFixed(1),
+                                  mess.rating.average.toStringAsFixed(1),
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodySmall
@@ -933,7 +938,7 @@ class CustomerHomeScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '₹${m.billingRate.toStringAsFixed(0)}',
+                          '₹${m.rateRupees.toStringAsFixed(0)}',
                           style:
                               Theme.of(context).textTheme.titleLarge?.copyWith(
                                     fontWeight: FontWeight.bold,

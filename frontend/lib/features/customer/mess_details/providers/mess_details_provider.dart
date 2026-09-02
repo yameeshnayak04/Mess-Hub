@@ -2,6 +2,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mess_management_app/core/api/dio_client_provider.dart';
 import '../../../../models/mess.dart';
+import '../../../../models/menu.dart';
 import '../../../../models/review.dart';
 import '../repositories/mess_details_repository.dart';
 import '../../discover/repositories/discover_repository.dart';
@@ -14,8 +15,7 @@ final messDetailsRepositoryProvider = Provider((ref) {
 class MessDetailsScreenState {
   final AsyncValue<Mess> mess;
   final AsyncValue<List<Review>> reviews;
-  final AsyncValue<List<Map<String, dynamic>>>
-      menu; // date, lunchItems, dinnerItems
+  final AsyncValue<List<Menu>> menu;
   final bool isJoining;
   final String? joinError;
   final int reviewsPage;
@@ -34,7 +34,7 @@ class MessDetailsScreenState {
   MessDetailsScreenState copyWith({
     AsyncValue<Mess>? mess,
     AsyncValue<List<Review>>? reviews,
-    AsyncValue<List<Map<String, dynamic>>>? menu,
+    AsyncValue<List<Menu>>? menu,
     bool? isJoining,
     String? joinError,
     bool clearJoinError = false,
@@ -81,7 +81,7 @@ class MessDetailsNotifier extends StateNotifier<MessDetailsScreenState> {
       final start = DateTime(now.year, now.month, now.day);
       final end = start.add(const Duration(days: 7));
       final menus = await _detailsRepository.getMenu(
-          messId: messId, startDate: start, endDate: end);
+          messId: messId, from: start, to: end);
       state = state.copyWith(menu: AsyncValue.data(menus));
     } catch (e, st) {
       state = state.copyWith(menu: AsyncValue.error(e, st));
@@ -126,10 +126,10 @@ class MessDetailsNotifier extends StateNotifier<MessDetailsScreenState> {
     return state.reviewsHasMore;
   }
 
-  Future<bool> joinMess(String planName) async {
+  Future<bool> joinMess(String planId) async {
     state = state.copyWith(isJoining: true, clearJoinError: true);
     try {
-      await _discoverRepository.joinMess(messId, planName);
+      await _discoverRepository.joinMess(messId, planId);
       state = state.copyWith(isJoining: false);
       return true;
     } catch (e) {

@@ -16,6 +16,8 @@ import 'package:mess_management_app/features/auth/widgets/logout_action.dart';
 import '../../../auth/providers/auth_provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/api/dio_client.dart';
+import '../../../../models/mess.dart';
 import '../providers/mess_profile_providers.dart';
 
 // Convert to ConsumerStatefulWidget (already is). Implement robust refresh without build-trigger loops.
@@ -58,7 +60,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
   TimeOfDay? _lunchStart, _lunchEnd, _dinnerStart, _dinnerEnd;
 
   // Plans snapshot (from backend)
-  List<Map<String, dynamic>> _plans = [];
+  List<MessPlan> _plans = [];
 
   File? _picked;
   bool _initialized = false; // seed form once per fresh fetch
@@ -220,7 +222,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
         // Skip sending empty.
       } else {
         final n = double.tryParse(v);
-        if (n != null && n >= 0) fields['dailyThaliRate'] = n;
+        if (n != null && n >= 0) fields['dailyThaliRateRupees'] = n;
       }
     }
 
@@ -241,56 +243,32 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
         rulePatch['minLeaveDaysForRebate'] = minLeave;
       }
       final rebate = double.tryParse(_rebatePerThali.text.trim());
-      if (rebate != null && rebate >= 0) rulePatch['rebatePerThali'] = rebate;
+      if (rebate != null && rebate >= 0) {
+        rulePatch['rebatePerThaliRupees'] = rebate;
+      }
       final skip = double.tryParse(_skipPercent.text.trim());
       if (skip != null && skip >= 0 && skip <= 100) {
         rulePatch['skipAllowancePercent'] = skip;
       }
       final mmc = double.tryParse(_minMonthlyCharge.text.trim());
-      if (mmc != null && mmc >= 0) rulePatch['minMonthlyCharge'] = mmc;
+      if (mmc != null && mmc >= 0) rulePatch['minMonthlyChargeRupees'] = mmc;
       rulePatch['allowAbsentRebate'] = _allowAbsentRebate;
 
       if (rulePatch.isNotEmpty) fields['rules'] = rulePatch;
     }
 
-    // Plans
-    if (_dirtyFields.contains('plans')) {
-      final plansPayload = <Map<String, dynamic>>[];
-      for (final p in _plans) {
-        final id = p['_id']?.toString();
-        final name = (p['name'] ?? '').toString();
-        final rateRaw = (p['rate'] ?? '').toString().trim();
-        final rate = double.tryParse(rateRaw);
-        if (rate == null || rate < 0) {
-          // If any rate is invalid, do not auto-save plans.
-          return;
-        }
-        plansPayload.add({
-          if (id != null && id.isNotEmpty) '_id': id,
-          'name': name,
-          'rate': rate,
-        });
-      }
-      if (plansPayload.isNotEmpty) fields['plans'] = plansPayload;
-    }
+    // Plans are NOT part of this payload. Each plan has its own endpoint, and
+    // a rate change is deliberate enough to need its own confirmation - see
+    // _savePlanRate below.
 
     // Timings (only save when complete and valid)
     if (_dirtyFields.contains('timings')) {
       if (_validateTimingConstraints(showSnack: false)) {
-        fields['timings'] = {
-          'lunchStart': _formatHHMM(_lunchStart),
-          'lunchEnd': _formatHHMM(_lunchEnd),
-          'dinnerStart': _formatHHMM(_dinnerStart),
-          'dinnerEnd': _formatHHMM(_dinnerEnd),
-          'lunch': {
-            'start': _formatHHMM(_lunchStart),
-            'end': _formatHHMM(_lunchEnd),
-          },
-          'dinner': {
-            'start': _formatHHMM(_dinnerStart),
-            'end': _formatHHMM(_dinnerEnd),
-          },
-        };
+        // Four top-level HH:MM fields - the API has no nested timings object.
+        fields['lunchStart'] = _formatHHMM(_lunchStart);
+        fields['lunchEnd'] = _formatHHMM(_lunchEnd);
+        fields['dinnerStart'] = _formatHHMM(_dinnerStart);
+        fields['dinnerEnd'] = _formatHHMM(_dinnerEnd);
       } else {
         // Don’t push invalid partial timings to backend.
       }
@@ -414,7 +392,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
               return _buildLoadingState();
             }
             // Handle empty data (e.g., manager has no mess yet)
-            if (mess.isEmpty) {
+            if (mess == null) {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: const [
@@ -430,7 +408,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
               _initialized = true;
             }
 
-            final imagePath = (mess['messImage'] as String?) ?? '';
+            final imagePath = mess.messImage ?? '';
             final imageUrl = dio.resolveServerUrl(imagePath);
 
             return CustomScrollView(
@@ -504,49 +482,34 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
     );
   }
 
-  void _seedFormFromMess(Map<String, dynamic> mess) {
+  void _seedFormFromMess(Mess mess) {
     _suppressAutoSave = true;
-    _name.text = (mess['messName'] ?? '').toString();
-    _city.text = (mess['city'] ?? '').toString();
-    _serviceType.text = (mess['serviceType'] ?? '').toString();
-    _cuisine.text = (mess['cuisine'] ?? '').toString();
+    _name.text = mess.messName;
+    _city.text = mess.city;
+    _serviceType.text = mess.serviceType;
+    _cuisine.text = mess.cuisine;
 
-    _address.text = (mess['address'] ?? '').toString();
-    _phone.text = (mess['contactPhone'] ?? '').toString();
-    _maxCapacity.text = (mess['maxCapacity'] ?? '').toString();
-    _dailyRate.text = (mess['dailyThaliRate'] ?? '').toString();
+    _address.text = mess.address;
+    _phone.text = mess.contactPhone;
+    _maxCapacity.text = mess.maxCapacity?.toString() ?? '';
+    _dailyRate.text = mess.dailyThaliRateRupees?.toString() ?? '';
 
-    final rules = (mess['rules'] as Map?)?.cast<String, dynamic>() ?? {};
-    _minLeaveDays.text = (rules['minLeaveDaysForRebate'] ?? '').toString();
-    _rebatePerThali.text = (rules['rebatePerThali'] ?? '').toString();
-    _skipPercent.text = (rules['skipAllowancePercent'] ?? '').toString();
-    _minMonthlyCharge.text = (rules['minMonthlyCharge'] ?? '').toString();
-    _allowAbsentRebate = rules['allowAbsentRebate'] == true;
+    _minLeaveDays.text = mess.rules.minLeaveDaysForRebate.toString();
+    _rebatePerThali.text = mess.rules.rebatePerThaliRupees.toString();
+    _skipPercent.text = mess.rules.skipAllowancePercent.toString();
+    _minMonthlyCharge.text = mess.rules.minMonthlyChargeRupees?.toString() ?? '';
+    _allowAbsentRebate = mess.rules.allowAbsentRebate;
 
-    _basicThali.text = (mess['basicThaliDetails'] ?? '').toString();
-    _tiffinService = mess['tiffinService'] == true;
+    _basicThali.text = mess.basicThaliDetails;
+    _tiffinService = mess.tiffinService;
 
-    final timings = (mess['timings'] as Map?)?.cast<String, dynamic>() ?? {};
-    final lunchMap = (timings['lunch'] as Map?)?.cast<String, dynamic>();
-    final dinnerMap = (timings['dinner'] as Map?)?.cast<String, dynamic>();
-    _lunchStart = _parseHHMM(
-      (timings['lunchStart'] ?? lunchMap?['start']) as String?,
-    );
-    _lunchEnd = _parseHHMM(
-      (timings['lunchEnd'] ?? lunchMap?['end']) as String?,
-    );
-    _dinnerStart = _parseHHMM(
-      (timings['dinnerStart'] ?? dinnerMap?['start']) as String?,
-    );
-    _dinnerEnd = _parseHHMM(
-      (timings['dinnerEnd'] ?? dinnerMap?['end']) as String?,
-    );
+    // Four flat HH:MM strings now - there is no nested lunch/dinner object.
+    _lunchStart = _parseHHMM(mess.timings.lunchStart);
+    _lunchEnd = _parseHHMM(mess.timings.lunchEnd);
+    _dinnerStart = _parseHHMM(mess.timings.dinnerStart);
+    _dinnerEnd = _parseHHMM(mess.timings.dinnerEnd);
 
-    final rawPlans = mess['plans'] as List? ?? const [];
-    _plans = rawPlans
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
+    _plans = List<MessPlan>.from(mess.plans);
 
     _dirtyFields.clear();
     _suppressAutoSave = false;
@@ -561,50 +524,30 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
     setState(() => _isSaving = true);
 
     try {
-      // Build payload with HH:mm strings
-      final timings = <String, dynamic>{};
-      if (_lunchStart != null) timings['lunchStart'] = _formatHHMM(_lunchStart);
-      if (_lunchEnd != null) timings['lunchEnd'] = _formatHHMM(_lunchEnd);
-      if (_dinnerStart != null)
-        timings['dinnerStart'] = _formatHHMM(_dinnerStart);
-      if (_dinnerEnd != null) timings['dinnerEnd'] = _formatHHMM(_dinnerEnd);
-      // Also send nested shape to keep parity with create payloads
-      timings['lunch'] = {
-        'start': _formatHHMM(_lunchStart),
-        'end': _formatHHMM(_lunchEnd),
-      };
-      timings['dinner'] = {
-        'start': _formatHHMM(_dinnerStart),
-        'end': _formatHHMM(_dinnerEnd),
-      };
-
+      // Numbers stay numbers here: the API validates types, so sending
+      // '450' where it wants 450 is a 400, not a helpful coercion.
       final rules = <String, dynamic>{
-        'minLeaveDaysForRebate': _minLeaveDays.text.trim(),
-        'rebatePerThali': _rebatePerThali.text.trim(),
-        'skipAllowancePercent': _skipPercent.text.trim(),
+        'minLeaveDaysForRebate': int.tryParse(_minLeaveDays.text.trim()),
+        'rebatePerThaliRupees': double.tryParse(_rebatePerThali.text.trim()),
+        'skipAllowancePercent': int.tryParse(_skipPercent.text.trim()),
         'allowAbsentRebate': _allowAbsentRebate,
-        'minMonthlyCharge': _minMonthlyCharge.text.trim(),
-      };
-
-      final plansPayload = _plans.map((p) {
-        return {
-          '_id': p['_id']?.toString(),
-          'name': (p['name'] ?? '').toString(),
-          'rate': (p['rate'] ?? '').toString(),
-        };
-      }).toList();
+        'minMonthlyChargeRupees':
+            double.tryParse(_minMonthlyCharge.text.trim()),
+      }..removeWhere((_, value) => value == null);
 
       final fields = <String, dynamic>{
         'address': _address.text.trim(),
         'contactPhone': _phone.text.trim(),
-        'maxCapacity': _maxCapacity.text.trim(),
-        'dailyThaliRate': _dailyRate.text.trim(),
-        'tiffinService': _tiffinService.toString(),
+        'maxCapacity': int.tryParse(_maxCapacity.text.trim()),
+        'dailyThaliRateRupees': double.tryParse(_dailyRate.text.trim()),
+        'tiffinService': _tiffinService,
         'basicThaliDetails': _basicThali.text.trim(),
-        'timings': timings,
+        'lunchStart': _formatHHMM(_lunchStart),
+        'lunchEnd': _formatHHMM(_lunchEnd),
+        'dinnerStart': _formatHHMM(_dinnerStart),
+        'dinnerEnd': _formatHHMM(_dinnerEnd),
         'rules': rules,
-        'plans': plansPayload,
-      };
+      }..removeWhere((_, value) => value == null);
 
       MultipartFile? mf;
       if (_picked != null) {
@@ -671,7 +614,7 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
     );
   }
 
-  Widget _buildHeader(BuildContext context, String imageUrl, Map mess) {
+  Widget _buildHeader(BuildContext context, String imageUrl, Mess mess) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -1603,11 +1546,64 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
     );
   }
 
+  /// Saves one plan's rate. Deliberately its own action rather than part of
+  /// the mess autosave: the new rate is what every member on this plan is
+  /// billed at from their next bill, so it needs a confirmation.
+  Future<void> _savePlanRate(MessPlan plan, String rawRate) async {
+    final rate = double.tryParse(rawRate.trim());
+    if (rate == null || rate < 0) {
+      _showSnackBar('Enter a valid rate', isError: true);
+      return;
+    }
+    if (rate == plan.rateRupees) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change plan rate?'),
+        content: Text(
+          '"${plan.name}" changes from Rs ${plan.rateRupees.toStringAsFixed(0)} '
+          'to Rs ${rate.toStringAsFixed(0)} per month.\n\n'
+          'This applies to everyone currently on this plan, not just new '
+          'members. Their next bill uses the new rate; bills already paid or '
+          'awaiting approval are not touched.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Change rate'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref.read(messProfileRepositoryProvider).updatePlan(
+            planId: plan.id,
+            name: plan.name,
+            rateRupees: rate,
+            meals: plan.meals,
+          );
+      if (!mounted) return;
+      _showSnackBar('Plan rate updated');
+      setState(() => _initialized = false);
+      await ref.refresh(messProfileProvider.future);
+    } catch (error) {
+      if (!mounted) return;
+      _showSnackBar(DioClient.asApiException(error).friendlyMessage, isError: true);
+    }
+  }
+
   Widget _modernPlanCard(BuildContext context, int index) {
     final plan = _plans[index];
-    final name = (plan['name'] ?? '').toString();
-    final rate = (plan['rate'] ?? '').toString();
-    final controller = TextEditingController(text: rate);
+    final name = plan.name;
+    final controller =
+        TextEditingController(text: plan.rateRupees.toStringAsFixed(0));
 
     final colors = [
       AppTheme.successGreen,
@@ -1689,9 +1685,9 @@ class _MessProfileScreenState extends ConsumerState<MessProfileScreen>
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
+                onFieldSubmitted: (v) => _savePlanRate(plan, v),
                 onChanged: (v) {
-                  plan['rate'] = v.trim();
-                  _dirtyFields.add('plans');
+                  // No autosave here on purpose - see _savePlanRate.
                   _scheduleAutoSave();
                 },
               ),

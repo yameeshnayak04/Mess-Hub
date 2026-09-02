@@ -5,17 +5,21 @@ import 'package:go_router/go_router.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/json_parse.dart';
+import '../../../../models/attendance.dart';
+import '../../../../models/bill.dart';
+import '../../../../models/leave.dart';
+import '../../../../models/membership.dart';
+import '../../../customer/membership/providers/membership_providers.dart';
 import '../providers/manager_members_providers.dart';
 
 class MemberDetailsScreen extends ConsumerStatefulWidget {
   final String membershipId;
-  final Map<String, dynamic>? membership;
 
-  const MemberDetailsScreen({
-    super.key,
-    required this.membershipId,
-    this.membership,
-  });
+  /// Only the id is passed in. Everything on this page is fetched fresh, so
+  /// there is nothing to gain from handing the list's row across - and a stale
+  /// copy of it would be worse than none.
+  const MemberDetailsScreen({super.key, required this.membershipId});
 
   @override
   ConsumerState<MemberDetailsScreen> createState() =>
@@ -33,12 +37,18 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
     _selectedDay = _focusedDay;
   }
 
-  List<String> _mealsFromPlan(String planName) {
-    final p = planName.toLowerCase();
-    if (p.contains('both')) return const ['Lunch', 'Dinner'];
-    if (p.contains('lunch')) return const ['Lunch'];
-    if (p.contains('dinner')) return const ['Dinner'];
-    return const ['Lunch', 'Dinner'];
+  /// Flattens the day-grouped calendar into one row per meal, which is what
+  /// the list below renders.
+  List<Map<String, dynamic>> _flattenCalendar(AttendanceCalendar calendar) {
+    final entries = <Map<String, dynamic>>[];
+    for (final day in calendar.days) {
+      final date = day.dateTime;
+      if (date == null) continue;
+      day.meals.forEach((meal, status) {
+        entries.add({'date': date, 'mealType': meal, 'status': status});
+      });
+    }
+    return entries;
   }
 
   Color _colorFor(String? status) {
@@ -95,34 +105,38 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
         loading: () => _buildLoadingState(),
         error: (error, stack) => _buildErrorState(error),
         data: (details) {
-          final membership = details['membership'] as Map<String, dynamic>;
-          final user = membership['user'] as Map<String, dynamic>;
-          final planName = membership['planName'] as String? ?? '';
-          final allowedMeals = _mealsFromPlan(planName);
+          final membership = details.membership;
+
+          // Which meals this plan covers is real data on the mess's plan list,
+          // not something to read out of the plan's name.
+          final allowedMeals = ref
+                  .watch(messByIdProvider(membership.messId))
+                  .maybeWhen(
+                    data: (mess) => mess.plans
+                        .where((plan) => plan.id == membership.planId)
+                        .firstOrNull
+                        ?.meals,
+                    orElse: () => null,
+                  ) ??
+              const ['Lunch', 'Dinner'];
 
           return attendanceAsync.when(
             loading: () => _buildContent(
-              user,
               membership,
-              planName,
               allowedMeals,
               const [],
               isLoading: true,
             ),
             error: (e, s) => _buildContent(
-              user,
               membership,
-              planName,
               allowedMeals,
               const [],
               error: e.toString(),
             ),
-            data: (attendance) => _buildContent(
-              user,
+            data: (calendar) => _buildContent(
               membership,
-              planName,
               allowedMeals,
-              attendance,
+              _flattenCalendar(calendar),
             ),
           );
         },
@@ -131,18 +145,16 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
   }
 
   Widget _buildContent(
-    Map<String, dynamic> user,
-    Map<String, dynamic> membership,
-    String planName,
+    Membership membership,
     List<String> allowedMeals,
     List<Map<String, dynamic>> attendance, {
     bool isLoading = false,
     String? error,
   }) {
-    final filtered = attendance.where((e) {
-      final meal = (e['mealType'] as String?)?.trim();
-      return meal == null || meal.isEmpty || allowedMeals.contains(meal);
-    }).toList();
+    final planName = membership.planName;
+    final filtered = attendance
+        .where((e) => allowedMeals.contains(e['mealType']))
+        .toList();
 
     final entriesByDate = _groupEntriesByDate(filtered);
     final counts = _computeCounts(filtered);
@@ -153,7 +165,6 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
           // Member Info Card
           _MemberInfoCard(
             membership: membership,
-            user: user,
             planName: planName,
           ),
 
@@ -228,18 +239,18 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
     );
   }
 
+  // [_flattenCalendar] already put a real DateTime in 'date', so there is
+  // nothing to parse. It used to read that field as a String, which threw for
+  // every single entry - and a try/catch here swallowed each one, so the
+  // calendar came out empty with no error to show for it.
   Map<DateTime, List<Map<String, dynamic>>> _groupEntriesByDate(
       List<Map<String, dynamic>> entries) {
     final map = <DateTime, List<Map<String, dynamic>>>{};
     for (final e in entries) {
-      try {
-        final d = DateTime.parse(e['date'] as String).toLocal();
-        final key = DateTime(d.year, d.month, d.day);
-        map[key] = map[key] ?? [];
-        map[key]!.add(e);
-      } catch (err) {
-        debugPrint('Error parsing entry: $err');
-      }
+      final d = e['date'] as DateTime;
+      final key = DateTime(d.year, d.month, d.day);
+      map[key] = map[key] ?? [];
+      map[key]!.add(e);
     }
     return map;
   }
@@ -306,13 +317,11 @@ class _MemberDetailsScreenState extends ConsumerState<MemberDetailsScreen> {
 
 // Member Info Card
 class _MemberInfoCard extends StatelessWidget {
-  final Map<String, dynamic> membership;
-  final Map<String, dynamic> user;
+  final Membership membership;
   final String planName;
 
   const _MemberInfoCard({
     required this.membership,
-    required this.user,
     required this.planName,
   });
 
@@ -355,7 +364,7 @@ class _MemberInfoCard extends StatelessWidget {
                   ),
                   child: Center(
                     child: Text(
-                      (user['name'] ?? 'M')[0].toUpperCase(),
+                      (membership.memberName ?? 'M')[0].toUpperCase(),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 28,
@@ -370,7 +379,7 @@ class _MemberInfoCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        user['name'] ?? 'Member',
+                        membership.memberName ?? 'Member',
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -387,7 +396,7 @@ class _MemberInfoCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            user['phone'] ?? 'N/A',
+                            membership.memberPhone ?? 'N/A',
                             style: TextStyle(
                               fontSize: 14,
                               color: AppTheme.textSecondary.withOpacity(0.8),
@@ -396,7 +405,7 @@ class _MemberInfoCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      _buildStatusBadge(membership['status']),
+                      _buildStatusBadge(membership.status),
                     ],
                   ),
                 ),
@@ -423,7 +432,7 @@ class _MemberInfoCard extends StatelessWidget {
                   child: _InfoTile(
                     icon: Icons.currency_rupee,
                     label: 'Billing Rate',
-                    value: '₹${membership['billingRate'] ?? 0}',
+                    value: '₹${membership.rateRupees ?? 0}',
                     color: AppTheme.successGreen,
                   ),
                 ),
@@ -436,7 +445,7 @@ class _MemberInfoCard extends StatelessWidget {
             _InfoTile(
               icon: Icons.calendar_today,
               label: 'Joined Date',
-              value: _formatDate(membership['joinedDate']),
+              value: _formatDate(membership.joinedDate),
               color: AppTheme.infoBlue,
             ),
           ],
@@ -492,14 +501,13 @@ class _MemberInfoCard extends StatelessWidget {
     );
   }
 
-  String _formatDate(dynamic date) {
-    if (date == null) return 'N/A';
-    try {
-      final dt = DateTime.parse(date.toString()).toLocal();
-      return DateFormat('dd MMM yyyy').format(dt);
-    } catch (e) {
-      return 'Invalid Date';
-    }
+  // These are calendar days ('2026-08-13'), so they go through the shared
+  // parser: it reads them at UTC midnight, and no toLocal() is applied, which
+  // is what keeps a date from sliding to the day before.
+  String _formatDate(String? date) {
+    final parsed = parseCalendarDate(date);
+    if (parsed == null) return 'N/A';
+    return DateFormat('dd MMM yyyy').format(parsed);
   }
 }
 
@@ -1349,27 +1357,7 @@ class _LeaveHistoryCard extends ConsumerWidget {
                 ],
               ),
             ),
-            data: (leavesData) {
-              // Handle both List and Map response structures
-              List<Map<String, dynamic>> leaves = [];
-
-              if (leavesData is List) {
-                leaves = leavesData
-                    .whereType<Map>()
-                    .map((e) => Map<String, dynamic>.from(e))
-                    .toList();
-              } else if (leavesData is Map) {
-                // If it's wrapped in a 'leaves' key
-                final dataMap = Map<String, dynamic>.from(leavesData as Map);
-                final leavesList = dataMap['leaves'] as List?;
-                if (leavesList != null) {
-                  leaves = leavesList
-                      .whereType<Map>()
-                      .map((e) => Map<String, dynamic>.from(e))
-                      .toList();
-                }
-              }
-
+            data: (leaves) {
               if (leaves.isEmpty) {
                 return Padding(
                   padding: const EdgeInsets.all(32),
@@ -1415,17 +1403,15 @@ class _LeaveHistoryCard extends ConsumerWidget {
 }
 
 class _LeaveItem extends StatelessWidget {
-  final Map<String, dynamic> leave;
+  final Leave leave;
 
   const _LeaveItem({required this.leave});
 
   @override
   Widget build(BuildContext context) {
-    final fromDate = leave['fromDate'] ?? leave['startDate'];
-    final toDate = leave['toDate'] ?? leave['endDate'];
-    final reason =
-        leave['reason'] as String? ?? leave['leaveReason'] as String?;
-    final status = leave['status'] as String?;
+    final fromDate = leave.startDate;
+    final toDate = leave.endDate;
+    final reason = leave.reason;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1468,30 +1454,6 @@ class _LeaveItem extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (status != null) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(status).withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: _getStatusColor(status).withOpacity(0.3),
-                          ),
-                        ),
-                        child: Text(
-                          status,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: _getStatusColor(status),
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
                 if (reason != null && reason.isNotEmpty) ...[
@@ -1540,14 +1502,10 @@ class _LeaveItem extends StatelessWidget {
     }
   }
 
-  String _formatDate(dynamic date) {
-    if (date == null) return 'N/A';
-    try {
-      final dt = DateTime.parse(date.toString()).toLocal();
-      return DateFormat('dd MMM yyyy').format(dt);
-    } catch (e) {
-      return 'Invalid';
-    }
+  String _formatDate(String? date) {
+    final parsed = parseCalendarDate(date);
+    if (parsed == null) return 'N/A';
+    return DateFormat('dd MMM yyyy').format(parsed);
   }
 }
 
@@ -1661,16 +1619,16 @@ class _PaymentHistoryCard extends ConsumerWidget {
 }
 
 class _PaymentItem extends StatelessWidget {
-  final Map<String, dynamic> bill;
+  final Bill bill;
 
   const _PaymentItem({required this.bill});
 
   @override
   Widget build(BuildContext context) {
-    final totalAmount = bill['totalAmount'];
-    final status = bill['status'] as String?;
-    final month = bill['month'];
-    final year = bill['year'];
+    final totalAmount = bill.totalRupees;
+    final status = bill.status;
+    final month = bill.periodDate?.month;
+    final year = bill.periodDate?.year;
 
     final statusColor = _getStatusColor(status);
 

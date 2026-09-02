@@ -24,7 +24,7 @@ class MessDetailsScreen extends ConsumerStatefulWidget {
 class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
     with SingleTickerProviderStateMixin {
   // Add mixin
-  String? _selectedPlan; // State to hold the chosen plan for joining
+  String? _selectedPlanId; // id of the plan chosen for joining
   late TabController _tabController; // Declare TabController
 
   @override
@@ -85,7 +85,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
   // Show dialog to select plan before joining
   void _showPlanSelectionDialog(BuildContext context, Mess mess) {
     // Reset selection when dialog opens
-    _selectedPlan = null;
+    _selectedPlanId = null;
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
@@ -109,14 +109,17 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                       : mess.plans.map((plan) {
                           return RadioListTile<String>(
                             title: Text(plan.name),
+                            // The backend tells us exactly which meals a plan
+                            // covers, so show it rather than leaving the user
+                            // to infer it from the plan's name.
                             subtitle: Text(
-                                '₹${plan.rate.toStringAsFixed(0)} / month'),
-                            value: plan.name,
-                            groupValue: _selectedPlan,
+                                '${plan.mealsLabel}  ·  ₹${plan.rateRupees.toStringAsFixed(0)} / month'),
+                            value: plan.id,
+                            groupValue: _selectedPlanId,
                             onChanged: (String? value) {
                               setDialogState(() {
                                 // Update dialog state
-                                _selectedPlan = value;
+                                _selectedPlanId = value;
                               });
                             },
                             activeColor: AppTheme.primaryOrange,
@@ -128,7 +131,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                 TextButton(
                   child: const Text('Cancel'),
                   onPressed: () {
-                    _selectedPlan = null; // Reset selection
+                    _selectedPlanId = null; // Reset selection
                     Navigator.of(dialogContext).pop();
                   },
                 ),
@@ -141,14 +144,13 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                     text: 'Confirm Join',
                     isLoading: isJoining,
                     // Disable button if no plan selected or already joining
-                    onPressed: (_selectedPlan == null || isJoining)
+                    onPressed: (_selectedPlanId == null || isJoining)
                         ? null
                         : () {
-                            if (_selectedPlan != null) {
+                            if (_selectedPlanId != null) {
                               Navigator.of(dialogContext)
                                   .pop(); // Close dialog FIRST
-                              _handleJoinMess(
-                                  _selectedPlan!); // Call join function
+                              _handleJoinMess(_selectedPlanId!);
                             }
                           },
                   );
@@ -162,9 +164,9 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
   }
 
   // Handle join mess API call and feedback
-  Future<void> _handleJoinMess(String planName) async {
+  Future<void> _handleJoinMess(String planId) async {
     final notifier = ref.read(messDetailsProvider(widget.messId).notifier);
-    final success = await notifier.joinMess(planName);
+    final success = await notifier.joinMess(planId);
 
     if (!mounted) return; // Check if widget is still in tree
 
@@ -191,7 +193,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
         ),
       );
     }
-    // No need to reset _selectedPlan here, dialog resets it
+    // No need to reset _selectedPlanId here, dialog resets it
   }
 
   // *** CORRECTED build method ***
@@ -394,8 +396,8 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          mess.averageRating != null && mess.averageRating! > 0
-                              ? mess.averageRating!.toStringAsFixed(1)
+                          mess.rating.count > 0
+                              ? mess.rating.average.toStringAsFixed(1)
                               : 'No Rating',
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
@@ -403,7 +405,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                           ),
                         ),
                         Text(
-                          '${mess.reviewCount ?? 0} reviews',
+                          '${mess.rating.count} reviews',
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: AppTheme.textSecondary,
@@ -412,7 +414,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                       ],
                     ),
                   ),
-                  if (mess.distance != null)
+                  if (mess.distanceMetres != null)
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
@@ -433,7 +435,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${(mess.distance! / 1000).toStringAsFixed(1)} km',
+                            '${(mess.distanceMetres! / 1000).toStringAsFixed(1)} km',
                             style: const TextStyle(
                               color: AppTheme.primaryOrange,
                               fontWeight: FontWeight.w600,
@@ -519,7 +521,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                   context,
                   Icons.wb_sunny_outlined,
                   'Lunch',
-                  '${mess.timings.lunch.start} - ${mess.timings.lunch.end}',
+                  '${mess.timings.lunchStart} - ${mess.timings.lunchEnd}',
                   Colors.orange,
                 ),
                 const SizedBox(height: 12),
@@ -527,7 +529,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                   context,
                   Icons.nightlight_outlined,
                   'Dinner',
-                  '${mess.timings.dinner.start} - ${mess.timings.dinner.end}',
+                  '${mess.timings.dinnerStart} - ${mess.timings.dinnerEnd}',
                   Colors.indigo,
                 ),
               ],
@@ -582,7 +584,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(
-                                    '₹${plan.rate.toStringAsFixed(0)}/mo',
+                                    '₹${plan.rateRupees.toStringAsFixed(0)}/mo',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.bold,
@@ -593,7 +595,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                               ],
                             ),
                           )),
-                      if (mess.dailyThaliRate != null &&
+                      if (mess.dailyThaliRateRupees != null &&
                           mess.serviceType == 'Both Daily & Monthly')
                         Container(
                           margin: const EdgeInsets.only(top: 4),
@@ -628,7 +630,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  '₹${mess.dailyThaliRate!.toStringAsFixed(0)}/day',
+                                  '₹${mess.dailyThaliRateRupees!.toStringAsFixed(0)}/day',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
@@ -662,7 +664,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                   context,
                   Icons.money_off_csred_outlined,
                   'Rebate per Meal',
-                  '₹${mess.rules.rebatePerThali.toStringAsFixed(0)}',
+                  '₹${mess.rules.rebatePerThaliRupees.toStringAsFixed(0)}',
                 ),
                 const Divider(height: 20),
                 _buildRuleItem(
@@ -671,24 +673,24 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                   'Skip Allowance',
                   '${mess.rules.skipAllowancePercent.toStringAsFixed(0)}% meals/month',
                 ),
-                if (mess.rules.securityDeposit != null &&
-                    mess.rules.securityDeposit! > 0) ...[
+                if (mess.rules.securityDepositRupees != null &&
+                    mess.rules.securityDepositRupees! > 0) ...[
                   const Divider(height: 20),
                   _buildRuleItem(
                     context,
                     Icons.shield_outlined,
                     'Security Deposit',
-                    '₹${mess.rules.securityDeposit!.toStringAsFixed(0)}',
+                    '₹${mess.rules.securityDepositRupees!.toStringAsFixed(0)}',
                   ),
                 ],
-                if (mess.rules.minMonthlyCharge != null &&
-                    mess.rules.minMonthlyCharge! > 0) ...[
+                if (mess.rules.minMonthlyChargeRupees != null &&
+                    mess.rules.minMonthlyChargeRupees! > 0) ...[
                   const Divider(height: 20),
                   _buildRuleItem(
                     context,
                     Icons.receipt_long_outlined,
                     'Min. Monthly Charge',
-                    '₹${mess.rules.minMonthlyCharge!.toStringAsFixed(0)}',
+                    '₹${mess.rules.minMonthlyChargeRupees!.toStringAsFixed(0)}',
                   ),
                 ],
               ],
@@ -963,11 +965,11 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
           separatorBuilder: (_, __) => const SizedBox(height: 16),
           itemBuilder: (context, index) {
             final m = menus[index];
-            final date = DateTime.tryParse(m['date']?.toString() ?? '');
-            final lunch =
-                (m['lunchItems'] as List?)?.cast<String>() ?? const <String>[];
-            final dinner =
-                (m['dinnerItems'] as List?)?.cast<String>() ?? const <String>[];
+            // serviceDate is a plain calendar day, already parsed as UTC
+            // midnight so the comparisons below cannot slide by a day.
+            final date = m.date;
+            final lunch = m.lunchItems;
+            final dinner = m.dinnerItems;
 
             final isToday = date != null &&
                 date.year == DateTime.now().year &&
@@ -1432,8 +1434,8 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final review = reviews[index];
-                      final initial = (review.userName?.isNotEmpty ?? false)
-                          ? review.userName![0].toUpperCase()
+                      final initial = (review.authorName?.isNotEmpty ?? false)
+                          ? review.authorName![0].toUpperCase()
                           : '?';
 
                       return Card(
@@ -1481,7 +1483,7 @@ class _MessDetailsScreenState extends ConsumerState<MessDetailsScreen>
                                           CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          review.userName ?? 'Anonymous',
+                                          review.authorName ?? 'Anonymous',
                                           style: Theme.of(context)
                                               .textTheme
                                               .titleMedium

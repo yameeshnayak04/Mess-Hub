@@ -1,60 +1,49 @@
+// new_backend/middleware/auth.js
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { loadConfig } = require('../utils/config');
+const { AppError, ForbiddenError } = require('../errors/AppError');
 
-// Protect routes - verify JWT
-exports.protect = async (req, res, next) => {
-  try {
-    let token;
+const config = loadConfig();
 
-    if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith('Bearer')
-    ) {
-      token = req.headers.authorization.split(' ')[1];
-    }
+function signToken(user) {
+  // The role travels inside the token so `protect` does not need a database
+  // query on every single request just to find out who is calling. Trade-off:
+  // if an account's role changes, their existing token keeps the old role
+  // until it expires. That is acceptable here because roles never change in
+  // this product - you are a Customer or a Manager from signup onward.
+  return jwt.sign({ id: user.id, role: user.role }, config.jwtSecret, {
+    expiresIn: config.jwtExpiresIn,
+  });
+}
 
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: 'Not authorized to access this route'
-      });
-    }
-
-    try {
-      // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-      // Get user from token
-      req.user = await User.findById(decoded.id).select('-kioskPin');
-
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          message: 'User not found'
-        });
-      }
-
-      next();
-    } catch (error) {
-      return res.status(401).json({
-        success: false,
-        message: 'Not authorized to access this route'
-      });
-    }
-  } catch (error) {
-    next(error);
+// Verifies the "Authorization: Bearer <token>" header and attaches
+// req.user = { id, role }.
+function protect(req, _res, next) {
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) {
+    return next(new AppError('You must be logged in to do that', 401, 'UNAUTHENTICATED'));
   }
-};
 
-// Authorize specific roles
-exports.authorize = (...roles) => {
-  return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        message: `User role '${req.user.role}' is not authorized to access this route`
-      });
+  const token = header.slice('Bearer '.length);
+  try {
+    const payload = jwt.verify(token, config.jwtSecret);
+    req.user = { id: Number(payload.id), role: payload.role };
+    return next();
+  } catch {
+    return next(new AppError('Your session is invalid or has expired', 401, 'UNAUTHENTICATED'));
+  }
+}
+
+// Use after `protect`: authorize('Manager') or authorize('Customer').
+function authorize(...allowedRoles) {
+  return (req, _res, next) => {
+    if (!allowedRoles.includes(req.user.role)) {
+      return next(
+        new ForbiddenError(`This action is only available to: ${allowedRoles.join(', ')}`)
+      );
     }
-    next();
+    return next();
   };
-};
+}
+
+module.exports = { signToken, protect, authorize };

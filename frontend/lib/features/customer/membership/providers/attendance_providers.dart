@@ -1,6 +1,7 @@
 // lib/features/customer/membership/providers/attendance_providers.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/api/dio_client_provider.dart';
+import '../../../../models/attendance.dart';
 import '../repositories/attendance_repository.dart';
 
 // Repo
@@ -32,8 +33,8 @@ class AttendanceCalendarParams {
 
 // Calendar provider
 final attendanceCalendarProvider = FutureProvider.family
-    .autoDispose<List<dynamic>, AttendanceCalendarParams>((ref, p) async {
-  return ref.watch(attendanceRepositoryProvider).getMyCalendar(
+    .autoDispose<AttendanceCalendar, AttendanceCalendarParams>((ref, p) async {
+  return ref.watch(attendanceRepositoryProvider).getCalendar(
         membershipId: p.membershipId,
         month: p.month,
         year: p.year,

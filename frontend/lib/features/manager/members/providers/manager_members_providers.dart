@@ -1,6 +1,11 @@
 // lib/features/manager/members/providers/manager_members_providers.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/api/dio_client_provider.dart';
+import '../../../../models/attendance.dart';
+import '../../../../models/bill.dart';
+import '../../../../models/leave.dart';
+import '../../../../models/membership.dart';
+import '../../../../models/membership_details.dart';
 import '../repositories/manager_members_repository.dart';
 
 final managerMembersRepositoryProvider =
@@ -10,14 +15,14 @@ final managerMembersRepositoryProvider =
 
 // Lists
 final membersByStatusProvider = FutureProvider.family
-    .autoDispose<List<Map<String, dynamic>>, String?>((ref, status) async {
+    .autoDispose<List<Membership>, String?>((ref, status) async {
   return ref
       .watch(managerMembersRepositoryProvider)
       .getMessMembers(status: status);
 });
 
 final pendingMembersProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+    FutureProvider.autoDispose<List<Membership>>((ref) async {
   return ref
       .watch(managerMembersRepositoryProvider)
       .getMessMembers(status: 'Pending');
@@ -25,7 +30,7 @@ final pendingMembersProvider =
 
 // Details
 final memberDetailsProvider = FutureProvider.family
-    .autoDispose<Map<String, dynamic>, String>((ref, id) async {
+    .autoDispose<MembershipDetails, String>((ref, id) async {
   return ref.watch(managerMembersRepositoryProvider).getMemberDetails(id);
 });
 
@@ -48,7 +53,7 @@ class MemberCalendarParams {
 }
 
 final memberAttendanceProvider = FutureProvider.family
-    .autoDispose<List<Map<String, dynamic>>, MemberCalendarParams>(
+    .autoDispose<AttendanceCalendar, MemberCalendarParams>(
         (ref, p) async {
   return ref.watch(managerMembersRepositoryProvider).getMemberAttendance(
         membershipId: p.membershipId,
@@ -59,12 +64,12 @@ final memberAttendanceProvider = FutureProvider.family
 
 // Leaves
 final memberLeavesProvider = FutureProvider.family
-    .autoDispose<List<Map<String, dynamic>>, String>((ref, id) async {
+    .autoDispose<List<Leave>, String>((ref, id) async {
   return ref.watch(managerMembersRepositoryProvider).getMemberLeaves(id);
 });
 
 // Bills
 final memberBillsProvider = FutureProvider.family
-    .autoDispose<List<Map<String, dynamic>>, String>((ref, id) async {
+    .autoDispose<List<Bill>, String>((ref, id) async {
   return ref.watch(managerMembersRepositoryProvider).getMemberBills(id);
 });

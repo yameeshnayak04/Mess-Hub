@@ -1,0 +1,1315 @@
+{
+  "POST /auth/register (manager)": {
+    "user": {
+      "id": 1208,
+      "name": "Contract Manager",
+      "phone": "8110784311",
+      "role": "Manager"
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIwOCwicm9sZSI6Ik1hbmFnZXIiLCJpYXQiOjE3ODY1NjExMDcsImV4cCI6MTc4OTE1MzEwN30.k3MMPiXnqelz_rkF0ZIhu9V1Td1z2SPOgsRK_4Jismw"
+  },
+  "POST /auth/register (customer)": {
+    "user": {
+      "id": 1209,
+      "name": "Contract Customer",
+      "phone": "9110784322",
+      "role": "Customer"
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIwOSwicm9sZSI6IkN1c3RvbWVyIiwiaWF0IjoxNzg2NTYxMTA4LCJleHAiOjE3ODkxNTMxMDh9.bAu_46J90hMuV20ayy1fSpGSzQbosE0MsFkG29f_Gi0"
+  },
+  "POST /auth/login": {
+    "user": {
+      "id": 1209,
+      "name": "Contract Customer",
+      "phone": "9110784322",
+      "role": "Customer"
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIwOSwicm9sZSI6IkN1c3RvbWVyIiwiaWF0IjoxNzg2NTYxMTA4LCJleHAiOjE3ODkxNTMxMDh9.bAu_46J90hMuV20ayy1fSpGSzQbosE0MsFkG29f_Gi0"
+  },
+  "GET /auth/me": {
+    "id": 1209,
+    "name": "Contract Customer",
+    "phone": "9110784322",
+    "role": "Customer"
+  },
+  "POST /messes": {
+    "messId": 608,
+    "plans": [
+      {
+        "id": 629,
+        "messId": 608,
+        "name": "Monthly (Both Meals)",
+        "rateRupees": 3000,
+        "meals": [
+          "Lunch",
+          "Dinner"
+        ],
+        "isActive": true
+      },
+      {
+        "id": 630,
+        "messId": 608,
+        "name": "Monthly (Lunch Only)",
+        "rateRupees": 1800,
+        "meals": [
+          "Lunch"
+        ],
+        "isActive": true
+      }
+    ]
+  },
+  "GET /messes/my-mess": {
+    "id": 608,
+    "ownerId": 1208,
+    "messName": "Contract Mess 1107843",
+    "messImage": null,
+    "address": "FC Road, Shivajinagar",
+    "city": "Pune",
+    "contactPhone": "8110784311",
+    "location": {
+      "longitude": 73.8567,
+      "latitude": 18.5204
+    },
+    "serviceType": "Both Daily & Monthly",
+    "cuisine": "Both",
+    "maxCapacity": 50,
+    "tiffinService": true,
+    "basicThaliDetails": "Two chapati, sabzi, rice, dal",
+    "timings": {
+      "lunchStart": "11:30",
+      "lunchEnd": "15:00",
+      "dinnerStart": "19:00",
+      "dinnerEnd": "22:30"
+    },
+    "dailyThaliRateRupees": 90,
+    "rules": {
+      "minLeaveDaysForRebate": 3,
+      "rebatePerThaliRupees": 40,
+      "skipAllowancePercent": 50,
+      "allowAbsentRebate": false,
+      "minMonthlyChargeRupees": 500,
+      "securityDepositRupees": 1000
+    },
+    "rating": {
+      "average": 0,
+      "count": 0
+    },
+    "plans": [
+      {
+        "id": 630,
+        "messId": 608,
+        "name": "Monthly (Lunch Only)",
+        "rateRupees": 1800,
+        "meals": [
+          "Lunch"
+        ],
+        "isActive": true
+      },
+      {
+        "id": 629,
+        "messId": 608,
+        "name": "Monthly (Both Meals)",
+        "rateRupees": 3000,
+        "meals": [
+          "Lunch",
+          "Dinner"
+        ],
+        "isActive": true
+      }
+    ]
+  },
+  "PATCH /messes/my-mess": {
+    "id": 608,
+    "ownerId": 1208,
+    "messName": "Contract Mess 1107843",
+    "messImage": null,
+    "address": "FC Road, Shivajinagar",
+    "city": "Pune",
+    "contactPhone": "8110784311",
+    "location": {
+      "longitude": 73.8567,
+      "latitude": 18.5204
+    },
+    "serviceType": "Both Daily & Monthly",
+    "cuisine": "Both",
+    "maxCapacity": 60,
+    "tiffinService": true,
+    "basicThaliDetails": "Two chapati, sabzi, rice, dal",
+    "timings": {
+      "lunchStart": "11:00",
+      "lunchEnd": "15:00",
+      "dinnerStart": "19:00",
+      "dinnerEnd": "22:30"
+    },
+    "dailyThaliRateRupees": 95,
+    "rules": {
+      "minLeaveDaysForRebate": 3,
+      "rebatePerThaliRupees": 40,
+      "skipAllowancePercent": 50,
+      "allowAbsentRebate": false,
+      "minMonthlyChargeRupees": 500,
+      "securityDepositRupees": 1000
+    },
+    "rating": {
+      "average": 0,
+      "count": 0
+    }
+  },
+  "GET /auth/me (manager with a mess)": {
+    "id": 1208,
+    "name": "Contract Manager",
+    "phone": "8110784311",
+    "role": "Manager",
+    "hasMess": true,
+    "messId": 608
+  },
+  "GET /messes/discover": [
+    {
+      "id": 16,
+      "ownerId": 31,
+      "messName": "Open Mess 371979450",
+      "messImage": null,
+      "address": "371979450 Open Mess Road",
+      "city": "Pune",
+      "contactPhone": "9371979455",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 75,
+      "tiffinService": true,
+      "basicThaliDetails": "Roti, sabzi, dal, chawal, salad",
+      "timings": {
+        "lunchStart": "00:00",
+        "lunchEnd": "22:59",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:59"
+      },
+      "dailyThaliRateRupees": 90,
+      "rules": {
+        "minLeaveDaysForRebate": 4,
+        "rebatePerThaliRupees": 50,
+        "skipAllowancePercent": 20,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 1200,
+        "securityDepositRupees": 2000
+      },
+      "rating": {
+        "average": 4,
+        "count": 2
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 33,
+      "ownerId": 69,
+      "messName": "Open Mess 372054466",
+      "messImage": null,
+      "address": "372054466 Open Mess Road",
+      "city": "Pune",
+      "contactPhone": "9372054471",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 75,
+      "tiffinService": true,
+      "basicThaliDetails": "Roti, sabzi, dal, chawal, salad",
+      "timings": {
+        "lunchStart": "00:00",
+        "lunchEnd": "22:59",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:59"
+      },
+      "dailyThaliRateRupees": 90,
+      "rules": {
+        "minLeaveDaysForRebate": 4,
+        "rebatePerThaliRupees": 50,
+        "skipAllowancePercent": 20,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 1200,
+        "securityDepositRupees": 2000
+      },
+      "rating": {
+        "average": 4,
+        "count": 2
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 17,
+      "ownerId": 35,
+      "messName": "Open Mess 372023315",
+      "messImage": null,
+      "address": "372023315 Open Mess Road",
+      "city": "Pune",
+      "contactPhone": "9372023320",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 75,
+      "tiffinService": true,
+      "basicThaliDetails": "Roti, sabzi, dal, chawal, salad",
+      "timings": {
+        "lunchStart": "00:00",
+        "lunchEnd": "22:59",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:59"
+      },
+      "dailyThaliRateRupees": 90,
+      "rules": {
+        "minLeaveDaysForRebate": 4,
+        "rebatePerThaliRupees": 50,
+        "skipAllowancePercent": 20,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 1200,
+        "securityDepositRupees": 2000
+      },
+      "rating": {
+        "average": 4,
+        "count": 2
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 405,
+      "ownerId": 807,
+      "messName": "Contract Mess 3076876",
+      "messImage": null,
+      "address": "FC Road, Shivajinagar",
+      "city": "Pune",
+      "contactPhone": "8307687611",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Both",
+      "maxCapacity": 60,
+      "tiffinService": true,
+      "basicThaliDetails": "Two chapati, sabzi, rice, dal",
+      "timings": {
+        "lunchStart": "11:00",
+        "lunchEnd": "15:00",
+        "dinnerStart": "19:00",
+        "dinnerEnd": "22:30"
+      },
+      "dailyThaliRateRupees": 95,
+      "rules": {
+        "minLeaveDaysForRebate": 3,
+        "rebatePerThaliRupees": 40,
+        "skipAllowancePercent": 50,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 500,
+        "securityDepositRupees": 1000
+      },
+      "rating": {
+        "average": 0,
+        "count": 0
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 404,
+      "ownerId": 803,
+      "messName": "Open Mess 393016028",
+      "messImage": null,
+      "address": "393016028 Open Mess Road",
+      "city": "Pune",
+      "contactPhone": "9393016033",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 75,
+      "tiffinService": true,
+      "basicThaliDetails": "Roti, sabzi, dal, chawal, salad",
+      "timings": {
+        "lunchStart": "00:00",
+        "lunchEnd": "22:59",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:59"
+      },
+      "dailyThaliRateRupees": 90,
+      "rules": {
+        "minLeaveDaysForRebate": 4,
+        "rebatePerThaliRupees": 50,
+        "skipAllowancePercent": 20,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 1200,
+        "securityDepositRupees": 2000
+      },
+      "rating": {
+        "average": 4,
+        "count": 2
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 518,
+      "ownerId": 1033,
+      "messName": "Open Mess 454075811",
+      "messImage": null,
+      "address": "454075811 Open Mess Road",
+      "city": "Pune",
+      "contactPhone": "9454075816",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 75,
+      "tiffinService": true,
+      "basicThaliDetails": "Roti, sabzi, dal, chawal, salad",
+      "timings": {
+        "lunchStart": "00:00",
+        "lunchEnd": "22:59",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:59"
+      },
+      "dailyThaliRateRupees": 90,
+      "rules": {
+        "minLeaveDaysForRebate": 4,
+        "rebatePerThaliRupees": 50,
+        "skipAllowancePercent": 20,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 1200,
+        "securityDepositRupees": 2000
+      },
+      "rating": {
+        "average": 4,
+        "count": 2
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 494,
+      "ownerId": 985,
+      "messName": "Kiosk Mess 3927659",
+      "messImage": null,
+      "address": "Karve Road, Kothrud",
+      "city": "Pune",
+      "contactPhone": "6392765911",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 40,
+      "tiffinService": false,
+      "basicThaliDetails": "Chapati, sabzi, dal, rice, salad",
+      "timings": {
+        "lunchStart": "17:42",
+        "lunchEnd": "19:42",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:30"
+      },
+      "dailyThaliRateRupees": 85,
+      "rules": {
+        "minLeaveDaysForRebate": 3,
+        "rebatePerThaliRupees": 35,
+        "skipAllowancePercent": 50,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": null,
+        "securityDepositRupees": null
+      },
+      "rating": {
+        "average": 0,
+        "count": 0
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 492,
+      "ownerId": 981,
+      "messName": "Contract Mess 3909432",
+      "messImage": null,
+      "address": "FC Road, Shivajinagar",
+      "city": "Pune",
+      "contactPhone": "8390943211",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Both",
+      "maxCapacity": 60,
+      "tiffinService": true,
+      "basicThaliDetails": "Two chapati, sabzi, rice, dal",
+      "timings": {
+        "lunchStart": "11:00",
+        "lunchEnd": "15:00",
+        "dinnerStart": "19:00",
+        "dinnerEnd": "22:30"
+      },
+      "dailyThaliRateRupees": 95,
+      "rules": {
+        "minLeaveDaysForRebate": 3,
+        "rebatePerThaliRupees": 40,
+        "skipAllowancePercent": 50,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 500,
+        "securityDepositRupees": 1000
+      },
+      "rating": {
+        "average": 4,
+        "count": 1
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 493,
+      "ownerId": 983,
+      "messName": "Kiosk Mess 3910341",
+      "messImage": null,
+      "address": "Karve Road, Kothrud",
+      "city": "Pune",
+      "contactPhone": "6391034111",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 40,
+      "tiffinService": false,
+      "basicThaliDetails": "Chapati, sabzi, dal, rice, salad",
+      "timings": {
+        "lunchStart": "17:41",
+        "lunchEnd": "19:41",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:30"
+      },
+      "dailyThaliRateRupees": 85,
+      "rules": {
+        "minLeaveDaysForRebate": 3,
+        "rebatePerThaliRupees": 35,
+        "skipAllowancePercent": 50,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": null,
+        "securityDepositRupees": null
+      },
+      "rating": {
+        "average": 0,
+        "count": 0
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 608,
+      "ownerId": 1208,
+      "messName": "Contract Mess 1107843",
+      "messImage": null,
+      "address": "FC Road, Shivajinagar",
+      "city": "Pune",
+      "contactPhone": "8110784311",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Both",
+      "maxCapacity": 60,
+      "tiffinService": true,
+      "basicThaliDetails": "Two chapati, sabzi, rice, dal",
+      "timings": {
+        "lunchStart": "11:00",
+        "lunchEnd": "15:00",
+        "dinnerStart": "19:00",
+        "dinnerEnd": "22:30"
+      },
+      "dailyThaliRateRupees": 95,
+      "rules": {
+        "minLeaveDaysForRebate": 3,
+        "rebatePerThaliRupees": 40,
+        "skipAllowancePercent": 50,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 500,
+        "securityDepositRupees": 1000
+      },
+      "rating": {
+        "average": 0,
+        "count": 0
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 607,
+      "ownerId": 1204,
+      "messName": "Open Mess 561096076",
+      "messImage": null,
+      "address": "561096076 Open Mess Road",
+      "city": "Pune",
+      "contactPhone": "9561096081",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 75,
+      "tiffinService": true,
+      "basicThaliDetails": "Roti, sabzi, dal, chawal, salad",
+      "timings": {
+        "lunchStart": "00:00",
+        "lunchEnd": "22:59",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:59"
+      },
+      "dailyThaliRateRupees": 90,
+      "rules": {
+        "minLeaveDaysForRebate": 4,
+        "rebatePerThaliRupees": 50,
+        "skipAllowancePercent": 20,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 1200,
+        "securityDepositRupees": 2000
+      },
+      "rating": {
+        "average": 4,
+        "count": 2
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 579,
+      "ownerId": 1148,
+      "messName": "Open Mess 551041348",
+      "messImage": null,
+      "address": "551041348 Open Mess Road",
+      "city": "Pune",
+      "contactPhone": "9551041353",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 75,
+      "tiffinService": true,
+      "basicThaliDetails": "Roti, sabzi, dal, chawal, salad",
+      "timings": {
+        "lunchStart": "00:00",
+        "lunchEnd": "22:59",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:59"
+      },
+      "dailyThaliRateRupees": 90,
+      "rules": {
+        "minLeaveDaysForRebate": 4,
+        "rebatePerThaliRupees": 50,
+        "skipAllowancePercent": 20,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 1200,
+        "securityDepositRupees": 2000
+      },
+      "rating": {
+        "average": 4,
+        "count": 2
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 491,
+      "ownerId": 979,
+      "messName": "Kiosk Mess 3893547",
+      "messImage": null,
+      "address": "Karve Road, Kothrud",
+      "city": "Pune",
+      "contactPhone": "6389354711",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 40,
+      "tiffinService": false,
+      "basicThaliDetails": "Chapati, sabzi, dal, rice, salad",
+      "timings": {
+        "lunchStart": "17:41",
+        "lunchEnd": "19:41",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:30"
+      },
+      "dailyThaliRateRupees": 85,
+      "rules": {
+        "minLeaveDaysForRebate": 3,
+        "rebatePerThaliRupees": 35,
+        "skipAllowancePercent": 50,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": null,
+        "securityDepositRupees": null
+      },
+      "rating": {
+        "average": 0,
+        "count": 0
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 459,
+      "ownerId": 916,
+      "messName": "Kiosk Mess 3515980",
+      "messImage": null,
+      "address": "Karve Road, Kothrud",
+      "city": "Pune",
+      "contactPhone": "6351598011",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 40,
+      "tiffinService": false,
+      "basicThaliDetails": "Chapati, sabzi, dal, rice, salad",
+      "timings": {
+        "lunchStart": "00:55",
+        "lunchEnd": "02:55",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:30"
+      },
+      "dailyThaliRateRupees": 85,
+      "rules": {
+        "minLeaveDaysForRebate": 3,
+        "rebatePerThaliRupees": 35,
+        "skipAllowancePercent": 50,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": null,
+        "securityDepositRupees": null
+      },
+      "rating": {
+        "average": 0,
+        "count": 0
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 457,
+      "ownerId": 910,
+      "messName": "Open Mess 393484627",
+      "messImage": null,
+      "address": "393484627 Open Mess Road",
+      "city": "Pune",
+      "contactPhone": "9393484632",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 75,
+      "tiffinService": true,
+      "basicThaliDetails": "Roti, sabzi, dal, chawal, salad",
+      "timings": {
+        "lunchStart": "00:00",
+        "lunchEnd": "22:59",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:59"
+      },
+      "dailyThaliRateRupees": 90,
+      "rules": {
+        "minLeaveDaysForRebate": 4,
+        "rebatePerThaliRupees": 50,
+        "skipAllowancePercent": 20,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 1200,
+        "securityDepositRupees": 2000
+      },
+      "rating": {
+        "average": 4,
+        "count": 2
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 433,
+      "ownerId": 862,
+      "messName": "Kiosk Mess 3390637",
+      "messImage": null,
+      "address": "Karve Road, Kothrud",
+      "city": "Pune",
+      "contactPhone": "6339063711",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 40,
+      "tiffinService": false,
+      "basicThaliDetails": "Chapati, sabzi, dal, rice, salad",
+      "timings": {
+        "lunchStart": "00:53",
+        "lunchEnd": "02:53",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:30"
+      },
+      "dailyThaliRateRupees": 85,
+      "rules": {
+        "minLeaveDaysForRebate": 3,
+        "rebatePerThaliRupees": 35,
+        "skipAllowancePercent": 50,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": null,
+        "securityDepositRupees": null
+      },
+      "rating": {
+        "average": 0,
+        "count": 0
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 554,
+      "ownerId": 1099,
+      "messName": "Kiosk Mess 0908447",
+      "messImage": null,
+      "address": "Karve Road, Kothrud",
+      "city": "Pune",
+      "contactPhone": "6090844711",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 40,
+      "tiffinService": false,
+      "basicThaliDetails": "Chapati, sabzi, dal, rice, salad",
+      "timings": {
+        "lunchStart": "20:38",
+        "lunchEnd": "22:38",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:30"
+      },
+      "dailyThaliRateRupees": 85,
+      "rules": {
+        "minLeaveDaysForRebate": 3,
+        "rebatePerThaliRupees": 35,
+        "skipAllowancePercent": 50,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": null,
+        "securityDepositRupees": null
+      },
+      "rating": {
+        "average": 0,
+        "count": 0
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 553,
+      "ownerId": 1097,
+      "messName": "Contract Mess 0907324",
+      "messImage": null,
+      "address": "FC Road, Shivajinagar",
+      "city": "Pune",
+      "contactPhone": "8090732411",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Both",
+      "maxCapacity": 60,
+      "tiffinService": true,
+      "basicThaliDetails": "Two chapati, sabzi, rice, dal",
+      "timings": {
+        "lunchStart": "11:00",
+        "lunchEnd": "15:00",
+        "dinnerStart": "19:00",
+        "dinnerEnd": "22:30"
+      },
+      "dailyThaliRateRupees": 95,
+      "rules": {
+        "minLeaveDaysForRebate": 3,
+        "rebatePerThaliRupees": 40,
+        "skipAllowancePercent": 50,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 500,
+        "securityDepositRupees": 1000
+      },
+      "rating": {
+        "average": 4,
+        "count": 1
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 550,
+      "ownerId": 1091,
+      "messName": "Open Mess 454988490",
+      "messImage": null,
+      "address": "454988490 Open Mess Road",
+      "city": "Pune",
+      "contactPhone": "9454988495",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 75,
+      "tiffinService": true,
+      "basicThaliDetails": "Roti, sabzi, dal, chawal, salad",
+      "timings": {
+        "lunchStart": "00:00",
+        "lunchEnd": "22:59",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:59"
+      },
+      "dailyThaliRateRupees": 90,
+      "rules": {
+        "minLeaveDaysForRebate": 4,
+        "rebatePerThaliRupees": 50,
+        "skipAllowancePercent": 20,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 1200,
+        "securityDepositRupees": 2000
+      },
+      "rating": {
+        "average": 4,
+        "count": 2
+      },
+      "distanceMetres": 0
+    },
+    {
+      "id": 380,
+      "ownerId": 753,
+      "messName": "Open Mess 373291017",
+      "messImage": null,
+      "address": "373291017 Open Mess Road",
+      "city": "Pune",
+      "contactPhone": "9373291022",
+      "location": {
+        "longitude": 73.8567,
+        "latitude": 18.5204
+      },
+      "serviceType": "Both Daily & Monthly",
+      "cuisine": "Veg",
+      "maxCapacity": 75,
+      "tiffinService": true,
+      "basicThaliDetails": "Roti, sabzi, dal, chawal, salad",
+      "timings": {
+        "lunchStart": "00:00",
+        "lunchEnd": "22:59",
+        "dinnerStart": "23:00",
+        "dinnerEnd": "23:59"
+      },
+      "dailyThaliRateRupees": 90,
+      "rules": {
+        "minLeaveDaysForRebate": 4,
+        "rebatePerThaliRupees": 50,
+        "skipAllowancePercent": 20,
+        "allowAbsentRebate": false,
+        "minMonthlyChargeRupees": 1200,
+        "securityDepositRupees": 2000
+      },
+      "rating": {
+        "average": 4,
+        "count": 2
+      },
+      "distanceMetres": 0
+    }
+  ],
+  "GET /messes/:id": {
+    "id": 608,
+    "ownerId": 1208,
+    "messName": "Contract Mess 1107843",
+    "messImage": null,
+    "address": "FC Road, Shivajinagar",
+    "city": "Pune",
+    "contactPhone": "8110784311",
+    "location": {
+      "longitude": 73.8567,
+      "latitude": 18.5204
+    },
+    "serviceType": "Both Daily & Monthly",
+    "cuisine": "Both",
+    "maxCapacity": 60,
+    "tiffinService": true,
+    "basicThaliDetails": "Two chapati, sabzi, rice, dal",
+    "timings": {
+      "lunchStart": "11:00",
+      "lunchEnd": "15:00",
+      "dinnerStart": "19:00",
+      "dinnerEnd": "22:30"
+    },
+    "dailyThaliRateRupees": 95,
+    "rules": {
+      "minLeaveDaysForRebate": 3,
+      "rebatePerThaliRupees": 40,
+      "skipAllowancePercent": 50,
+      "allowAbsentRebate": false,
+      "minMonthlyChargeRupees": 500,
+      "securityDepositRupees": 1000
+    },
+    "rating": {
+      "average": 0,
+      "count": 0
+    },
+    "plans": [
+      {
+        "id": 630,
+        "messId": 608,
+        "name": "Monthly (Lunch Only)",
+        "rateRupees": 1800,
+        "meals": [
+          "Lunch"
+        ],
+        "isActive": true
+      },
+      {
+        "id": 629,
+        "messId": 608,
+        "name": "Monthly (Both Meals)",
+        "rateRupees": 3000,
+        "meals": [
+          "Lunch",
+          "Dinner"
+        ],
+        "isActive": true
+      }
+    ],
+    "liveStatus": "Closed",
+    "currentMeal": null
+  },
+  "GET /messes/my-mess/plans": [
+    {
+      "id": 630,
+      "messId": 608,
+      "name": "Monthly (Lunch Only)",
+      "rateRupees": 1800,
+      "meals": [
+        "Lunch"
+      ],
+      "isActive": true
+    },
+    {
+      "id": 629,
+      "messId": 608,
+      "name": "Monthly (Both Meals)",
+      "rateRupees": 3000,
+      "meals": [
+        "Lunch",
+        "Dinner"
+      ],
+      "isActive": true
+    }
+  ],
+  "PATCH /messes/my-mess/plans/:id": {
+    "id": 629,
+    "messId": 608,
+    "name": "Monthly (Both Meals)",
+    "rateRupees": 3200,
+    "meals": [
+      "Lunch",
+      "Dinner"
+    ],
+    "isActive": true
+  },
+  "POST /memberships/join/:messId": {
+    "id": 614,
+    "userId": 1209,
+    "messId": 608,
+    "planId": 629,
+    "planName": "Monthly (Both Meals)",
+    "rateRupees": 3200,
+    "status": "Pending",
+    "joinedDate": null,
+    "discontinuationRequested": false,
+    "messName": "Contract Mess 1107843",
+    "memberName": "Contract Customer",
+    "memberPhone": "9110784322"
+  },
+  "GET /memberships/mess": [
+    {
+      "id": 614,
+      "userId": 1209,
+      "messId": 608,
+      "planId": 629,
+      "planName": "Monthly (Both Meals)",
+      "rateRupees": 3200,
+      "status": "Pending",
+      "joinedDate": null,
+      "discontinuationRequested": false,
+      "messName": "Contract Mess 1107843",
+      "memberName": "Contract Customer",
+      "memberPhone": "9110784322"
+    }
+  ],
+  "POST /memberships/:id/approve": {
+    "id": 614,
+    "userId": 1209,
+    "messId": 608,
+    "planId": 629,
+    "planName": "Monthly (Both Meals)",
+    "rateRupees": 3200,
+    "status": "Active",
+    "joinedDate": "2026-08-13",
+    "discontinuationRequested": false,
+    "messName": "Contract Mess 1107843",
+    "memberName": "Contract Customer",
+    "memberPhone": "9110784322"
+  },
+  "GET /memberships/mine": [
+    {
+      "id": 614,
+      "userId": 1209,
+      "messId": 608,
+      "planId": 629,
+      "planName": "Monthly (Both Meals)",
+      "rateRupees": 3200,
+      "status": "Active",
+      "joinedDate": "2026-08-13",
+      "discontinuationRequested": false,
+      "messName": "Contract Mess 1107843",
+      "memberName": "Contract Customer",
+      "memberPhone": "9110784322"
+    }
+  ],
+  "GET /memberships/:id": {
+    "membership": {
+      "id": 614,
+      "userId": 1209,
+      "messId": 608,
+      "planId": 629,
+      "planName": "Monthly (Both Meals)",
+      "rateRupees": 3200,
+      "status": "Active",
+      "joinedDate": "2026-08-13",
+      "discontinuationRequested": false,
+      "messName": "Contract Mess 1107843",
+      "memberName": "Contract Customer",
+      "memberPhone": "9110784322"
+    },
+    "monthToDate": {
+      "present": 0,
+      "skipped": 0,
+      "leave": 0,
+      "absent": 0
+    },
+    "recentBills": [],
+    "todaysMenu": null
+  },
+  "GET /messes/my-mess/dashboard": {
+    "date": "2026-08-13",
+    "meal": "Lunch",
+    "liveStatus": "Closed",
+    "currentMeal": null,
+    "nextMeal": "Lunch",
+    "nextMealIsTomorrow": false,
+    "counts": {
+      "eligible": 1,
+      "eating": 0,
+      "skipped": 0,
+      "onLeave": 0,
+      "absent": 0,
+      "remaining": 1,
+      "walkins": 0
+    },
+    "todaysMenu": null
+  },
+  "GET /messes/my-mess/dashboard/members": [
+    {
+      "membershipId": 614,
+      "userId": 1209,
+      "name": "Contract Customer",
+      "phone": "9110784322",
+      "status": "Remaining"
+    }
+  ],
+  "PUT /menus/my-mess": {
+    "id": 34,
+    "serviceDate": "2026-08-12",
+    "lunchItems": [
+      "Paneer",
+      "Rice"
+    ],
+    "dinnerItems": [
+      "Dal",
+      "Roti"
+    ]
+  },
+  "GET /menus/:messId": [],
+  "POST /leave/:membershipId": {
+    "id": 224,
+    "membershipId": 614,
+    "startDate": "2026-08-14",
+    "endDate": "2026-08-17",
+    "reason": "Travelling home",
+    "mealsMarked": 8
+  },
+  "GET /leave/:membershipId": [
+    {
+      "id": 224,
+      "membershipId": 614,
+      "startDate": "2026-08-14",
+      "endDate": "2026-08-17",
+      "reason": "Travelling home"
+    }
+  ],
+  "POST /attendance/:membershipId/skip": {
+    "serviceDate": "2026-08-13",
+    "meal": "Lunch",
+    "status": "Skipped"
+  },
+  "GET /attendance/:membershipId/calendar": {
+    "month": 8,
+    "year": 2026,
+    "days": [
+      {
+        "date": "2026-08-13",
+        "meals": {
+          "Lunch": "Skipped"
+        }
+      },
+      {
+        "date": "2026-08-14",
+        "meals": {
+          "Lunch": "Leave",
+          "Dinner": "Leave"
+        }
+      },
+      {
+        "date": "2026-08-15",
+        "meals": {
+          "Lunch": "Leave",
+          "Dinner": "Leave"
+        }
+      },
+      {
+        "date": "2026-08-16",
+        "meals": {
+          "Lunch": "Leave",
+          "Dinner": "Leave"
+        }
+      },
+      {
+        "date": "2026-08-17",
+        "meals": {
+          "Lunch": "Leave",
+          "Dinner": "Leave"
+        }
+      }
+    ]
+  },
+  "PUT /reviews/:messId": {
+    "id": 44,
+    "rating": 4,
+    "comment": "Good food, fair rebates.",
+    "authorName": "Contract Customer",
+    "createdAt": "2026-08-12T18:58:28.602Z",
+    "updatedAt": "2026-08-12T18:58:28.602Z"
+  },
+  "GET /reviews/:messId": [
+    {
+      "id": 44,
+      "rating": 4,
+      "comment": "Good food, fair rebates.",
+      "authorName": "Contract Customer",
+      "createdAt": "2026-08-12T18:58:28.602Z",
+      "updatedAt": "2026-08-12T18:58:28.602Z"
+    }
+  ],
+  "GET /reviews/:messId/mine": {
+    "id": 44,
+    "rating": 4,
+    "comment": "Good food, fair rebates.",
+    "authorName": "Contract Customer",
+    "createdAt": "2026-08-12T18:58:28.602Z",
+    "updatedAt": "2026-08-12T18:58:28.602Z"
+  },
+  "POST /memberships/:id/discontinue": {
+    "membershipId": 614,
+    "requestedOn": "2026-08-13",
+    "bill": {
+      "id": 475,
+      "membershipId": 614,
+      "messId": 608,
+      "period": "2026-08-01",
+      "baseRupees": 0,
+      "rebateRupees": 0,
+      "totalRupees": 0,
+      "status": "Due",
+      "hasPaymentProof": false,
+      "createdAt": "2026-08-12T18:58:28.623Z",
+      "updatedAt": "2026-08-12T18:58:28.623Z"
+    }
+  },
+  "GET /billing/membership/:id": [
+    {
+      "id": 475,
+      "membershipId": 614,
+      "messId": 608,
+      "period": "2026-08-01",
+      "baseRupees": 0,
+      "rebateRupees": 0,
+      "totalRupees": 0,
+      "status": "Due",
+      "hasPaymentProof": false,
+      "createdAt": "2026-08-12T18:58:28.623Z",
+      "updatedAt": "2026-08-12T18:58:28.623Z"
+    }
+  ],
+  "GET /billing/mess": [
+    {
+      "id": 475,
+      "membershipId": 614,
+      "messId": 608,
+      "period": "2026-08-01",
+      "baseRupees": 0,
+      "rebateRupees": 0,
+      "totalRupees": 0,
+      "status": "Due",
+      "hasPaymentProof": false,
+      "memberName": "Contract Customer",
+      "memberPhone": "9110784322",
+      "createdAt": "2026-08-12T18:58:28.623Z",
+      "updatedAt": "2026-08-12T18:58:28.623Z"
+    }
+  ],
+  "GET /billing/:id/history": {
+    "bill": {
+      "id": 475,
+      "membershipId": 614,
+      "messId": 608,
+      "period": "2026-08-01",
+      "baseRupees": 0,
+      "rebateRupees": 0,
+      "totalRupees": 0,
+      "status": "Due",
+      "hasPaymentProof": false,
+      "memberName": "Contract Customer",
+      "memberPhone": "9110784322",
+      "createdAt": "2026-08-12T18:58:28.623Z",
+      "updatedAt": "2026-08-12T18:58:28.623Z"
+    },
+    "events": []
+  },
+  "POST /attendance/kiosk/mark": {
+    "membershipId": 615,
+    "serviceDate": "2026-08-13",
+    "meal": "Lunch",
+    "status": "Present"
+  },
+  "POST /attendance/kiosk/walkin": {
+    "serviceDate": "2026-08-13",
+    "meal": "Lunch",
+    "quantity": 2,
+    "totalRupees": 170
+  }
+}

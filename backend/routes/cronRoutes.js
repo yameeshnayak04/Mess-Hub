@@ -1,24 +1,16 @@
-// routes/cronRoutes.js (keep as is, summarized)
-const router = require('express').Router();
-const { runBillingJob } = require('../jobs/billingJob.js');
-const { runAbsentJob } = require('../jobs/absentJob.js');
+// new_backend/routes/cronRoutes.js
+//
+// Called by an external scheduler rather than by a logged-in user, so these
+// are guarded by a shared secret instead of a JWT.
+const express = require('express');
 
-router.use((req, res, next) => {
-  const key = req.header('x-cron-secret');
-  if (!key || key !== process.env.CRON_SECRET) {
-    return res.status(401).json({ success: false, message: 'Unauthorized' });
-  }
-  next();
-});
+const asyncHandler = require('../middleware/asyncHandler');
+const cronController = require('../controllers/cronController');
 
-router.post('/absent/run', async (_req, res, next) => {
-  try { await runAbsentJob(); res.json({ success: true, message: 'Absent job executed' }); }
-  catch (e) { next(e); }
-});
+const router = express.Router();
 
-router.post('/billing/run', async (_req, res, next) => {
-  try { await runBillingJob(); res.json({ success: true, message: 'Monthly billing job executed' }); }
-  catch (e) { next(e); }
-});
+router.use(cronController.verifyCronSecret);
+router.post('/absence', asyncHandler(cronController.runAbsenceJob));
+router.post('/billing', asyncHandler(cronController.runBillingJob));
 
 module.exports = router;

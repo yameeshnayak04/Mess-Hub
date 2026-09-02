@@ -5,6 +5,8 @@ import 'package:mess_management_app/features/customer/membership/providers/membe
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../models/attendance.dart';
+import '../../../../models/mess.dart';
 import '../providers/attendance_providers.dart';
 
 class AttendanceCalendarScreen extends ConsumerStatefulWidget {
@@ -54,12 +56,18 @@ class _AttendanceCalendarScreenState
     });
   }
 
-  List<String> _mealsFromPlan(String planName) {
-    final p = planName.toLowerCase();
-    if (p.contains('both')) return const ['Lunch', 'Dinner'];
-    if (p.contains('lunch')) return const ['Lunch'];
-    if (p.contains('dinner')) return const ['Dinner'];
-    return const ['Lunch', 'Dinner'];
+  /// Flattens the day-grouped calendar into the one-row-per-meal shape the
+  /// rest of this screen renders from.
+  List<Map<String, dynamic>> _flatten(AttendanceCalendar calendar) {
+    final entries = <Map<String, dynamic>>[];
+    for (final day in calendar.days) {
+      final date = day.dateTime;
+      if (date == null) continue;
+      day.meals.forEach((meal, status) {
+        entries.add({'date': date, 'mealType': meal, 'status': status});
+      });
+    }
+    return entries;
   }
 
   Color _colorFor(String? status) {
@@ -170,17 +178,27 @@ class _AttendanceCalendarScreenState
             ),
           );
         },
-        data: (list) {
-          final planName = membershipAsync.maybeWhen(
-            data: (d) => (d['membership']?['planName'] as String?) ?? '',
-            orElse: () => '',
+        data: (calendar) {
+          // The plan itself says which meals it covers - no guessing from its
+          // name any more. Until the mess loads we assume both meals, which
+          // only ever shows what the calendar already returned.
+          final MessPlan? plan = membershipAsync.maybeWhen(
+            data: (details) => ref
+                .watch(messByIdProvider(details.membership.messId))
+                .maybeWhen(
+                  data: (mess) => mess.plans
+                      .where((p) => p.id == details.membership.planId)
+                      .firstOrNull,
+                  orElse: () => null,
+                ),
+            orElse: () => null,
           );
-          final allowedMeals = _mealsFromPlan(planName);
+          final planName = plan?.name ?? '';
+          final allowedMeals = plan?.meals ?? const ['Lunch', 'Dinner'];
 
-          final filtered = list.where((e) {
-            final meal = (e['mealType'] as String?)?.trim();
-            return meal == null || meal.isEmpty || allowedMeals.contains(meal);
-          }).toList();
+          final filtered = _flatten(calendar)
+              .where((e) => allowedMeals.contains(e['mealType']))
+              .toList();
 
           final entriesByDate = _groupEntriesByDate(filtered);
           final counts = _computeCounts(filtered);
@@ -485,23 +503,22 @@ class _AttendanceCalendarScreenState
     );
   }
 
+  // Takes the flattened entries from [_flatten], so the shape is known - no
+  // `dynamic` and no casts, which is what let a wrong type slip through here
+  // unnoticed before.
   Map<DateTime, List<Map<String, dynamic>>> _groupEntriesByDate(
-      List<dynamic> entries) {
+      List<Map<String, dynamic>> entries) {
     final map = <DateTime, List<Map<String, dynamic>>>{};
     for (final e in entries) {
-      try {
-        final d = DateTime.parse(e['date'] as String).toLocal();
-        final key = DateTime(d.year, d.month, d.day);
-        map[key] = map[key] ?? [];
-        map[key]!.add(e as Map<String, dynamic>);
-      } catch (err) {
-        debugPrint('Error parsing entry: $err');
-      }
+      final d = e['date'] as DateTime;
+      final key = DateTime(d.year, d.month, d.day);
+      map[key] = map[key] ?? [];
+      map[key]!.add(e);
     }
     return map;
   }
 
-  Map<String, int> _computeCounts(List<dynamic> entries) {
+  Map<String, int> _computeCounts(List<Map<String, dynamic>> entries) {
     final result = {'Present': 0, 'Skipped': 0, 'Leave': 0, 'Absent': 0};
     for (final e in entries) {
       final status = e['status'] as String?;

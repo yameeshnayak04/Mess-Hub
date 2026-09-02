@@ -1,42 +1,81 @@
-import 'package:dio/dio.dart';
+// lib/features/customer/membership/repositories/reviews_repository.dart
 import '../../../../core/api/dio_client.dart';
+import '../../../../models/review.dart';
+
+/// A page of reviews plus the mess's overall average, which the backend keeps
+/// denormalised and returns in `meta`.
+class ReviewPage {
+  final List<Review> reviews;
+  final double averageRating;
+  final int total;
+
+  ReviewPage({
+    required this.reviews,
+    required this.averageRating,
+    required this.total,
+  });
+}
 
 class ReviewsRepository {
   final DioClient _dio;
   ReviewsRepository(this._dio);
 
-  Future<Map?> getMyReview(String messId) async {
-    final res = await _dio.get('/reviews/$messId/me');
-    if (res.statusCode == 200) {
-      return (res.data is Map) ? (res.data['data'] as Map?) : null;
+  /// The current customer's own review, or null if they have not left one.
+  /// Note the path is `/mine`, not the old `/me`.
+  Future<Review?> getMyReview(String messId) async {
+    try {
+      final res = await _dio.get('/reviews/$messId/mine');
+      final data = DioClient.unwrap(res);
+      if (data == null) return null;
+      return Review.fromJson(Map<String, dynamic>.from(data as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
-    throw Exception('Failed to fetch review');
   }
 
-  Future<Map> upsertReview({
+  /// Writes or edits in one call - a customer has at most one review per
+  /// mess, so there is no separate "add" and "update".
+  Future<Review> upsertReview({
     required String messId,
     required int rating,
-    required String comment,
+    String? comment,
   }) async {
-    final res = await _dio.put('/reviews/$messId', data: {
-      'rating': rating,
-      'comment': comment,
-    });
-    if (res.statusCode == 200 || res.statusCode == 201) {
-      return (res.data as Map)['data'] as Map;
+    try {
+      final res = await _dio.put('/reviews/$messId', data: {
+        'rating': rating,
+        if (comment != null && comment.trim().isNotEmpty)
+          'comment': comment.trim(),
+      });
+      return Review.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
-    throw Exception(
-        ((res.data as Map?)?['message'] as String?) ?? 'Failed to save review');
   }
 
-  Future<List<Map>> getReviews(String messId,
-      {int page = 1, int limit = 10}) async {
-    final res = await _dio.get('/reviews/$messId',
-        queryParameters: {'page': page, 'limit': limit});
-    if (res.statusCode == 200) {
-      final data = (res.data as Map)['data'] as List? ?? [];
-      return data.cast<Map>();
+  Future<ReviewPage> getReviews(
+    String messId, {
+    int page = 1,
+    int limit = 10,
+  }) async {
+    try {
+      final res = await _dio.get(
+        '/reviews/$messId',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      final result = DioClient.unwrapWithMeta(res);
+      final reviews = (result.data as List)
+          .whereType<Map>()
+          .map((e) => Review.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+      final meta = result.meta ?? const <String, dynamic>{};
+      return ReviewPage(
+        reviews: reviews,
+        averageRating: (meta['averageRating'] as num?)?.toDouble() ?? 0,
+        total: (meta['total'] as num?)?.toInt() ?? reviews.length,
+      );
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
-    throw Exception('Failed to load reviews');
   }
 }

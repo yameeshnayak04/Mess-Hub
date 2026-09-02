@@ -1,146 +1,73 @@
-// jobs/billingJob.js
-const mongoose = require('mongoose');
-const Bill = require('../models/Bill');
-const Membership = require('../models/Membership');
-const Mess = require('../models/Mess');
-const Attendance = require('../models/Attendance');
-const connectDB = require('../config/db');
-const { getStartAndEndOfMonth, calculateMonthlyBillForMember } = require('../utils/billCalculation');
+// new_backend/jobs/billingJob.js
+//
+// Runs on the 1st of each month and bills everyone for the month just gone.
 
-const TZ_OFFSET_MINUTES = parseInt(process.env.TZ_OFFSET_MINUTES || '330', 10);
+const knex = require('../db/knex');
+const billingService = require('../services/billingService');
+const { runTrackedJob } = require('./jobRunner');
+const { getTodayInIndia } = require('../services/messClock');
+const { addMonths, firstDayOfMonth } = require('../utils/dates');
 
-function getLocalYearMonth(offsetMin = TZ_OFFSET_MINUTES, now = new Date()) {
-  // Shift the current instant by offsetMin and read as UTC fields.
-  // This yields a stable "local" year/month regardless of server timezone.
-  const local = new Date(now.getTime() + offsetMin * 60 * 1000);
-  return { year: local.getUTCFullYear(), monthIndex0: local.getUTCMonth() };
+// Who gets billed for a month: anyone whose membership *overlapped* that
+// month, not just those who are Active right now.
+//
+// The difference matters. Someone who left on the 20th of last month is
+// already Inactive by the time this runs on the 1st, so filtering on current
+// status would skip them forever. Selecting on the date range instead means
+// this job doubles as a safety net: if the partial bill created when they
+// asked to leave failed for any reason, this run still catches it. Re-billing
+// someone who was already billed is harmless because generateBillForMembership
+// refuses to touch a bill that is already Paid or awaiting approval.
+async function findMembershipsToBill(periodStart, periodEnd) {
+  const rows = await knex('memberships')
+    .select('id')
+    .whereRaw('active_period && daterange(?::date, ?::date, ?)', [periodStart, periodEnd, '[)'])
+    .orderBy('id');
+  return rows.map((row) => row.id);
 }
 
-async function upsertBill({ member, mess, month, year, breakdown, session }) {
-  const existing = await Bill.findOne({
-    user: member.user,
-    mess: mess._id,
-    month,
-    year,
-  }).session(session);
+async function generateMonthlyBills({ periodStart } = {}) {
+  const today = await getTodayInIndia();
+  // Default: the month that just ended.
+  const start = periodStart || addMonths(firstDayOfMonth(today), -1);
+  const end = addMonths(start, 1);
 
-  if (existing) {
-    existing.baseAmount = breakdown.baseAmount;
-    existing.rebateAmount = breakdown.rebateAmount;
-    existing.totalAmount = breakdown.finalAmount; // totalAmount holds final payable
-    // Preserve Paid / Pending
-    if (!['Paid', 'Pending Approval'].includes(existing.status)) {
-      existing.status = 'Due';
-    }
-    await existing.save({ session });
-  } else {
-    await Bill.create(
-      [
-        {
-          user: member.user,
-          mess: mess._id,
-          month,
-          year,
-          baseAmount: breakdown.baseAmount,
-            rebateAmount: breakdown.rebateAmount,
-          totalAmount: breakdown.finalAmount,
-          status: 'Due',
-        },
-      ],
-      { session }
-    );
-  }
-}
+  return runTrackedJob('monthly_billing', start, async () => {
+    const membershipIds = await findMembershipsToBill(start, end);
 
-async function processMessForPeriod(mess, billingMonth, billingYear, startOfMonth, endOfMonth) {
-  const session = await mongoose.startSession();
-  try {
-    let processed = 0;
-    await session.withTransaction(async () => {
-      const members = await Membership.find({
-        mess: mess._id,
-        status: 'Active',
-      }).session(session);
+    const succeeded = [];
+    const failed = [];
 
-      for (const member of members) {
-        // Calculate attendance-based bill
-        const breakdown = await calculateMonthlyBillForMember({
-          member,
-          mess,
-          month: billingMonth,
-          year: billingYear,
-          AttendanceModel: Attendance,
+    // Deliberately one transaction per membership rather than one giant one.
+    // If a single member has incomplete attendance, only their bill fails -
+    // everyone else's still gets written. One long transaction would roll the
+    // whole month back because of one member, and would likely hit Postgres'
+    // transaction time limits on a large mess.
+    for (const membershipId of membershipIds) {
+      try {
+        await knex.transaction(async (trx) => {
+          await billingService.generateBillForMembership(trx, {
+            membershipId,
+            periodStart: start,
+          });
         });
-
-        // If baseAmount zero, skip (no plan rate)
-        if (!breakdown.baseAmount) continue;
-
-        // Persist membership.billingRate if just derived
-        if (!member.billingRate && breakdown.baseAmount) {
-          member.billingRate = breakdown.baseAmount;
-          await member.save({ session });
-        }
-
-        await upsertBill({
-          member,
-          mess,
-          month: billingMonth,
-          year: billingYear,
-          breakdown,
-          session,
-        });
-        processed++;
+        succeeded.push(membershipId);
+      } catch (error) {
+        failed.push({ membershipId, reason: error.message });
       }
-    });
+    }
+
+    if (failed.length > 0) {
+      console.warn(`[billing] ${failed.length} membership(s) could not be billed for ${start}`);
+    }
 
     return {
-      success: true,
-      messId: mess._id,
-      messName: mess.messName,
-      membersProcessed: processed,
+      rowsAffected: succeeded.length,
+      period: start,
+      billed: succeeded.length,
+      failed,
     };
-  } catch (err) {
-    return { success: false, messId: mess._id, messName: mess.messName, error: err.message };
-  } finally {
-    await session.endSession();
-  }
+  });
 }
 
-/**
- * Monthly billing job: previous calendar month only.
- */
-async function runBillingJob() {
-  await connectDB();
-  console.log('--- JOB: Monthly Billing (Attendance-Based) ---');
-
-  const now = new Date();
-  // Compute previous month using "local" calendar (IST by default), not server timezone.
-  const { year: localYear, monthIndex0: localMonth0 } = getLocalYearMonth(TZ_OFFSET_MINUTES, now);
-  const prevMonthDateLocal = new Date(Date.UTC(localYear, localMonth0, 0));
-  const billingMonth = prevMonthDateLocal.getUTCMonth() + 1; // 1..12
-  const billingYear = prevMonthDateLocal.getUTCFullYear();
-  const { startOfMonth, endOfMonth } = getStartAndEndOfMonth(billingMonth, billingYear);
-
-  const messes = await Mess.find({});
-  const results = [];
-
-  for (const mess of messes) {
-    const r = await processMessForPeriod(
-      mess,
-      billingMonth,
-      billingYear,
-      startOfMonth,
-      endOfMonth
-    );
-    results.push(r);
-  }
-
-  const ok = results.filter((r) => r.success).length;
-  const fail = results.length - ok;
-  console.log(`[Billing Job] Completed. Success: ${ok}, Failed: ${fail}`);
-  if (fail) console.error('[Billing Job] Failures:', results.filter((r) => !r.success));
-
-  return results;
-}
-
-module.exports = { runBillingJob };
+module.exports = { generateMonthlyBills };

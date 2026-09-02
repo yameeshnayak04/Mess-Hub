@@ -1,7 +1,10 @@
 // lib/features/manager/dashboard/providers/dashboard_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/api/dio_client_provider.dart';
+import '../../../../models/bill.dart';
 import '../../../../models/dashboard_stats.dart';
+import '../../../../models/membership.dart';
+import '../../../../models/menu.dart';
 import '../repositories/dashboard_repository.dart';
 
 // lib/features/manager/dashboard/providers/dashboard_provider.dart
@@ -37,32 +40,31 @@ class DashboardStatsNotifier extends StateNotifier<AsyncValue<DashboardStats>> {
 
   Future<void> refresh() async => loadStats();
 
-  Future<List<Map<String, dynamic>>> getMembersEating(String mealType) =>
-      _repository.getMembersEating(mealType);
+  Future<List<DashboardMember>> getMembersEating(String meal) =>
+      _repository.getMembersEating(meal: meal);
 
-  Future<List<Map<String, dynamic>>> getMembersOnLeave(String mealType) =>
-      _repository.getMembersOnLeave(mealType);
+  Future<List<DashboardMember>> getMembersOnLeave(String meal) =>
+      _repository.getMembersOnLeave(meal: meal);
 
-  Future<List<Map<String, dynamic>>> getMembersSkipped(String mealType) =>
-      _repository.getMembersSkipped(mealType);
+  Future<List<DashboardMember>> getMembersSkipped(String meal) =>
+      _repository.getMembersSkipped(meal: meal);
 
-  Future<List<Map<String, dynamic>>> getMembersRemaining(String mealType) =>
-      _repository.getMembersRemaining(mealType);
+  Future<List<DashboardMember>> getMembersRemaining(String meal) =>
+      _repository.getMembersRemaining(meal: meal);
 }
 
 // Lists for action center
 final pendingApprovalsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+    FutureProvider.autoDispose<List<Bill>>((ref) async {
   return ref.watch(dashboardRepositoryProvider).getPendingApprovals();
 });
 
 final pendingJoinRequestsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+    FutureProvider.autoDispose<List<Membership>>((ref) async {
   return ref.watch(dashboardRepositoryProvider).getPendingJoinRequests();
 });
 
 // Today’s menu
-final todaysMenuProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
+final todaysMenuProvider = FutureProvider.autoDispose<Menu?>((ref) async {
   return ref.watch(dashboardRepositoryProvider).getTodaysMenu();
 });

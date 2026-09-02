@@ -2,46 +2,71 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/api/dio_client_provider.dart';
 import '../../../../models/membership.dart';
+import '../../../../models/mess.dart';
+import '../../discover/repositories/discover_repository.dart';
 import '../repositories/membership_repository.dart';
 
 final membershipRepositoryProvider = Provider((ref) {
   return MembershipRepository(ref.watch(dioClientProvider));
 });
 
-// Auto-dispose to prevent stale data when customer shell is not visible
-final membershipProvider = StateNotifierProvider.autoDispose<MembershipNotifier,
-    AsyncValue<List<Membership>>>((ref) {
-  return MembershipNotifier(ref.watch(membershipRepositoryProvider));
+final _messLookupRepositoryProvider = Provider((ref) {
+  return DiscoverRepository(ref.watch(dioClientProvider));
 });
 
-class MembershipNotifier extends StateNotifier<AsyncValue<List<Membership>>> {
+/// A membership plus the mess it belongs to.
+///
+/// The membership payload carries only `messId`/`messName` now - it does not
+/// embed the whole mess - but the home card needs the mess's meal timings and
+/// rating, so we fetch them alongside.
+class MembershipWithMess {
+  final Membership membership;
+  final Mess? mess;
+
+  const MembershipWithMess({required this.membership, this.mess});
+
+  /// The plan's CURRENT price, straight from the last fetch. Deliberately not
+  /// cached anywhere: a manager can change a plan's rate and it applies to
+  /// existing members from their next bill.
+  double get rateRupees => membership.rateRupees;
+}
+
+// Auto-dispose to prevent stale data when customer shell is not visible
+final membershipProvider = StateNotifierProvider.autoDispose<MembershipNotifier,
+    AsyncValue<List<MembershipWithMess>>>((ref) {
+  return MembershipNotifier(
+    ref.watch(membershipRepositoryProvider),
+    ref.watch(_messLookupRepositoryProvider),
+  );
+});
+
+class MembershipNotifier
+    extends StateNotifier<AsyncValue<List<MembershipWithMess>>> {
   final MembershipRepository _repository;
-  MembershipNotifier(this._repository) : super(const AsyncValue.loading()) {
+  final DiscoverRepository _messRepository;
+
+  MembershipNotifier(this._repository, this._messRepository)
+      : super(const AsyncValue.loading()) {
     loadMemberships();
   }
 
   Future<void> loadMemberships() async {
     state = const AsyncValue.loading();
     try {
-      final base = await _repository.getMyMemberships();
+      final memberships = await _repository.getMyMemberships();
 
-      // Enrich mess ratings in parallel for memberships that have mess populated
-      final futures = base.map((mem) async {
-        if (mem.messObject == null) return mem;
+      // Fetch each mess in parallel. A failure here is not fatal - the card
+      // still renders from the membership alone, just without timings.
+      final loaded = await Future.wait(memberships.map((membership) async {
         try {
-          final rating = await _repository.getMessRating(mem.messObject!.id);
-          final updatedMess = mem.messObject!.copyWith(
-            averageRating: rating['averageRating'] as double?,
-            reviewCount: rating['reviewCount'] as int?,
-          );
-          return mem.copyWith(mess: updatedMess);
+          final mess = await _messRepository.getMessById(membership.messId);
+          return MembershipWithMess(membership: membership, mess: mess);
         } catch (_) {
-          return mem; // keep original if rating fetch fails
+          return MembershipWithMess(membership: membership);
         }
-      }).toList();
+      }));
 
-      final enriched = await Future.wait(futures);
-      state = AsyncValue.data(enriched);
+      state = AsyncValue.data(loaded);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }

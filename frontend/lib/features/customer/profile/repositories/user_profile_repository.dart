@@ -1,34 +1,34 @@
 // lib/features/customer/profile/repositories/user_profile_repository.dart
 import '../../../../core/api/dio_client.dart';
-import 'package:dio/dio.dart';
+import '../../../../models/user.dart';
 
 class UserProfileRepository {
-  final DioClient dio;
-  UserProfileRepository(this.dio);
+  final DioClient _dio;
+  UserProfileRepository(this._dio);
 
-  String _msg(Response res) {
-    final d = res.data;
-    if (d is Map &&
-        d['message'] is String &&
-        (d['message'] as String).isNotEmpty) return d['message'];
-    if (d is Map && d['error'] is String && (d['error'] as String).isNotEmpty)
-      return d['error'];
-    return 'Failed to update profile';
+  Future<User> getProfile() async {
+    try {
+      final res = await _dio.get('/auth/me');
+      return User.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
   }
 
-  // Update any subset of fields; backend supports name and (for customers) pin
-  Future<Map<String, dynamic>> updateProfile(
-      {String? name, String? pin}) async {
-    final body = <String, dynamic>{};
-    if (name != null) body['name'] = name;
-    if (pin != null) body['pin'] = pin;
-
-    final res = await dio.put('/users/profile/me', data: body);
-    if (res.statusCode != 200) {
-      throw _msg(res);
+  /// PATCH /auth/me - the profile route moved off /users and became a partial
+  /// update. Only a customer may set a kiosk PIN; the backend rejects it for
+  /// managers.
+  Future<User> updateProfile({String? name, String? pin}) async {
+    try {
+      final res = await _dio.patch('/auth/me', data: {
+        if (name != null) 'name': name,
+        if (pin != null) 'pin': pin,
+      });
+      return User.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
-    final data = res.data;
-    if (data is Map<String, dynamic>) return data;
-    return {'success': true};
   }
 }

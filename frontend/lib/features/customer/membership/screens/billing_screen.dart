@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/primary_button.dart';
+import '../../../../models/bill.dart';
 import '../providers/billing_providers.dart';
 
 class BillingScreen extends ConsumerWidget {
@@ -137,23 +138,19 @@ class BillingScreen extends ConsumerWidget {
 
           // Separate bills by status
           final dueBills = list
-              .where((b) => (b as Map)['status'] == 'Due')
-              .cast<Map<String, dynamic>>()
+              .where((b) => b.isDue)
               .toList();
           final pendingBills = list
-              .where((b) => (b as Map)['status'] == 'Pending Approval')
-              .cast<Map<String, dynamic>>()
+              .where((b) => b.isAwaitingApproval)
               .toList();
           final paidBills = list
-              .where((b) => (b as Map)['status'] == 'Paid')
-              .cast<Map<String, dynamic>>()
+              .where((b) => b.isPaid)
               .toList();
 
           // Calculate total due
           final totalDue = dueBills.fold<double>(
             0,
-            (sum, bill) =>
-                sum + ((bill['totalAmount'] as num?)?.toDouble() ?? 0),
+            (sum, bill) => sum + bill.totalRupees,
           );
 
           return RefreshIndicator(
@@ -453,8 +450,7 @@ class BillingScreen extends ConsumerWidget {
     );
   }
 
-  void _showPaymentDialog(
-      BuildContext context, WidgetRef ref, Map<String, dynamic> bill) {
+  void _showPaymentDialog(BuildContext context, WidgetRef ref, Bill bill) {
     File? selectedImage;
     bool isUploading = false;
 
@@ -536,7 +532,7 @@ class BillingScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '₹${((bill['totalAmount'] as num?)?.toDouble() ?? 0).toStringAsFixed(0)}',
+                      '₹${bill.totalRupees.toStringAsFixed(0)}',
                       style: Theme.of(context).textTheme.displaySmall?.copyWith(
                             color: AppTheme.primaryOrange,
                             fontWeight: FontWeight.bold,
@@ -694,8 +690,9 @@ class BillingScreen extends ConsumerWidget {
                           await ref
                               .read(billingRepositoryProvider)
                               .submitPaymentProof(
-                                  billId: bill['_id'] as String,
-                                  file: selectedImage!);
+                                  billId: bill.id,
+                                  filePath: selectedImage!.path,
+                                  fileName: selectedImage!.path.split(Platform.pathSeparator).last);
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -756,16 +753,17 @@ class BillingScreen extends ConsumerWidget {
 }
 
 class _BillCard extends StatelessWidget {
-  final Map<String, dynamic> bill;
+  final Bill bill;
   final VoidCallback onPay;
   const _BillCard({required this.bill, required this.onPay});
 
   @override
   Widget build(BuildContext context) {
-    final monthName = DateFormat('MMMM').format(
-      DateTime(bill['year'], bill['month']),
-    );
-    final status = bill['status'] as String;
+    // `period` is the first day of the billed month, as a plain calendar date.
+    final periodDate = bill.periodDate;
+    final monthName =
+        periodDate != null ? DateFormat('MMMM').format(periodDate) : '-';
+    final status = bill.status;
     final statusColor = _statusColor(status);
     final statusIcon = _statusIcon(status);
 
@@ -806,14 +804,14 @@ class _BillCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '$monthName ${bill['year']}',
+                        '$monthName ${periodDate?.year ?? ''}',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'ID: ${bill['_id']?.substring(bill['_id'].length - 8) ?? 'N/A'}',
+                        'ID: ${bill.id}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: AppTheme.textSecondary,
                               fontFamily: 'monospace',
@@ -867,17 +865,15 @@ class _BillCard extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  _buildBillRow(
-                      context, 'Base Amount', bill['baseAmount'] ?? 0),
+                  _buildBillRow(context, 'Base Amount', bill.baseRupees),
                   const SizedBox(height: 12),
-                  _buildBillRow(context, 'Rebate', -(bill['rebateAmount'] ?? 0),
+                  _buildBillRow(context, 'Rebate', -bill.rebateRupees,
                       isNegative: true),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     child: Divider(height: 1, color: Colors.grey.shade300),
                   ),
-                  _buildBillRow(
-                      context, 'Total Amount', bill['totalAmount'] ?? 0,
+                  _buildBillRow(context, 'Total Amount', bill.totalRupees,
                       isTotal: true),
                 ],
               ),

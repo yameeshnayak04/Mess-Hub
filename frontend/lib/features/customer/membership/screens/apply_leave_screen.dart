@@ -41,12 +41,14 @@ class _ApplyLeaveScreenState extends ConsumerState<ApplyLeaveScreen> {
         membershipDetailsProvider(widget.membershipId).future,
       );
 
-      final rules = (details['membership']?['mess']?['rules'] as Map?) ?? {};
+      // The membership payload carries only the mess id, so the rules come
+      // from a separate mess fetch.
+      final mess =
+          await ref.read(messByIdProvider(details.membership.messId).future);
 
       if (mounted) {
         setState(() {
-          final raw = rules['minLeaveDaysForRebate'];
-          _minLeaveDaysForRebate = raw is int ? raw : int.tryParse('$raw');
+          _minLeaveDaysForRebate = mess.rules.minLeaveDaysForRebate;
           _rulesLoaded = true;
         });
       }

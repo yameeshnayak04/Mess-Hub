@@ -1,174 +1,23 @@
-const Review = require('../models/Review');
-const Mess = require('../models/Mess');
-const Membership = require('../models/Membership');
-const mongoose = require('mongoose');
+// new_backend/controllers/reviewController.js
+const reviewService = require('../services/reviewService');
+const { readPagination } = require('../utils/pagination');
 
-// @desc    Add review for a mess
-// @route   POST /api/reviews/:messId
-// @access  Private (Customer only)
-exports.addReview = async (req, res, next) => {
-  try {
-    const { messId } = req.params;
-    const { rating, comment } = req.body;
+async function listReviews(req, res) {
+  const { page, limit, offset } = readPagination(req.validatedQuery || {});
+  const result = await reviewService.listReviews(req.params.messId, { page, limit, offset });
+  res.json({ success: true, data: result.data, meta: result.meta });
+}
 
-    // Check if mess exists
-    const mess = await Mess.findById(messId);
+// One endpoint for both writing and editing a review - a customer only ever
+// has one review per mess, so "save my review" is the only action needed.
+async function upsertMyReview(req, res) {
+  const review = await reviewService.upsertReview(req.user.id, req.params.messId, req.body);
+  res.json({ success: true, data: review });
+}
 
-    if (!mess) {
-      return res.status(404).json({
-        success: false,
-        message: 'Mess not found'
-      });
-    }
+async function getMyReview(req, res) {
+  const review = await reviewService.getMyReview(req.user.id, req.params.messId);
+  res.json({ success: true, data: review });
+}
 
-    // Check if user has active or past membership
-    const membership = await Membership.findOne({
-      user: req.user.id,
-      mess: messId,
-      status: { $in: ['Active', 'Inactive'] }
-    });
-
-    if (!membership) {
-      return res.status(403).json({
-        success: false,
-        message: 'You must be a member of this mess to leave a review'
-      });
-    }
-
-    // Create review (unique index will prevent duplicates)
-    const review = await Review.create({
-      user: req.user.id,
-      mess: messId,
-      rating,
-      comment
-    });
-
-    const populatedReview = await Review.findById(review._id)
-      .populate('user', 'name');
-
-    res.status(201).json({
-      success: true,
-      data: populatedReview,
-      message: 'Review added successfully'
-    });
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'You have already reviewed this mess'
-      });
-    }
-    next(error);
-  }
-};
-
-// @desc    Get reviews for a mess
-// @route   GET /api/reviews/:messId
-// @access  Private
-exports.getReviews = async (req, res, next) => {
-  try {
-    const { messId } = req.params;
-    const { page = 1, limit = 10 } = req.query;
-    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
-    const limitNum = Math.max(parseInt(limit, 10) || 10, 1);
-    const skip = (pageNum - 1) * limitNum;
-
-    const [reviews, meta] = await Promise.all([
-      Review.find({ mess: messId })
-        .populate('user', 'name')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum)
-        .lean(),
-      Review.aggregate([
-        { $match: { mess: new mongoose.Types.ObjectId(messId) } },
-        { $group: { _id: null, total: { $sum: 1 }, averageRating: { $avg: '$rating' } } }
-      ])
-    ]);
-
-    const summary = meta[0] || { total: 0, averageRating: 0 };
-    const total = summary.total || 0;
-
-    // Calculate average rating
-    const averageRating = Number(summary.averageRating || 0);
-
-    res.status(200).json({
-      success: true,
-      count: reviews.length,
-      total,
-      averageRating: Number(averageRating.toFixed(1)),
-      data: reviews
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// Update or create (upsert) a user's review for a mess
-// @route PUT /api/reviews/:messId
-// @access Private (Customer)
-exports.upsertMyReview = async (req, res, next) => {
-  try {
-    const { messId } = req.params;
-    const { rating, comment } = req.body;
-
-    const mess = await Mess.findById(messId);
-    if (!mess) {
-      return res.status(404).json({ success: false, message: 'Mess not found' });
-    }
-
-    // Must be a current or past member
-    const membership = await Membership.findOne({
-      user: req.user.id,
-      mess: messId,
-      status: { $in: ['Active', 'Inactive'] },
-    });
-    if (!membership) {
-      return res.status(403).json({
-        success: false,
-        message: 'You must be a member of this mess to leave a review',
-      });
-    }
-
-    // Update if exists; else create
-    const existing = await Review.findOne({ user: req.user.id, mess: messId });
-    if (existing) {
-      if (typeof rating === 'number') existing.rating = rating;
-      if (typeof comment === 'string') existing.comment = comment;
-      await existing.save();
-      const populated = await Review.findById(existing._id).populate('user', 'name');
-      return res.status(200).json({ success: true, data: populated, message: 'Review updated successfully' });
-    } else {
-      const created = await Review.create({
-        user: req.user.id,
-        mess: messId,
-        rating,
-        comment,
-      });
-      const populated = await Review.findById(created._id).populate('user', 'name');
-      return res.status(201).json({ success: true, data: populated, message: 'Review added successfully' });
-    }
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: 'You have already reviewed this mess' });
-    }
-    next(error);
-  }
-};
-
-// Get current user's review for a mess (helps prefill edit form)
-// @route GET /api/reviews/:messId/me
-// @access Private (Customer)
-exports.getMyReview = async (req, res, next) => {
-  try {
-    const { messId } = req.params;
-    const review = await Review.findOne({ user: req.user.id, mess: messId }).populate('user', 'name');
-    if (!review) {
-      return res.status(200).json({ success: true, data: null });
-    }
-    return res.status(200).json({ success: true, data: review });
-  } catch (error) {
-    next(error);
-  }
-};
-
+module.exports = { listReviews, upsertMyReview, getMyReview };

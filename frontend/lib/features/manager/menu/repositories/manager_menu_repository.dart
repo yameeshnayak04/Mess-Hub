@@ -1,64 +1,56 @@
 // lib/features/manager/menu/repositories/manager_menu_repository.dart
-import 'package:dio/dio.dart';
 import '../../../../core/api/dio_client.dart';
+import '../../../../core/utils/json_parse.dart';
+import '../../../../models/menu.dart';
 
 class ManagerMenuRepository {
   final DioClient _dio;
   ManagerMenuRepository(this._dio);
 
-  String _msg(Response res, String fallback) {
-    final d = res.data;
-    if (d is Map &&
-        d['message'] is String &&
-        (d['message'] as String).isNotEmpty) return d['message'];
-    if (d is Map && d['error'] is String && (d['error'] as String).isNotEmpty)
-      return d['error'];
-    return fallback;
+  String? _cachedMessId;
+
+  /// The menu read route is public and takes a mess id, so we still need it.
+  /// Cached because it never changes for a signed-in manager.
+  Future<String> _messId() async {
+    if (_cachedMessId != null) return _cachedMessId!;
+    final res = await _dio.get('/messes/my-mess');
+    final mess = Map<String, dynamic>.from(DioClient.unwrap(res) as Map);
+    _cachedMessId = asId(mess['id']);
+    return _cachedMessId!;
   }
 
-  Future<String?> _getMyMessId() async {
-    final res = await _dio.get('/mess/my-mess');
-    if (res.statusCode == 200 && res.data is Map) {
-      return ((res.data['data'] as Map?)?['_id'] as String?);
-    }
-    throw _msg(res, 'Failed to load mess');
-  }
-
-  Future<Map<String, dynamic>?> getMenuForDate(DateTime date) async {
-    final messId = await _getMyMessId();
-    if (messId == null) return null;
-    final y = date.year.toString().padLeft(4, '0');
-    final m = date.month.toString().padLeft(2, '0');
-    final d = date.day.toString().padLeft(2, '0');
-    final res = await _dio.get('/menu/$messId', queryParameters: {
-      'startDate': '$y-$m-$d',
-      // 'endDate': '$y-$m-$d', // optional if backend supports range
-    });
-    if (res.statusCode == 200 && res.data is Map && res.data['data'] is List) {
-      final list = (res.data['data'] as List);
+  Future<Menu?> getMenuForDate(DateTime date) async {
+    try {
+      final day = formatCalendarDate(date);
+      final res = await _dio.get(
+        '/menus/${await _messId()}',
+        queryParameters: {'from': day, 'to': day},
+      );
+      final list = (DioClient.unwrap(res) as List).whereType<Map>().toList();
       if (list.isEmpty) return null;
-      final first = list.first;
-      return (first is Map) ? Map<String, dynamic>.from(first) : null;
+      return Menu.fromJson(Map<String, dynamic>.from(list.first));
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
-    throw _msg(res, 'Failed to load menu');
   }
 
-  Future<Map<String, dynamic>> setMenu({
+  /// Writing a menu is now PUT /menus/my-mess with a `serviceDate` - the
+  /// manager's own mess is implied, and re-posting a date replaces it.
+  Future<Menu> setMenu({
     required DateTime date,
     required List<String> lunchItems,
     required List<String> dinnerItems,
   }) async {
-    final y = date.year.toString().padLeft(4, '0');
-    final m = date.month.toString().padLeft(2, '0');
-    final d = date.day.toString().padLeft(2, '0');
-    final res = await _dio.post('/menu', data: {
-      'date': '$y-$m-$d',
-      'lunchItems': lunchItems,
-      'dinnerItems': dinnerItems,
-    });
-    if (res.statusCode == 200 && res.data is Map) {
-      return Map<String, dynamic>.from(res.data as Map);
+    try {
+      final res = await _dio.put('/menus/my-mess', data: {
+        'serviceDate': formatCalendarDate(date),
+        'lunchItems': lunchItems,
+        'dinnerItems': dinnerItems,
+      });
+      return Menu.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
-    throw _msg(res, 'Failed to save menu');
   }
 }

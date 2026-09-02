@@ -1,99 +1,95 @@
 // lib/models/membership.dart
-import 'mess.dart';
+import '../core/utils/json_parse.dart';
 
 class Membership {
   final String id;
-  final String user;
-  final dynamic mess; // String or Mess
+  final String userId;
+  final String messId;
+  final String planId;
   final String planName;
-  final double billingRate;
+
+  /// The plan's CURRENT rate. The backend no longer stores a rate on the
+  /// membership - it joins to the plan on every read - so this can change
+  /// between billing cycles if the manager edits the plan. Never cache it;
+  /// always show what the latest fetch returned.
+  final double rateRupees;
+
   final String status; // 'Pending' | 'Active' | 'Inactive'
-  final DateTime? joinedDate;
-  final String? paymentStatus;
-  final DateTime? createdAt;
-  final DateTime? updatedAt;
+
+  /// Plain calendar date 'YYYY-MM-DD' - not an instant, so no timezone maths.
+  final String? joinedDate;
+
+  /// True once the member has asked to leave and is awaiting the manager.
+  /// While true the membership is frozen: no attendance, no new leave.
+  final bool discontinuationRequested;
+
+  final String? messName;
+  final String? memberName;
+  final String? memberPhone;
 
   Membership({
     required this.id,
-    required this.user,
-    required this.mess,
+    required this.userId,
+    required this.messId,
+    required this.planId,
     required this.planName,
-    required this.billingRate,
+    required this.rateRupees,
     required this.status,
     this.joinedDate,
-    this.paymentStatus,
-    this.createdAt,
-    this.updatedAt,
+    this.discontinuationRequested = false,
+    this.messName,
+    this.memberName,
+    this.memberPhone,
   });
 
-  factory Membership.fromJson(Map<String, dynamic> json) {
-    dynamic messData = json['mess'];
-    if (messData is Map) {
-      messData = Mess.fromJson(Map<String, dynamic>.from(messData));
-    }
-    return Membership(
-      id: json['_id'] as String,
-      user: json['user'] as String,
-      mess: messData,
-      planName: json['planName'] as String,
-      billingRate: (json['billingRate'] as num).toDouble(),
-      status: json['status'] as String,
-      joinedDate: json['joinedDate'] != null
-          ? DateTime.parse(json['joinedDate'] as String)
-          : null,
-      paymentStatus: json['paymentStatus'] as String?,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : null,
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
-          : null,
-    );
-  }
+  factory Membership.fromJson(Map<String, dynamic> json) => Membership(
+        id: asId(json['id']),
+        userId: asId(json['userId']),
+        messId: asId(json['messId']),
+        planId: asId(json['planId']),
+        planName: json['planName'] as String? ?? '',
+        rateRupees: asDouble(json['rateRupees']) ?? 0,
+        status: json['status'] as String? ?? 'Pending',
+        joinedDate: asCalendarDate(json['joinedDate']),
+        discontinuationRequested: asBool(json['discontinuationRequested']),
+        messName: json['messName'] as String?,
+        memberName: json['memberName'] as String?,
+        memberPhone: json['memberPhone'] as String?,
+      );
 
-  Map<String, dynamic> toJson() => {
-        '_id': id,
-        'user': user,
-        'mess': mess is Mess ? (mess as Mess).toJson() : mess,
-        'planName': planName,
-        'billingRate': billingRate,
-        'status': status,
-        if (joinedDate != null) 'joinedDate': joinedDate!.toIso8601String(),
-        if (paymentStatus != null) 'paymentStatus': paymentStatus,
-        if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
-        if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
-      };
+  bool get isActive => status == 'Active';
+  bool get isPending => status == 'Pending';
 
-  Mess? get messObject => mess is Mess ? mess as Mess : null;
-  String? get messId => mess is Mess
-      ? (mess as Mess).id
-      : mess is String
-          ? mess as String
-          : null;
+  DateTime? get joinedDateTime => parseCalendarDate(joinedDate);
 
   Membership copyWith({
     String? id,
-    String? user,
-    dynamic mess,
+    String? userId,
+    String? messId,
+    String? planId,
     String? planName,
-    double? billingRate,
+    double? rateRupees,
     String? status,
-    DateTime? joinedDate,
-    String? paymentStatus,
-    DateTime? createdAt,
-    DateTime? updatedAt,
+    String? joinedDate,
+    bool? discontinuationRequested,
+    String? messName,
+    String? memberName,
+    String? memberPhone,
   }) {
     return Membership(
       id: id ?? this.id,
-      user: user ?? this.user,
-      mess: mess ?? this.mess,
+      userId: userId ?? this.userId,
+      messId: messId ?? this.messId,
+      planId: planId ?? this.planId,
       planName: planName ?? this.planName,
-      billingRate: billingRate ?? this.billingRate,
+      rateRupees: rateRupees ?? this.rateRupees,
       status: status ?? this.status,
       joinedDate: joinedDate ?? this.joinedDate,
-      paymentStatus: paymentStatus ?? this.paymentStatus,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
+      discontinuationRequested:
+          discontinuationRequested ?? this.discontinuationRequested,
+      messName: messName ?? this.messName,
+      memberName: memberName ?? this.memberName,
+      memberPhone: memberPhone ?? this.memberPhone,
     );
   }
 }

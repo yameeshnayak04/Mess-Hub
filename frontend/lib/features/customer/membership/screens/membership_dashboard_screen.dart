@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../models/menu.dart';
+import '../../../../models/membership_details.dart';
 import '../providers/membership_providers.dart';
 import '../providers/attendance_providers.dart';
 
@@ -29,18 +31,17 @@ class MembershipDashboardScreen extends ConsumerWidget {
           onRetry: () => ref.refresh(membershipDetailsProvider(membershipId)),
         ),
         data: (data) {
-          final membership = data['membership'] as Map<String, dynamic>? ?? {};
-          final mess = membership['mess'] as Map<String, dynamic>? ?? {};
-          final messId = (mess['_id'] as String?) ?? '';
-          final menu = data['todaysMenu'] as Map<String, dynamic>?;
-          final summary =
-              data['attendanceSummary'] as Map<String, dynamic>? ?? {};
+          final membership = data.membership;
+          final messId = membership.messId;
+          final menu = data.todaysMenu;
 
-          // Extract manager phone (supports multiple possible keys) and sanitize
-          final rawPhone =
-              (mess['contactPhone'] ?? mess['phone'] ?? mess['mobile'] ?? '')
-                  .toString()
-                  .trim();
+          // The details payload carries only the mess id and name, so the
+          // contact number comes from a separate mess fetch.
+          final messAsync = ref.watch(messByIdProvider(messId));
+          final rawPhone = messAsync.maybeWhen(
+            data: (m) => m.contactPhone,
+            orElse: () => '',
+          );
 
           return CustomScrollView(
             slivers: [
@@ -99,7 +100,7 @@ class MembershipDashboardScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              mess['messName'] ?? 'N/A',
+                              membership.messName ?? 'N/A',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 28,
@@ -153,7 +154,7 @@ class MembershipDashboardScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Quick Stats Card
-                      _QuickStatsCard(summary: summary),
+                      _QuickStatsCard(details: data),
 
                       const SizedBox(height: 16),
 
@@ -215,10 +216,11 @@ class MembershipDashboardScreen extends ConsumerWidget {
 
   Future<void> _skip(BuildContext context, WidgetRef ref, String meal) async {
     try {
+      // Skips are for today only - the backend derives the date and refuses
+      // once the meal window has closed, so there is no date to send.
       await ref.read(attendanceRepositoryProvider).skipMeal(
             membershipId: membershipId,
-            mealType: meal,
-            date: DateTime.now(),
+            meal: meal,
           );
       ref.invalidate(membershipDetailsProvider(membershipId));
       if (context.mounted) {
@@ -389,8 +391,8 @@ class MembershipDashboardScreen extends ConsumerWidget {
 
 // Quick Stats Card
 class _QuickStatsCard extends StatelessWidget {
-  final Map<String, dynamic> summary;
-  const _QuickStatsCard({required this.summary});
+  final MembershipDetails details;
+  const _QuickStatsCard({required this.details});
 
   @override
   Widget build(BuildContext context) {
@@ -441,7 +443,7 @@ class _QuickStatsCard extends StatelessWidget {
                   child: _buildStatItem(
                     context,
                     'Present',
-                    summary['present'] ?? 0,
+                    details.present,
                     AppTheme.successGreen,
                     Icons.check_circle,
                   ),
@@ -455,7 +457,7 @@ class _QuickStatsCard extends StatelessWidget {
                   child: _buildStatItem(
                     context,
                     'Skipped',
-                    summary['skipped'] ?? 0,
+                    details.skipped,
                     AppTheme.warningYellow,
                     Icons.skip_next,
                   ),
@@ -469,7 +471,7 @@ class _QuickStatsCard extends StatelessWidget {
                   child: _buildStatItem(
                     context,
                     'Leave',
-                    summary['leave'] ?? 0,
+                    details.leave,
                     AppTheme.infoBlue,
                     Icons.beach_access,
                   ),
@@ -483,7 +485,7 @@ class _QuickStatsCard extends StatelessWidget {
                   child: _buildStatItem(
                     context,
                     'Absent',
-                    summary['absent'] ?? 0,
+                    details.absent,
                     AppTheme.errorRed,
                     Icons.cancel,
                   ),
@@ -530,13 +532,13 @@ class _QuickStatsCard extends StatelessWidget {
 
 // Modern Menu Card
 class _ModernMenuCard extends StatelessWidget {
-  final Map<String, dynamic>? menu;
+  final Menu? menu;
   const _ModernMenuCard({required this.menu});
 
   @override
   Widget build(BuildContext context) {
-    final lunchItems = (menu?['lunchItems'] as List?)?.cast<String>() ?? [];
-    final dinnerItems = (menu?['dinnerItems'] as List?)?.cast<String>() ?? [];
+    final lunchItems = menu?.lunchItems ?? const <String>[];
+    final dinnerItems = menu?.dinnerItems ?? const <String>[];
 
     return Card(
       elevation: 0,

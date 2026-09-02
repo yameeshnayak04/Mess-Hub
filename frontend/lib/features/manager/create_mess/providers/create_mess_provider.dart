@@ -23,6 +23,10 @@ class CreateMessState {
   final XFile? messImage;
   final bool isSubmitting;
 
+  /// The mess was created but its picture did not upload. Not an error - the
+  /// mess is real and usable - just something to tell the manager about.
+  final bool pictureUploadFailed;
+
   CreateMessState({
     this.currentStep = 0,
     this.isLoading = false,
@@ -30,6 +34,7 @@ class CreateMessState {
     Map<String, dynamic>? formData,
     this.messImage, // Keep XFile?
     this.isSubmitting = false,
+    this.pictureUploadFailed = false,
   }) : formData = formData ?? {};
 
   CreateMessState copyWith({
@@ -41,6 +46,7 @@ class CreateMessState {
     XFile? messImage,
     bool clearImage = false,
     bool? isSubmitting,
+    bool? pictureUploadFailed,
   }) {
     return CreateMessState(
       currentStep: currentStep ?? this.currentStep,
@@ -50,6 +56,7 @@ class CreateMessState {
       // *** FIX: Handle XFile? ***
       messImage: clearImage ? null : messImage ?? this.messImage,
       isSubmitting: isSubmitting ?? this.isSubmitting,
+      pictureUploadFailed: pictureUploadFailed ?? this.pictureUploadFailed,
     );
   }
 }
@@ -101,9 +108,11 @@ class CreateMessNotifier extends StateNotifier<CreateMessState> {
   // Existing method: setLocation
   Future<void> setLocation(LatLng latLng) async {
     // 1. Update location coordinates immediately
+    // The API takes plain longitude/latitude numbers now, not a GeoJSON
+    // {type, coordinates} object.
     final newLocation = Location(
-      type: 'Point',
-      coordinates: [latLng.longitude, latLng.latitude],
+      longitude: latLng.longitude,
+      latitude: latLng.latitude,
     );
 
     final currentFormData = Map<String, dynamic>.from(state.formData);
@@ -119,37 +128,41 @@ class CreateMessNotifier extends StateNotifier<CreateMessState> {
   Future<bool> submitMess() async {
     state = state.copyWith(isSubmitting: true, errorMessage: null);
     try {
+      // Only plans the manager actually priced get sent. A mess that offers
+      // lunch only is a real thing, so the other preset rows are dropped rather
+      // than submitted with a null rate the server would reject.
       final plans = (state.formData['plans'] as List?)
-          ?.where((p) => p is Map && p['name'] != null && p['rate'] != null)
+          ?.whereType<Map>()
+          .where((plan) {
+            final rate = plan['rateRupees'];
+            return plan['name'] != null && rate is num && rate > 0;
+          })
+          .map((plan) => Map<String, dynamic>.from(plan))
           .toList();
 
       if (plans == null || plans.isEmpty) {
-        throw 'Please add at least one monthly plan.';
+        throw 'Set a monthly rate for at least one plan.';
       }
 
       final dataToSend = Map<String, dynamic>.from(state.formData);
       dataToSend['plans'] = plans;
 
-      // Create the mess via repository
-      await _messRepository.createMess(dataToSend, state.messImage);
+      // Create the mess via repository. The picture travels as its own
+      // request, so it can fail without the mess failing.
+      final result =
+          await _messRepository.createMess(dataToSend, state.messImage);
+      final pictureFailed =
+          state.messImage != null && !result.pictureUploaded;
 
-      // *** FIX: Update Auth Provider State ***
-      final authNotifier = ref.read(authProvider.notifier);
-      final currentUserState = ref.read(authProvider);
+      // Re-read the profile rather than patching hasMess by hand: the server
+      // also returns the new messId, and the router keys off this state to let
+      // the manager out of the create-mess wizard.
+      await ref.read(authProvider.notifier).refreshProfile();
 
-      // Check if user data is available before updating
-      if (currentUserState.hasValue && currentUserState.value != null) {
-        final currentUser = currentUserState.value!;
-        // Create a new user object with hasMess set to true
-        final updatedUser = currentUser.copyWith(hasMess: true);
-        // Manually update the auth state
-        authNotifier.state = AsyncValue.data(updatedUser);
-      } else {
-        // Might need to trigger a profile refresh instead if user data isn't loaded yet
-        // authNotifier.refreshProfile();
-      }
-
-      state = state.copyWith(isSubmitting: false);
+      state = state.copyWith(
+        isSubmitting: false,
+        pictureUploadFailed: pictureFailed,
+      );
       return true;
     } catch (e) {
       state = state.copyWith(isSubmitting: false, errorMessage: e.toString());

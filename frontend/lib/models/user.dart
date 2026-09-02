@@ -1,23 +1,23 @@
 // lib/models/user.dart
+import '../core/utils/json_parse.dart';
+
+/// The backend sends and accepts a plain `{ longitude, latitude }` object.
+/// (The old API used GeoJSON `{ type: 'Point', coordinates: [lng, lat] }`;
+/// nothing on the wire uses that shape any more.)
 class Location {
-  final String type; // 'Point'
-  final List<double> coordinates; // [lng, lat]
+  final double longitude;
+  final double latitude;
 
-  Location({required this.type, required this.coordinates});
+  Location({required this.longitude, required this.latitude});
 
-  factory Location.fromJson(Map<String, dynamic> json) {
-    return Location(
-      type: json['type'] as String,
-      coordinates: (json['coordinates'] as List)
-          .map((e) =>
-              e is num ? e.toDouble() : double.tryParse(e.toString()) ?? 0.0)
-          .toList(),
-    );
-  }
+  factory Location.fromJson(Map<String, dynamic> json) => Location(
+        longitude: asDouble(json['longitude']) ?? 0.0,
+        latitude: asDouble(json['latitude']) ?? 0.0,
+      );
 
   Map<String, dynamic> toJson() => {
-        'type': type,
-        'coordinates': coordinates,
+        'longitude': longitude,
+        'latitude': latitude,
       };
 }
 
@@ -26,43 +26,38 @@ class User {
   final String name;
   final String phone;
   final String role; // 'Customer' | 'Manager'
-  final Location? location; // present for customers
+
+  /// Only present on GET /auth/me, and only for managers.
   final bool? hasMess;
+  final String? messId;
 
   User({
     required this.id,
     required this.name,
     required this.phone,
     required this.role,
-    this.location,
     this.hasMess,
+    this.messId,
   });
 
-  factory User.fromJson(Map<String, dynamic> json) {
-    final locJson = json['location'];
-    Location? loc;
-    if (locJson is Map<String, dynamic> &&
-        locJson['type'] is String &&
-        locJson['coordinates'] is List) {
-      loc = Location.fromJson(locJson);
-    }
-    return User(
-      id: json['_id'] as String,
-      name: json['name'] as String,
-      phone: json['phone'] as String,
-      role: json['role'] as String,
-      location: loc,
-      hasMess: json['hasMess'] as bool?,
-    );
-  }
+  /// Note: the backend never returns the user's location. It is write-only -
+  /// sent at registration, used server-side for "messes near me".
+  factory User.fromJson(Map<String, dynamic> json) => User(
+        id: asId(json['id']),
+        name: json['name'] as String? ?? '',
+        phone: json['phone'] as String? ?? '',
+        role: json['role'] as String? ?? 'Customer',
+        hasMess: json['hasMess'] as bool?,
+        messId: asNullableId(json['messId']),
+      );
 
   Map<String, dynamic> toJson() => {
-        '_id': id,
+        'id': id,
         'name': name,
         'phone': phone,
         'role': role,
-        if (location != null) 'location': location!.toJson(),
         if (hasMess != null) 'hasMess': hasMess,
+        if (messId != null) 'messId': messId,
       };
 
   User copyWith({
@@ -70,17 +65,16 @@ class User {
     String? name,
     String? phone,
     String? role,
-    Location? location,
     bool? hasMess,
-    bool clearLocation = false,
+    String? messId,
   }) {
     return User(
       id: id ?? this.id,
       name: name ?? this.name,
       phone: phone ?? this.phone,
       role: role ?? this.role,
-      location: clearLocation ? null : (location ?? this.location),
       hasMess: hasMess ?? this.hasMess,
+      messId: messId ?? this.messId,
     );
   }
 }

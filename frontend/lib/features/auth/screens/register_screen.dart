@@ -53,8 +53,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       if (position != null) {
         setState(() {
           _location = Location(
-            type: 'Point',
-            coordinates: [position.longitude, position.latitude],
+            longitude: position.longitude,
+            latitude: position.latitude,
           );
         });
 
@@ -130,10 +130,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     LatLng initialPosition = const LatLng(28.6139, 77.2090); // Default: Delhi
 
     if (_location != null) {
-      initialPosition = LatLng(
-        _location!.coordinates[1],
-        _location!.coordinates[0],
-      );
+      initialPosition = LatLng(_location!.latitude, _location!.longitude);
     } else {
       try {
         final locationService = ref.read(locationServiceProvider);
@@ -156,8 +153,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (pickedLocation != null) {
       setState(() {
         _location = Location(
-          type: 'Point',
-          coordinates: [pickedLocation.longitude, pickedLocation.latitude],
+          longitude: pickedLocation.longitude,
+          latitude: pickedLocation.latitude,
         );
       });
 

@@ -42,12 +42,8 @@ class _MenuEditorScreenState extends ConsumerState<MenuEditorScreen>
     setState(() => _loading = true);
     try {
       final menu = await ref.read(menuForDateProvider(_date).future);
-      final lunch =
-          (menu?['lunchItems'] as List?)?.cast<String>() ?? <String>[];
-      final dinner =
-          (menu?['dinnerItems'] as List?)?.cast<String>() ?? <String>[];
-      _lunchCtrl.text = lunch.join(', ');
-      _dinnerCtrl.text = dinner.join(', ');
+      _lunchCtrl.text = (menu?.lunchItems ?? const <String>[]).join(', ');
+      _dinnerCtrl.text = (menu?.dinnerItems ?? const <String>[]).join(', ');
       _animationController.forward();
     } finally {
       if (mounted) setState(() => _loading = false);

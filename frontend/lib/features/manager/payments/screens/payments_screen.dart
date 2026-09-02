@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../models/bill.dart';
 import '../providers/manager_payments_providers.dart';
 
 class PaymentsScreen extends ConsumerStatefulWidget {
@@ -221,7 +222,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
                               padding: const EdgeInsets.all(16),
                               itemCount: list.length,
                               itemBuilder: (context, i) => _ModernBillCard(
-                                bill: list[i] as Map<String, dynamic>,
+                                bill: list[i],
                               ),
                             ),
                           );
@@ -254,7 +255,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
                           padding: const EdgeInsets.all(16),
                           itemCount: list.length,
                           itemBuilder: (context, index) => _ModernPendingCard(
-                            bill: list[index] as Map<String, dynamic>,
+                            bill: list[index],
                             onApprove: (id) => _approvePayment(context, id),
                             onReject: (id) => _rejectPayment(context, id),
                             onViewProof: (bill) =>
@@ -320,7 +321,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
                                 itemCount: list.length,
                                 itemBuilder: (context, index) =>
                                     _ModernBillCard(
-                                  bill: list[index] as Map<String, dynamic>,
+                                  bill: list[index],
                                 ),
                               ),
                             );
@@ -527,7 +528,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
           .read(managerPaymentsRepositoryProvider)
           .getPendingApprovals();
       for (final b in pending) {
-        final id = (b as Map<String, dynamic>)['_id'] as String?;
+        final id = b.id;
         if (id != null) {
           await ref.read(managerPaymentsRepositoryProvider).approvePayment(id);
         }
@@ -544,11 +545,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
     }
   }
 
-  Future _showPaymentProof(BuildContext context, Map bill) async {
+  Future _showPaymentProof(BuildContext context, Bill bill) async {
     try {
       final repo = ref.read(managerPaymentsRepositoryProvider);
-      final url =
-          await repo.getPaymentProofUrl(Map<String, dynamic>.from(bill));
+      final url = await repo.getPaymentProofUrl(bill.id);
 
       if (!context.mounted) return;
 
@@ -669,19 +669,18 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen>
 
 // Modern Bill Card
 class _ModernBillCard extends StatelessWidget {
-  final Map<String, dynamic> bill;
+  final Bill bill;
 
   const _ModernBillCard({required this.bill});
 
   @override
   Widget build(BuildContext context) {
-    final user = bill['user'] as Map<String, dynamic>?;
-    final userName = user?['name'] ?? bill['userName'] ?? 'Unknown';
-    final userPhone = user?['phone'] ?? bill['userPhone'] ?? 'N/A';
-    final month = bill['month'] as int? ?? 0;
-    final year = bill['year'] as int? ?? 0;
-    final status = bill['status'] as String? ?? 'Unknown';
-    final amount = (bill['totalAmount'] ?? bill['amount'] ?? 0) as num;
+    final userName = bill.memberName ?? 'Unknown';
+    final userPhone = bill.memberPhone ?? 'N/A';
+    final month = bill.periodDate?.month ?? 0;
+    final year = bill.periodDate?.year ?? 0;
+    final status = bill.status;
+    final amount = bill.totalRupees;
     final monthName =
         month > 0 ? DateFormat('MMMM').format(DateTime(year, month)) : '-';
 
@@ -851,10 +850,10 @@ class _ModernBillCard extends StatelessWidget {
 
 // Modern Pending Card
 class _ModernPendingCard extends StatelessWidget {
-  final Map<String, dynamic> bill;
+  final Bill bill;
   final Future<void> Function(String billId) onApprove;
   final Future<void> Function(String billId) onReject;
-  final Future<void> Function(Map<String, dynamic> bill) onViewProof;
+  final Future<void> Function(Bill bill) onViewProof;
 
   const _ModernPendingCard({
     required this.bill,
@@ -865,15 +864,14 @@ class _ModernPendingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = bill['user'] as Map<String, dynamic>?;
-    final userName = user?['name'] ?? bill['userName'] ?? 'Unknown';
-    final userPhone = user?['phone'] ?? bill['userPhone'] ?? 'N/A';
-    final month = bill['month'] as int? ?? 0;
-    final year = bill['year'] as int? ?? 0;
-    final amount = (bill['totalAmount'] ?? bill['amount'] ?? 0) as num;
+    final userName = bill.memberName ?? 'Unknown';
+    final userPhone = bill.memberPhone ?? 'N/A';
+    final month = bill.periodDate?.month ?? 0;
+    final year = bill.periodDate?.year ?? 0;
+    final amount = bill.totalRupees;
     final monthName =
         month > 0 ? DateFormat('MMMM').format(DateTime(year, month)) : '-';
-    final billId = bill['_id'] as String? ?? bill['id'] as String? ?? '';
+    final billId = bill.id;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),

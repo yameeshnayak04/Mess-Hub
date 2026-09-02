@@ -1,38 +1,43 @@
 // lib/features/auth/repositories/auth_repository.dart
-import 'package:dio/dio.dart';
+import '../../../core/api/api_exception.dart';
 import '../../../core/api/dio_client.dart';
 import '../../../models/user.dart';
+
+/// What a successful login/register hands back: the user plus their token.
+class AuthResult {
+  final User user;
+  final String token;
+  AuthResult({required this.user, required this.token});
+}
 
 class AuthRepository {
   final DioClient _dioClient;
   AuthRepository(this._dioClient);
 
-  String _serverMessage(Response res) {
-    final data = res.data;
-    if (data is Map) {
-      // Prefer explicit server message
-      if (data['message'] is String && (data['message'] as String).isNotEmpty) {
-        return data['message'] as String;
-      }
-      // Fallbacks
-      if (data['error'] is String) return data['error'] as String;
+  /// Both login and register return `data: { user, token }`.
+  AuthResult _readAuthResult(dynamic data) {
+    final map = Map<String, dynamic>.from(data as Map);
+    return AuthResult(
+      user: User.fromJson(Map<String, dynamic>.from(map['user'] as Map)),
+      token: map['token'] as String,
+    );
+  }
+
+  Future<AuthResult> login(String phone, String password) async {
+    try {
+      final res = await _dioClient.post(
+        '/auth/login',
+        data: {'phone': phone, 'password': password},
+      );
+      return _readAuthResult(DioClient.unwrap(res));
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
-    return 'Something went wrong. Please try again.';
   }
 
-  Future<Map<String, dynamic>?> login(String phone, String password) async {
-    final response = await _dioClient
-        .post('/auth/login', data: {'phone': phone, 'password': password});
-    if (response.statusCode == 200)
-      return response.data as Map<String, dynamic>;
-    if (response.statusCode == 401) return null;
-    throw DioException(
-        requestOptions: response.requestOptions,
-        response: response,
-        message: _serverMessage(response));
-  }
-
-  Future<Map<String, dynamic>> register({
+  /// A Customer must send a PIN and a location; a Manager must send neither -
+  /// the backend rejects those fields outright for managers.
+  Future<AuthResult> register({
     required String name,
     required String phone,
     required String password,
@@ -40,55 +45,56 @@ class AuthRepository {
     String? pin,
     Location? location,
   }) async {
-    final response = await _dioClient.post(
-      '/auth/register',
-      data: {
+    final isCustomer = role == 'Customer';
+    try {
+      final res = await _dioClient.post('/auth/register', data: {
         'name': name,
         'phone': phone,
         'password': password,
         'role': role,
-        if (pin != null) 'pin': pin,
-        if (location != null) 'location': location.toJson(),
-      },
-    );
-    if (response.statusCode == 201)
-      return response.data as Map<String, dynamic>;
-
-    // For non-201 (e.g., 409 USER_EXISTS), throw with server message
-    throw DioException(
-      requestOptions: response.requestOptions,
-      response: response,
-      message: _serverMessage(response),
-    );
+        if (isCustomer && pin != null) 'pin': pin,
+        if (isCustomer && location != null) 'location': location.toJson(),
+      });
+      return _readAuthResult(DioClient.unwrap(res));
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
   }
 
   Future<User> getProfile() async {
-    final response = await _dioClient.get('/users/profile/me');
-    if (response.statusCode == 200) return User.fromJson(response.data['data']);
-    throw DioException(
-        requestOptions: response.requestOptions,
-        response: response,
-        message: _serverMessage(response));
-  }
-
-  Future<void> updateProfile({String? name, String? pin}) async {
-    final response = await _dioClient.put('/users/profile/me', data: {
-      if (name != null) 'name': name,
-      if (pin != null) 'pin': pin,
-    });
-    if (response.statusCode != 200) {
-      throw DioException(
-          requestOptions: response.requestOptions,
-          response: response,
-          message: _serverMessage(response));
+    try {
+      final res = await _dioClient.get('/auth/me');
+      return User.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
   }
 
+  /// PATCH, not PUT - and the profile route now lives under /auth.
+  Future<User> updateProfile({String? name, String? pin}) async {
+    try {
+      final res = await _dioClient.patch('/auth/me', data: {
+        if (name != null) 'name': name,
+        if (pin != null) 'pin': pin,
+      });
+      return User.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
+  }
+
+  /// Tokens are stateless, so this is best-effort: the client dropping the
+  /// token is what actually ends the session.
   Future<void> serverLogout() async {
     try {
-      await _dioClient.post('/auth/logout'); // fixed leading slash
-    } on DioException {
-      // best effort
+      await _dioClient.post('/auth/logout');
+    } on Object catch (_) {
+      // ignored on purpose
     }
   }
 }
+
+/// Re-exported so callers can catch a single error type.
+typedef AuthException = ApiException;

@@ -1,177 +1,143 @@
-// lib/features/manager/dashboard/repositories/dashboard_repository.dart
-import 'package:dio/dio.dart';
+// lib/features/manager/home/repositories/dashboard_repository.dart
 import '../../../../core/api/dio_client.dart';
+import '../../../../models/bill.dart';
 import '../../../../models/dashboard_stats.dart';
+import '../../../../models/membership.dart';
+import '../../../../models/menu.dart';
 
 class DashboardRepository {
   final DioClient _dioClient;
   DashboardRepository(this._dioClient);
 
-  String _msg(Response res, String fallback) {
-    final d = res.data;
-    if (d is Map &&
-        d['message'] is String &&
-        (d['message'] as String).isNotEmpty) return d['message'] as String;
-    if (d is Map && d['error'] is String && (d['error'] as String).isNotEmpty)
-      return d['error'] as String;
-    return fallback;
-  }
-
-  // Meal-aware summary stats (current window Lunch/Dinner)
-  Future<DashboardStats> getDashboardStats() async {
-    final res = await _dioClient.get('/mess/my-mess/dashboard');
-    if (res.statusCode == 200 && res.data is Map && res.data['data'] is Map) {
-      return DashboardStats.fromJson(
-        Map<String, dynamic>.from(res.data['data'] as Map),
+  /// The whole live dashboard in one call - counts, current/next meal, and
+  /// today's menu. The backend computes the counts with a single grouped
+  /// query, so there is nothing left to stitch together here.
+  Future<DashboardStats> getDashboardStats({String? meal}) async {
+    try {
+      final res = await _dioClient.get(
+        '/messes/my-mess/dashboard',
+        queryParameters: {if (meal != null) 'meal': meal},
       );
+      return DashboardStats.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
-    throw _msg(res, 'Failed to load dashboard stats');
   }
 
-  Future<Map<String, dynamic>> _getMealDashboard(String mealType) async {
-    final res = await _dioClient.get(
-      '/attendance/dashboard/meal-stats', // <-- correct path
-      queryParameters: {'mealType': mealType},
-    );
-    if (res.statusCode == 200 && res.data is Map && res.data['data'] is Map) {
-      return Map<String, dynamic>.from(res.data['data'] as Map);
-    }
-    throw _msg(res, 'Failed to load meal dashboard');
-  }
-
-  Future<List<Map<String, dynamic>>> getMembersRemaining(
-      String mealType) async {
-    final data = await _getMealDashboard(mealType);
-    final section = (data['remaining'] as Map?) ?? const {};
-    final list = (section['members'] as List?) ?? const [];
-    return list.whereType<Map>().map((e) {
-      final item = Map<String, dynamic>.from(e);
-      // Ensure user data is properly structured
-      if (item['user'] is! Map) {
-        // If user is just an ID, create a minimal structure
-        item['user'] = {'_id': item['user']};
-      }
-      return item;
-    }).toList();
-  }
-
-  Future<List<Map<String, dynamic>>> getMembersEating(String mealType) async {
-    final data = await _getMealDashboard(mealType);
-    final section = (data['eaten'] as Map?) ?? const {};
-    final list = (section['members'] as List?) ?? const [];
-    return list.whereType<Map>().map((e) {
-      final item = Map<String, dynamic>.from(e);
-      if (item['user'] is! Map) {
-        item['user'] = {'_id': item['user']};
-      }
-      return item;
-    }).toList();
-  }
-
-  Future<List<Map<String, dynamic>>> getMembersOnLeave(String mealType) async {
-    final data = await _getMealDashboard(mealType);
-    final section = (data['onLeave'] as Map?) ?? const {};
-    final list = (section['members'] as List?) ?? const [];
-    return list.whereType<Map>().map((e) {
-      final item = Map<String, dynamic>.from(e);
-      if (item['user'] is! Map) {
-        item['user'] = {'_id': item['user']};
-      }
-      return item;
-    }).toList();
-  }
-
-  Future<List<Map<String, dynamic>>> getMembersSkipped(String mealType) async {
-    final data = await _getMealDashboard(mealType);
-    final section = (data['skipped'] as Map?) ?? const {};
-    final list = (section['members'] as List?) ?? const [];
-    return list.whereType<Map>().map((e) {
-      final item = Map<String, dynamic>.from(e);
-      if (item['user'] is! Map) {
-        item['user'] = {'_id': item['user']};
-      }
-      return item;
-    }).toList();
-  }
-
-  // Payments (manager)
-  Future<List<Map<String, dynamic>>> getPendingApprovals() async {
-    final res = await _dioClient.get('/billing/pending-approvals');
-    if (res.statusCode == 200 && res.data is Map && res.data['data'] is List) {
-      return (res.data['data'] as List)
+  Future<List<DashboardMember>> getMembersByStatus(
+    String status, {
+    String? meal,
+  }) async {
+    try {
+      final res = await _dioClient.get(
+        '/messes/my-mess/dashboard/members',
+        queryParameters: {
+          'status': status,
+          if (meal != null) 'meal': meal,
+          'limit': 100,
+        },
+      );
+      return (DioClient.unwrap(res) as List)
           .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
+          .map((e) => DashboardMember.fromJson(Map<String, dynamic>.from(e)))
           .toList();
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
-    throw _msg(res, 'Failed to load pending approvals');
   }
 
-  Future<Map<String, dynamic>> approvePayment(String billId) async {
-    final res = await _dioClient.put('/billing/approve-payment/$billId');
-    if (res.statusCode == 200)
-      return Map<String, dynamic>.from(res.data as Map);
-    throw _msg(res, 'Failed to approve payment');
-  }
+  Future<List<DashboardMember>> getMembersRemaining({String? meal}) =>
+      getMembersByStatus('Remaining', meal: meal);
 
-  Future<Map<String, dynamic>> rejectPayment(String billId) async {
-    final res = await _dioClient.put('/billing/reject-payment/$billId');
-    if (res.statusCode == 200)
-      return Map<String, dynamic>.from(res.data as Map);
-    throw _msg(res, 'Failed to reject payment');
-  }
+  Future<List<DashboardMember>> getMembersEating({String? meal}) =>
+      getMembersByStatus('Present', meal: meal);
 
-  // Membership join approvals (manager)
-  Future<List<Map<String, dynamic>>> getPendingJoinRequests() async {
-    final res = await _dioClient
-        .get('/membership/mess', queryParameters: {'status': 'Pending'});
-    if (res.statusCode == 200 && res.data is Map && res.data['data'] is List) {
-      return (res.data['data'] as List)
+  Future<List<DashboardMember>> getMembersOnLeave({String? meal}) =>
+      getMembersByStatus('Leave', meal: meal);
+
+  Future<List<DashboardMember>> getMembersSkipped({String? meal}) =>
+      getMembersByStatus('Skipped', meal: meal);
+
+  // ------------------------------------------------------------- action centre
+
+  Future<List<Bill>> getPendingApprovals() async {
+    try {
+      final res = await _dioClient.get(
+        '/billing/mess',
+        queryParameters: {'status': 'Pending Approval', 'limit': 50},
+      );
+      return (DioClient.unwrap(res) as List)
           .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
+          .map((e) => Bill.fromJson(Map<String, dynamic>.from(e)))
           .toList();
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
-    throw _msg(res, 'Failed to load join requests');
   }
 
-  Future<Map<String, dynamic>> approveMembership(String membershipId) async {
-    final res = await _dioClient.put('/membership/approve/$membershipId');
-    if (res.statusCode == 200)
-      return Map<String, dynamic>.from(res.data as Map);
-    throw _msg(res, 'Failed to approve membership');
+  Future<Bill> approvePayment(String billId) async {
+    try {
+      final res = await _dioClient.post('/billing/$billId/approve');
+      return Bill.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
   }
 
-  Future<Map<String, dynamic>> rejectMembership(String membershipId) async {
-    final res = await _dioClient.put('/membership/reject/$membershipId');
-    if (res.statusCode == 200)
-      return Map<String, dynamic>.from(res.data as Map);
-    throw _msg(res, 'Failed to reject membership');
+  Future<Bill> rejectPayment(String billId) async {
+    try {
+      final res = await _dioClient.post('/billing/$billId/reject');
+      return Bill.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
   }
 
-  // Today’s menu (manager’s mess)
-  Future<Map<String, dynamic>?> getTodaysMenu() async {
-    final messRes = await _dioClient.get('/mess/my-mess');
-    final messMap = messRes.data['data'];
-    final messId = messMap is Map ? messMap['_id'] as String? : null;
-    if (messId == null) return null;
-
-    final now = DateTime.now();
-    final y = now.year.toString().padLeft(4, '0');
-    final m = now.month.toString().padLeft(2, '0');
-    final d = now.day.toString().padLeft(2, '0');
-
-    final menuRes = await _dioClient.get(
-      '/menu/$messId',
-      queryParameters: {'startDate': '$y-$m-$d', 'endDate': '$y-$m-$d'},
-    );
-    if (menuRes.statusCode == 200 &&
-        menuRes.data is Map &&
-        menuRes.data['data'] is List) {
-      final list = (menuRes.data['data'] as List)
+  Future<List<Membership>> getPendingJoinRequests() async {
+    try {
+      final res = await _dioClient.get(
+        '/memberships/mess',
+        queryParameters: {'status': 'Pending', 'limit': 50},
+      );
+      return (DioClient.unwrap(res) as List)
           .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
+          .map((e) => Membership.fromJson(Map<String, dynamic>.from(e)))
           .toList();
-      return list.isNotEmpty ? list.first : null;
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
-    throw _msg(menuRes, 'Failed to load today’s menu');
+  }
+
+  Future<Membership> approveMembership(String membershipId) async {
+    try {
+      final res = await _dioClient.post('/memberships/$membershipId/approve');
+      return Membership.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
+  }
+
+  Future<void> rejectMembership(String membershipId) async {
+    try {
+      DioClient.unwrap(
+          await _dioClient.post('/memberships/$membershipId/reject'));
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
+  }
+
+  /// Today's menu already comes back on the dashboard payload, so this is only
+  /// for screens that want it on its own.
+  Future<Menu?> getTodaysMenu() async {
+    try {
+      final stats = await getDashboardStats();
+      return stats.todaysMenu;
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../models/membership.dart';
 import '../providers/manager_members_providers.dart';
 import 'package:flutter/services.dart';
 
@@ -307,10 +308,7 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
                       detail: e.toString(),
                       onRetry: () => ref.refresh(pendingMembersProvider),
                     ),
-                    data: (pendingListRaw) {
-                      final pendingList =
-                          (pendingListRaw as List).cast<Map<String, dynamic>>();
-
+                    data: (pendingList) {
                       return active.when(
                         loading: () => _buildLoadingState(),
                         error: (e, st) => _ErrorRetry(
@@ -319,11 +317,9 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
                           onRetry: () =>
                               ref.refresh(membersByStatusProvider('Active')),
                         ),
-                        data: (activeListRaw) {
-                          final activeList = (activeListRaw as List)
-                              .cast<Map<String, dynamic>>();
+                        data: (activeList) {
                           final discontinueList = activeList
-                              .where((m) => m['leaveRequested'] == true)
+                              .where((m) => m.discontinuationRequested)
                               .toList();
 
                           return _PendingCombinedList(
@@ -350,10 +346,10 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
                           ref.refresh(membersByStatusProvider('Active')),
                     ),
                     data: (list) => _MemberList(
-                      list: (list as List).cast<Map<String, dynamic>>(),
+                      list: list,
                       searchQuery: _searchQuery,
                       onTap: (m) =>
-                          context.push('/manager/member/${m['_id']}', extra: m),
+                          context.push('/manager/member/${m.id}'),
                     ),
                   ),
 
@@ -367,10 +363,10 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
                           ref.refresh(membersByStatusProvider('Inactive')),
                     ),
                     data: (list) => _MemberList(
-                      list: (list as List).cast<Map<String, dynamic>>(),
+                      list: list,
                       searchQuery: _searchQuery,
                       onTap: (m) =>
-                          context.push('/manager/member/${m['_id']}', extra: m),
+                          context.push('/manager/member/${m.id}'),
                     ),
                   ),
                 ],
@@ -421,8 +417,8 @@ class _MembersScreenState extends ConsumerState<MembersScreen>
 }
 
 class _PendingCombinedList extends StatelessWidget {
-  final List<Map<String, dynamic>> joinRequests;
-  final List<Map<String, dynamic>> discontinueRequests;
+  final List<Membership> joinRequests;
+  final List<Membership> discontinueRequests;
   final String searchQuery;
   final Future<void> Function(String id) onApproveJoin;
   final Future<void> Function(String id) onRejectJoin;
@@ -442,19 +438,13 @@ class _PendingCombinedList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Filter based on search
-    final filteredJoin = joinRequests.where((m) {
-      final user = m['user'];
-      final name =
-          user is Map ? (user['name']?.toString() ?? '').toLowerCase() : '';
+    bool matches(Membership m) {
+      final name = (m.memberName ?? '').toLowerCase();
       return searchQuery.isEmpty || name.contains(searchQuery);
-    }).toList();
+    }
 
-    final filteredDiscontinue = discontinueRequests.where((m) {
-      final user = m['user'];
-      final name =
-          user is Map ? (user['name']?.toString() ?? '').toLowerCase() : '';
-      return searchQuery.isEmpty || name.contains(searchQuery);
-    }).toList();
+    final filteredJoin = joinRequests.where(matches).toList();
+    final filteredDiscontinue = discontinueRequests.where(matches).toList();
 
     if (filteredJoin.isEmpty && filteredDiscontinue.isEmpty) {
       return _EmptyState(
@@ -555,11 +545,10 @@ class _PendingCombinedList extends StatelessWidget {
     );
   }
 
-  Widget _buildJoinRequestCard(BuildContext context, Map<String, dynamic> m) {
-    final user = m['user'] as Map<String, dynamic>?;
-    final name = user?['name'] ?? 'Unknown';
-    final phone = user?['phone'] ?? 'N/A';
-    final plan = m['planName'] ?? 'Plan';
+  Widget _buildJoinRequestCard(BuildContext context, Membership m) {
+    final name = m.memberName ?? 'Unknown';
+    final phone = m.memberPhone ?? 'N/A';
+    final plan = m.planName;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -719,7 +708,7 @@ class _PendingCombinedList extends StatelessWidget {
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => onRejectJoin(m['_id'] as String),
+                        onTap: () => onRejectJoin(m.id),
                         borderRadius: BorderRadius.circular(12),
                         child: const Center(
                           child: Row(
@@ -766,7 +755,7 @@ class _PendingCombinedList extends StatelessWidget {
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => onApproveJoin(m['_id'] as String),
+                        onTap: () => onApproveJoin(m.id),
                         borderRadius: BorderRadius.circular(12),
                         child: const Center(
                           child: Row(
@@ -797,10 +786,9 @@ class _PendingCombinedList extends StatelessWidget {
     );
   }
 
-  Widget _buildDiscontinueCard(BuildContext context, Map<String, dynamic> m) {
-    final user = (m['user'] as Map?) ?? const {};
-    final name = (user['name'] ?? 'Unknown') as String;
-    final phone = (user['phone'] ?? 'N/A') as String;
+  Widget _buildDiscontinueCard(BuildContext context, Membership m) {
+    final name = m.memberName ?? 'Unknown';
+    final phone = m.memberPhone ?? 'N/A';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -936,7 +924,7 @@ class _PendingCombinedList extends StatelessWidget {
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => onRejectDiscontinue(m['_id'] as String),
+                        onTap: () => onRejectDiscontinue(m.id),
                         borderRadius: BorderRadius.circular(12),
                         child: Center(
                           child: Row(
@@ -983,7 +971,7 @@ class _PendingCombinedList extends StatelessWidget {
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => onApproveDiscontinue(m['_id'] as String),
+                        onTap: () => onApproveDiscontinue(m.id),
                         borderRadius: BorderRadius.circular(12),
                         child: const Center(
                           child: Row(
@@ -1016,9 +1004,9 @@ class _PendingCombinedList extends StatelessWidget {
 }
 
 class _MemberList extends StatelessWidget {
-  final List<Map<String, dynamic>> list;
+  final List<Membership> list;
   final String searchQuery;
-  final void Function(Map<String, dynamic>) onTap;
+  final void Function(Membership) onTap;
 
   const _MemberList({
     required this.list,
@@ -1030,9 +1018,8 @@ class _MemberList extends StatelessWidget {
   Widget build(BuildContext context) {
     // Filter based on search
     final filtered = list.where((m) {
-      final user = m['user'] as Map<String, dynamic>?;
-      final name = (user?['name'] ?? '').toString().toLowerCase();
-      final phone = (user?['phone'] ?? '').toString();
+      final name = (m.memberName ?? '').toLowerCase();
+      final phone = m.memberPhone ?? '';
       return searchQuery.isEmpty ||
           name.contains(searchQuery) ||
           phone.contains(searchQuery);
@@ -1052,10 +1039,9 @@ class _MemberList extends StatelessWidget {
       itemCount: filtered.length,
       itemBuilder: (context, i) {
         final m = filtered[i];
-        final user = m['user'] as Map<String, dynamic>?;
-        final name = user?['name'] ?? 'Unknown';
-        final phone = user?['phone'] ?? 'N/A';
-        final status = m['status'] as String? ?? 'Unknown';
+        final name = m.memberName ?? 'Unknown';
+        final phone = m.memberPhone ?? 'N/A';
+        final status = m.status;
         final color =
             status == 'Active' ? AppTheme.successGreen : AppTheme.textSecondary;
 

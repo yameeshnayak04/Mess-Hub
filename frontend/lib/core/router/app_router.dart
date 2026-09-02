@@ -198,7 +198,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/manager/member/:membershipId',
         builder: (_, state) => MemberDetailsScreen(
           membershipId: state.pathParameters['membershipId']!,
-          membership: state.extra as Map<String, dynamic>?,
         ),
       ),
     ],

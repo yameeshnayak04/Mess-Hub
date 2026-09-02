@@ -1,25 +1,66 @@
-// routes/attendanceRoutes.js
+// new_backend/routes/attendanceRoutes.js
 const express = require('express');
+
+const asyncHandler = require('../middleware/asyncHandler');
+const { protect, authorize } = require('../middleware/auth');
+const { requireManagerMess } = require('../middleware/loadMess');
+const { loadMembership } = require('../middleware/loadMembership');
+const { validateBody, validateQuery } = require('../middleware/validate');
+const schemas = require('../middleware/schemas');
+const { kioskLimiter } = require('../middleware/rateLimiters');
+const attendanceController = require('../controllers/attendanceController');
+
 const router = express.Router();
 
-const attendanceController = require('../controllers/attendanceController');
-const { protect, authorize } = require('../middleware/auth');
-const validate = require('../middleware/validate');
-const { skipMealSchema, kioskMarkSchema, kioskMarkDailySchema } = require('../middleware/schemas');
+// --- kiosk (manager's shared device at the mess) ---
+// Declared before '/:membershipId/...' so "kiosk" is not read as an id.
+// Rate limited because the PIN is only four digits.
+router.post(
+  '/kiosk/mark',
+  protect,
+  authorize('Manager'),
+  requireManagerMess,
+  kioskLimiter,
+  validateBody(schemas.kioskMark),
+  asyncHandler(attendanceController.markAtKiosk)
+);
+// Same PIN-verified kiosk path, but the deliberate override for a member who
+// is mid-leave and has shown up anyway.
+router.post(
+  '/kiosk/override-leave',
+  protect,
+  authorize('Manager'),
+  requireManagerMess,
+  kioskLimiter,
+  validateBody(schemas.kioskMark),
+  asyncHandler(attendanceController.overrideLeaveAtKiosk)
+);
+router.post(
+  '/kiosk/walkin',
+  protect,
+  authorize('Manager'),
+  requireManagerMess,
+  validateBody(schemas.walkinSale),
+  asyncHandler(attendanceController.recordWalkinSale)
+);
 
-// Customer
-router.get('/my-calendar/:membershipId', protect, authorize('Customer'), attendanceController.getMyAttendance);
-router.post('/skip', protect, authorize('Customer'), validate(skipMealSchema), attendanceController.skipMeal);
+// --- customer ---
+router.post(
+  '/:membershipId/skip',
+  protect,
+  authorize('Customer'),
+  loadMembership,
+  validateBody(schemas.skipMeal),
+  asyncHandler(attendanceController.skipMeal)
+);
 
-// Manager kiosk
-router.post('/kiosk/mark', protect, authorize('Manager'), validate(kioskMarkSchema), attendanceController.kioskMarkAttendance);
-router.post('/kiosk/daily', protect, authorize('Manager'), validate(kioskMarkDailySchema), attendanceController.kioskMarkDaily);
-
-// Manager route for single member attendance
-router.get('/member/:membershipId', protect, authorize('Manager'), attendanceController.getMemberAttendance);
-
-// Any routes that were on or after line 22 in your local file are removed 
-// if they pointed to non-existent controller functions.
-router.get('/dashboard/meal-stats', protect, authorize('Manager'), attendanceController.getMealDashboardStats);
+// Readable by the member themselves or by their mess manager.
+router.get(
+  '/:membershipId/calendar',
+  protect,
+  loadMembership,
+  validateQuery(schemas.calendarQuery),
+  asyncHandler(attendanceController.getCalendar)
+);
 
 module.exports = router;

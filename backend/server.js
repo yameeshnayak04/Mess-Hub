@@ -1,69 +1,53 @@
-// backend/server.js
-const express = require('express');
-const dotenv = require('dotenv');
-const cors = require('cors');
-const helmet = require('helmet');
-const compression = require('compression');
-const morgan = require('morgan');
-const path = require('path');
+// new_backend/server.js
+//
+// Starts the HTTP server and shuts it down cleanly.
+const { createApp } = require('./app');
+const knex = require('./db/knex');
+const { loadConfig } = require('./utils/config');
 
-dotenv.config();
+const config = loadConfig(); // throws immediately if required env vars are missing
+const app = createApp();
 
-const connectDB = require('./config/db.js');
-connectDB();
-
-const app = express();
-
-// Trust proxy (Render)
-app.set('trust proxy', 1);
-
-// Security and core middleware
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));  //TODO implement a proper policy
-app.use(cors());
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true }));
-
-// Logging only in development
-if ((process.env.NODE_ENV || '').toLowerCase() === 'development') {
-  app.use(morgan('dev'));
-}
-
-// Enable compression in all envs
-app.use(compression());
-
-// Static and health
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
-
-// Routes
-app.use('/api/auth', require('./routes/authRoutes.js'));
-app.use('/api/users', require('./routes/userRoutes.js'));
-app.use('/api/mess', require('./routes/messRoutes.js'));
-app.use('/api/membership', require('./routes/membershipRoutes.js'));
-app.use('/api/attendance', require('./routes/attendanceRoutes.js'));
-app.use('/api/leave', require('./routes/leaveRoutes.js'));
-app.use('/api/billing', require('./routes/billingRoutes.js'));
-app.use('/api/menu', require('./routes/menuRoutes.js'));
-app.use('/api/reviews', require('./routes/reviewRoutes.js'));
-
-// Cron endpoints (always mounted)
-app.use('/api/cron', require('./routes/cronRoutes.js'));
-
-// Error handler (after routes)
-app.use((err, req, res, _next) => {
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    return res.status(400).json({ success: false, message: 'Invalid JSON payload' });
-  }
-  console.error(err.stack);
-  return res.status(err.statusCode || 500).json({
-    success: false,
-    message: err.message || 'Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-  });
+const server = app.listen(config.port, () => {
+  console.log(`new_backend listening on port ${config.port} (${config.env})`);
 });
 
-// 404 fallback (last)
-app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
+// A promise that rejects with nothing catching it, or an error thrown outside
+// any request, leaves Node in a state we cannot reason about. Log it and exit
+// so the container restarts with a clean process, rather than limping along
+// serving requests from a broken event loop.
+function crashOnUnexpectedError(label) {
+  return (error) => {
+    console.error(`${label}:`, error);
+    process.exit(1);
+  };
+}
+process.on('unhandledRejection', crashOnUnexpectedError('Unhandled promise rejection'));
+process.on('uncaughtException', crashOnUnexpectedError('Uncaught exception'));
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Docker sends SIGTERM when stopping a container. Finish the requests already
+// in flight, close the database pool, then exit - otherwise an in-progress
+// billing transaction could be cut off mid-way.
+async function shutDownGracefully(signal) {
+  console.log(`${signal} received, shutting down...`);
+
+  server.close(async () => {
+    try {
+      await knex.destroy();
+      console.log('Database pool closed. Bye.');
+      process.exit(0);
+    } catch (error) {
+      console.error('Error while closing the database pool:', error);
+      process.exit(1);
+    }
+  });
+
+  // Don't hang forever if a request refuses to finish.
+  setTimeout(() => {
+    console.error('Shutdown took too long, forcing exit.');
+    process.exit(1);
+  }, 10000).unref();
+}
+
+process.on('SIGTERM', () => shutDownGracefully('SIGTERM'));
+process.on('SIGINT', () => shutDownGracefully('SIGINT'));

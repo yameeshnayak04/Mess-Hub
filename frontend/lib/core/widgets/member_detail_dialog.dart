@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../models/dashboard_stats.dart';
 import '../theme/app_theme.dart';
 
 class MemberInfo {
@@ -9,24 +10,10 @@ class MemberInfo {
 
   const MemberInfo({required this.name, this.phone});
 
-  // Factory constructor to handle different data formats
-  factory MemberInfo.fromMap(Map<String, dynamic> map) {
-    // Try different possible keys for name
-    final name = map['name'] as String? ??
-        map['userName'] as String? ??
-        map['memberName'] as String? ??
-        map['user']?['name'] as String? ??
-        'Unknown';
-
-    // Try different possible keys for phone
-    final phone = map['phone'] as String? ??
-        map['contactPhone'] as String? ??
-        map['phoneNumber'] as String? ??
-        map['user']?['phone'] as String? ??
-        map['user']?['contactPhone'] as String?;
-
-    return MemberInfo(name: name, phone: phone);
-  }
+  /// The dashboard's member rows carry a flat name and phone, so there is one
+  /// shape to read rather than a list of possible key names to guess between.
+  factory MemberInfo.fromDashboardMember(DashboardMember member) =>
+      MemberInfo(name: member.name, phone: member.phone);
 }
 
 class MemberDetailDialog extends StatefulWidget {
@@ -39,24 +26,13 @@ class MemberDetailDialog extends StatefulWidget {
     required this.members,
   });
 
-  // Helper factory constructor to create dialog from raw data
   factory MemberDetailDialog.fromData({
     required String title,
-    required List<dynamic> data,
+    required List<DashboardMember> data,
   }) {
-    final members = data.map((item) {
-      if (item is Map<String, dynamic>) {
-        return MemberInfo.fromMap(item);
-      } else if (item is MemberInfo) {
-        return item;
-      } else {
-        return const MemberInfo(name: 'Unknown', phone: null);
-      }
-    }).toList();
-
     return MemberDetailDialog(
       title: title,
-      members: members,
+      members: data.map(MemberInfo.fromDashboardMember).toList(),
     );
   }
 

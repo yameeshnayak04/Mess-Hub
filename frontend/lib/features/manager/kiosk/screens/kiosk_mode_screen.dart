@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:mess_management_app/core/utils/constants.dart';
 import 'package:pinput/pinput.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../models/dashboard_stats.dart';
+import '../../../../models/membership.dart';
+import '../../../../models/mess.dart';
 import '../providers/kiosk_providers.dart';
 
 class KioskModeScreen extends ConsumerStatefulWidget {
@@ -48,15 +51,13 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen>
 
   Future<void> _hydrateFromMess() async {
     final mess = await ref.read(kioskMessProvider.future);
-    if (mess == null) return;
-    final timings = mess['timings'] as Map<String, dynamic>?;
-    if (timings == null) return;
+    final timings = mess.timings;
 
     final now = TimeOfDay.fromDateTime(DateTime.now());
-    final lunchStart = _parse(timings['lunch']?['start'] as String?);
-    final lunchEnd = _parse(timings['lunch']?['end'] as String?);
-    final dinnerStart = _parse(timings['dinner']?['start'] as String?);
-    final dinnerEnd = _parse(timings['dinner']?['end'] as String?);
+    final lunchStart = _parse(timings.lunchStart);
+    final lunchEnd = _parse(timings.lunchEnd);
+    final dinnerStart = _parse(timings.dinnerStart);
+    final dinnerEnd = _parse(timings.dinnerEnd);
 
     String meal = _meal;
     bool isWithin = false;
@@ -178,7 +179,7 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen>
     );
   }
 
-  Widget _buildModernHeader(AsyncValue<Map<String, dynamic>?> mess) {
+  Widget _buildModernHeader(AsyncValue<Mess> mess) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -365,8 +366,8 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen>
                       // Daily Button
                       mess.when(
                         data: (m) {
-                          final supported = (m?['serviceType'] as String?) ==
-                              'Both Daily & Monthly';
+                          final supported =
+                              m.serviceType == 'Both Daily & Monthly';
                           return supported
                               ? Padding(
                                   padding: const EdgeInsets.only(left: 12),
@@ -557,45 +558,31 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen>
   }
 
   Widget _buildMembersGrid(
-    List<dynamic> list,
-    List<dynamic> eatingNow,
-    List<dynamic> onLeave,
-    List<dynamic> skipped,
+    List<Membership> list,
+    List<DashboardMember> eatingNow,
+    List<DashboardMember> onLeave,
+    List<DashboardMember> skipped,
   ) {
-    final eatingUserIds = eatingNow
-        .map((e) => (e as Map)['user']?['_id'] ?? (e)['user'] ?? '')
-        .cast<String>()
-        .toSet();
+    // All three lists are already scoped to the meal being served, so they are
+    // membership ids for today's served meal and nothing else.
+    Set<String> idsOf(List<DashboardMember> members) =>
+        members.map((member) => member.membershipId).toSet();
 
-    final leaveUserIds = onLeave
-        .map((e) => (e as Map)['user']?['_id'] ?? (e)['user'] ?? '')
-        .cast<String>()
-        .toSet();
-
-    final skippedUserIds = skipped
-        .where((e) {
-          final m = e as Map;
-          final meal = (m['mealType'] ?? '').toString();
-          return meal.isEmpty || meal == _meal;
-        })
-        .map((e) => (e as Map)['user']?['_id'] ?? (e)['user'] ?? '')
-        .cast<String>()
-        .toSet();
+    final eatingIds = idsOf(eatingNow);
+    final leaveIds = idsOf(onLeave);
+    final skippedIds = idsOf(skipped);
 
     final q = _searchCtrl.text.trim().toLowerCase();
 
-    final filtered = list.where((m) {
-      final mm = m as Map;
-      final user = mm['user'] as Map?;
-      final name = (user?['name'] ?? '').toString().toLowerCase();
-      final id = (user?['_id'] ?? '').toString();
-
+    // Members already eating or already skipped are done for this meal. Members
+    // on leave stay in the grid: they may still turn up, and marking them
+    // present is a real (deliberate) action - see _showPinDialog.
+    final filtered = list.where((membership) {
+      final name = (membership.memberName ?? '').toLowerCase();
       final matchesSearch = q.isEmpty || name.contains(q);
-      final isBlocked = eatingUserIds.contains(id) ||
-          leaveUserIds.contains(id) ||
-          skippedUserIds.contains(id);
-
-      return matchesSearch && !isBlocked;
+      final isDone = eatingIds.contains(membership.id) ||
+          skippedIds.contains(membership.id);
+      return matchesSearch && !isDone;
     }).toList();
 
     if (filtered.isEmpty) {
@@ -616,14 +603,15 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen>
       ),
       itemCount: filtered.length,
       itemBuilder: (context, i) {
-        final m = filtered[i] as Map;
-        final user = m['user'] as Map?;
-        final name = (user?['name'] ?? 'Unknown') as String;
-        final userId = (user?['_id'] ?? '') as String;
+        final membership = filtered[i];
+        final name = membership.memberName ?? 'Unknown';
+        final isOnLeave = leaveIds.contains(membership.id);
 
         return _ModernMemberCard(
           name: name,
-          onTap: () => _showPinDialog(userId, name),
+          isOnLeave: isOnLeave,
+          onTap: () =>
+              _showPinDialog(membership.id, name, isLeaveOverride: isOnLeave),
         );
       },
     );
@@ -638,12 +626,12 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen>
     }
   }
 
-  bool _checkWithin(String meal, Map<String, dynamic>? mess) {
-    final t = mess?['timings'] as Map<String, dynamic>?;
+  bool _checkWithin(String meal, Mess? mess) {
+    final t = mess?.timings;
     if (t == null) return false;
     final now = TimeOfDay.fromDateTime(DateTime.now());
-    final s = _parse(t[meal.toLowerCase()]?['start'] as String?);
-    final e = _parse(t[meal.toLowerCase()]?['end'] as String?);
+    final s = _parse(meal == 'Lunch' ? t.lunchStart : t.dinnerStart);
+    final e = _parse(meal == 'Lunch' ? t.lunchEnd : t.dinnerEnd);
     if (s == null || e == null) return false;
     setState(() {
       _start = s;
@@ -678,7 +666,14 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen>
     );
   }
 
-  Future<void> _showPinDialog(String userId, String name) async {
+  /// The PIN dialog does double duty: a normal check-in, or - when the member
+  /// is on leave for the meal being served - an override that also corrects
+  /// their leave. It never touches any other day or meal.
+  Future<void> _showPinDialog(
+    String membershipId,
+    String name, {
+    bool isLeaveOverride = false,
+  }) async {
     if (!_isWithinWindow) {
       _snack('$_meal window not active • ${_windowText()}',
           AppTheme.warningYellow);
@@ -784,7 +779,11 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen>
                   ),
                   onCompleted: (pin) async {
                     setStateDlg(() => isVerifying = true);
-                    await _markMonthly(userId, pin);
+                    if (isLeaveOverride) {
+                      await _overrideLeave(membershipId, pin);
+                    } else {
+                      await _markPresent(membershipId, pin);
+                    }
                     if (mounted) Navigator.pop(context);
                   },
                 ),
@@ -826,18 +825,42 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen>
     );
   }
 
-  Future<void> _markMonthly(String userId, String pin) async {
+  Future<void> _markPresent(String membershipId, String pin) async {
     try {
-      await ref.read(kioskRepositoryProvider).markMonthly(
-            userId: userId,
-            kioskPin: pin,
-            mealType: _meal,
+      await ref.read(kioskRepositoryProvider).markPresent(
+            membershipId: membershipId,
+            pin: pin,
+            meal: _meal,
           );
       _snack('Attendance marked: $_meal', AppTheme.successGreen);
-      ref.invalidate(kioskMembersEatingProvider);
+      _refreshFeeds();
     } catch (e) {
       _snack(e.toString().replaceAll('Exception: ', ''), AppTheme.errorRed);
     }
+  }
+
+  /// Marks a member present for today's meal even though they are on approved
+  /// leave, and corrects the leave itself so no rebate is kept for a day they
+  /// actually ate. The server does the correcting and tells us what it did.
+  Future<void> _overrideLeave(String membershipId, String pin) async {
+    try {
+      final result =
+          await ref.read(kioskRepositoryProvider).overrideLeaveAndMarkPresent(
+                membershipId: membershipId,
+                pin: pin,
+                meal: _meal,
+              );
+      _snack(result.summary, AppTheme.successGreen);
+      _refreshFeeds();
+    } catch (e) {
+      _snack(e.toString().replaceAll('Exception: ', ''), AppTheme.errorRed);
+    }
+  }
+
+  void _refreshFeeds() {
+    ref.invalidate(kioskMembersEatingProvider);
+    ref.invalidate(kioskMembersOnLeaveProvider);
+    ref.invalidate(kioskMembersSkippedProvider);
   }
 
   Future<void> _confirmExit() async {
@@ -932,9 +955,10 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen>
 
   Future<void> _markDaily() async {
     try {
-      await ref.read(kioskRepositoryProvider).markDaily(mealType: _meal);
-      _snack('Daily meal logged: $_meal', AppTheme.successGreen);
-      ref.invalidate(kioskMembersEatingProvider);
+      // A walk-in thali is a sale, not attendance, so it does not touch any of
+      // the member feeds.
+      await ref.read(kioskRepositoryProvider).recordWalkinSale(meal: _meal);
+      _snack('Walk-in thali logged: $_meal', AppTheme.successGreen);
     } catch (e) {
       _snack(e.toString().replaceAll('Exception: ', ''), AppTheme.errorRed);
     }
@@ -944,8 +968,13 @@ class _KioskModeScreenState extends ConsumerState<KioskModeScreen>
 class _ModernMemberCard extends StatelessWidget {
   final String name;
   final VoidCallback onTap;
+  final bool isOnLeave;
 
-  const _ModernMemberCard({required this.name, required this.onTap});
+  const _ModernMemberCard({
+    required this.name,
+    required this.onTap,
+    this.isOnLeave = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -976,10 +1005,12 @@ class _ModernMemberCard extends StatelessWidget {
                   height: 64,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [
-                        AppTheme.primaryOrange,
-                        AppTheme.secondaryOrange,
-                      ],
+                      colors: isOnLeave
+                          ? [AppTheme.infoBlue, AppTheme.infoBlue]
+                          : [
+                              AppTheme.primaryOrange,
+                              AppTheme.secondaryOrange,
+                            ],
                     ),
                     shape: BoxShape.circle,
                     boxShadow: [
@@ -1013,6 +1044,20 @@ class _ModernMemberCard extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (isOnLeave) ...[
+                  const SizedBox(height: 6),
+                  const Text(
+                    'On leave • tap to mark present',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.infoBlue,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ),
           ),

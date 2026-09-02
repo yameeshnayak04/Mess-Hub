@@ -1,7 +1,11 @@
 class ApiConstants {
+  // Points at the new PostgreSQL backend. 10.0.2.2 is how the Android
+  // emulator reaches the host machine's localhost; override for a real
+  // device or a deployed environment with:
+  //   flutter run --dart-define=API_BASE_URL=https://your-host
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://mess-hub-backend.onrender.com',
+    defaultValue: 'http://10.52.90.41:4000',
   );
   static const String apiPrefix = '/api';
   static const Duration connectionTimeout = Duration(seconds: 60);

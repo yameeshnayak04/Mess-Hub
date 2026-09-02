@@ -1,22 +1,35 @@
-// routes/reviewRoutes.js
-
+// new_backend/routes/reviewRoutes.js
 const express = require('express');
-const router = express.Router();
-const reviewController = require('../controllers/reviewController');
+
+const asyncHandler = require('../middleware/asyncHandler');
 const { protect, authorize } = require('../middleware/auth');
-const validate = require('../middleware/validate');
-const { reviewSchema } = require('../middleware/schemas');
+const { validateBody, validateQuery } = require('../middleware/validate');
+const schemas = require('../middleware/schemas');
+const reviewController = require('../controllers/reviewController');
 
-// List reviews for a mess (public or protected as per your policy)
-router.get('/:messId', reviewController.getReviews);
+const router = express.Router();
 
-// Current user's review (prefill editor)
-router.get('/:messId/me', protect, authorize('Customer'), reviewController.getMyReview);
+router.get(
+  '/:messId',
+  protect,
+  validateQuery(schemas.pageQuery),
+  asyncHandler(reviewController.listReviews)
+);
+router.get(
+  '/:messId/mine',
+  protect,
+  authorize('Customer'),
+  asyncHandler(reviewController.getMyReview)
+);
 
-// Add new review (legacy)
-router.post('/:messId', protect, authorize('Customer'), validate(reviewSchema), reviewController.addReview);
-
-// Upsert (add or update in one endpoint)
-router.put('/:messId', protect, authorize('Customer'), validate(reviewSchema), reviewController.upsertMyReview);
+// One endpoint covers writing and editing: a customer has at most one review
+// per mess, so "save my review" is the only action that exists.
+router.put(
+  '/:messId',
+  protect,
+  authorize('Customer'),
+  validateBody(schemas.upsertReview),
+  asyncHandler(reviewController.upsertMyReview)
+);
 
 module.exports = router;

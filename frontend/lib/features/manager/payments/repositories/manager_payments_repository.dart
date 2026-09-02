@@ -1,126 +1,98 @@
-// lib/features/manager/billing/repositories/manager_payments_repository.dart
-import 'package:dio/dio.dart';
+// lib/features/manager/payments/repositories/manager_payments_repository.dart
 import '../../../../core/api/dio_client.dart';
+import '../../../../models/bill.dart';
 
 class ManagerPaymentsRepository {
   final DioClient _dio;
   ManagerPaymentsRepository(this._dio);
 
-  String _msg(Response res, String fallback) {
-    final d = res.data;
-    if (d is Map &&
-        d['message'] is String &&
-        (d['message'] as String).isNotEmpty) return d['message'];
-    if (d is Map && d['error'] is String && (d['error'] as String).isNotEmpty)
-      return d['error'];
-    return fallback;
-  }
-
-  // Extract origin from baseUrl (strip trailing /api if present)
-  String get _origin {
-    final base =
-        _dio.baseUrl; // expose baseUrl from DioClient (ensure getter exists)
-    final uri = Uri.parse(base);
-    final origin =
-        '${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}';
-    return base.endsWith('/api')
-        ? origin
-        : (uri.path.startsWith('/api') ? origin : base);
-  }
-
-  String? resolveFileUrl(String? pathOrUrl) {
-    if (pathOrUrl == null || pathOrUrl.isEmpty) return null;
-    if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://'))
-      return pathOrUrl;
-    // Server serves static uploads at /uploads
-    if (pathOrUrl.startsWith('/uploads/')) return '$_origin$pathOrUrl';
-    return '$_origin/$pathOrUrl';
-  }
-
-  // Pending approvals (bills awaiting manager decision)
-  Future<List<Map<String, dynamic>>> getPendingApprovals() async {
-    final res = await _dio.get('/billing/pending-approvals');
-    if (res.statusCode == 200 && res.data is Map && res.data['data'] is List) {
-      return (res.data['data'] as List)
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    }
-    throw _msg(res, 'Failed to load pending approvals');
-  }
-
-  Future<List> getDueBills() async {
-    final res = await _dio.get('/billing/due-bills');
-    return (res.data['data'] as List);
-  }
-
-  // Approve a payment
-  Future<Map<String, dynamic>> approvePayment(String billId) async {
-    final res = await _dio.put('/billing/approve-payment/$billId');
-    if (res.statusCode == 200)
-      return Map<String, dynamic>.from(res.data as Map);
-    throw _msg(res, 'Failed to approve payment');
-  }
-
-  // Reject a payment
-  Future<Map<String, dynamic>> rejectPayment(String billId) async {
-    final res = await _dio.put('/billing/reject-payment/$billId');
-    if (res.statusCode == 200)
-      return Map<String, dynamic>.from(res.data as Map);
-    throw _msg(res, 'Failed to reject payment');
-  }
-
-  // All bills (filter by status/month/year/member; supports automated billing cycles)
-  Future<List<Map<String, dynamic>>> getAllBills({
-    String? status, // 'Paid' | 'Pending Approval' | 'Due'
+  /// One filtered route replaces the old separate pending/due/all endpoints.
+  Future<List<Bill>> getBills({
+    String? status,
     int? month,
     int? year,
-    String? memberNameOrPhone,
     int page = 1,
     int limit = 20,
   }) async {
-    final qp = {
-      'page': page,
-      'limit': limit,
-      if (status != null) 'status': status,
-      if (month != null) 'month': month,
-      if (year != null) 'year': year,
-      if (memberNameOrPhone != null && memberNameOrPhone.isNotEmpty)
-        'q': memberNameOrPhone,
-    };
-    final res = await _dio.get('/billing/all-bills', queryParameters: qp);
-    if (res.statusCode == 200 && res.data is Map && res.data['data'] is List) {
-      return (res.data['data'] as List)
+    try {
+      final res = await _dio.get('/billing/mess', queryParameters: {
+        if (status != null) 'status': status,
+        if (month != null) 'month': month,
+        if (year != null) 'year': year,
+        'page': page,
+        'limit': limit,
+      });
+      return (DioClient.unwrap(res) as List)
           .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
+          .map((e) => Bill.fromJson(Map<String, dynamic>.from(e)))
           .toList();
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
-    throw _msg(res, 'Failed to load bills');
   }
 
-  // Payment detail for proof (if not embedded on the bill)
-  Future<Map<String, dynamic>> getPaymentByBillId(String billId) async {
-    final res = await _dio.get('/billing/payment/$billId');
-    if (res.statusCode == 200 && res.data is Map && res.data['data'] is Map) {
-      return Map<String, dynamic>.from(res.data['data'] as Map);
+  Future<List<Bill>> getPendingApprovals() =>
+      getBills(status: 'Pending Approval');
+
+  Future<List<Bill>> getDueBills() => getBills(status: 'Due');
+
+  Future<List<Bill>> getAllBills({
+    String? status,
+    int? month,
+    int? year,
+    int page = 1,
+    int limit = 20,
+  }) =>
+      getBills(
+          status: status, month: month, year: year, page: page, limit: limit);
+
+  /// A bill only moves to Paid from 'Pending Approval' - the backend refuses a
+  /// straight Due -> Paid jump, since nobody submitted proof for it.
+  Future<Bill> approvePayment(String billId) async {
+    try {
+      final res = await _dio.post('/billing/$billId/approve');
+      return Bill.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
     }
-    throw _msg(res, 'Failed to load payment detail');
   }
 
-  // Helper to resolve payment proof URL from bill or detail
-  Future<String?> getPaymentProofUrl(Map<String, dynamic> bill) async {
-    final direct = resolveFileUrl((bill['proofUrl'] ??
-        bill['paymentProofUrl'] ??
-        bill['screenshotUrl']) as String?);
-    if (direct != null) return direct;
-    final id = (bill['_id'] as String?) ?? (bill['id'] as String?);
-    if (id == null) return null;
-    final detail = await getPaymentByBillId(id);
-    final fromDetail = resolveFileUrl(
-      (detail['proofUrl'] ??
-          detail['paymentProofUrl'] ??
-          detail['screenshotUrl']) as String?,
-    );
-    return fromDetail;
+  /// Sends the bill back to Due. The rejected proof is kept in the bill's
+  /// event history rather than being erased.
+  Future<Bill> rejectPayment(String billId, {String? note}) async {
+    try {
+      final res = await _dio.post(
+        '/billing/$billId/reject',
+        data: {if (note != null && note.trim().isNotEmpty) 'note': note.trim()},
+      );
+      return Bill.fromJson(
+          Map<String, dynamic>.from(DioClient.unwrap(res) as Map));
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
+  }
+
+  /// Payment proofs are private on Cloudinary, so there is no permanent URL on
+  /// the bill any more. This asks for a freshly signed link that expires in a
+  /// few minutes.
+  Future<String?> getPaymentProofUrl(String billId) async {
+    try {
+      final res = await _dio.get('/billing/$billId/proof');
+      final data = Map<String, dynamic>.from(DioClient.unwrap(res) as Map);
+      return data['viewUrl'] as String?;
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
+  }
+
+  /// Who submitted, approved or rejected a payment, and when.
+  Future<Map<String, dynamic>> getBillHistory(String billId) async {
+    try {
+      final res = await _dio.get('/billing/$billId/history');
+      return Map<String, dynamic>.from(DioClient.unwrap(res) as Map);
+    } catch (error) {
+      throw DioClient.asApiException(error);
+    }
   }
 }

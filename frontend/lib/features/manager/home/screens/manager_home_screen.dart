@@ -11,7 +11,10 @@ import '../../../../core/widgets/stat_card.dart';
 import '../../../../core/widgets/member_detail_dialog.dart';
 import '../../../../core/utils/constants.dart';
 import '../providers/dashboard_provider.dart';
+import '../../../../models/bill.dart';
 import '../../../../models/dashboard_stats.dart';
+import '../../../../models/membership.dart';
+import '../../../../models/menu.dart';
 
 class ManagerHomeScreen extends ConsumerStatefulWidget {
   const ManagerHomeScreen({super.key});
@@ -70,17 +73,19 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                   ref.read(dashboardStatsProvider.notifier).refresh(),
             ),
             data: (stats) {
+              // currentMeal is null when nothing is being served right now;
+              // `meal` on the payload is already "the meal these counts are
+              // about", so it is the right one to query the drill-downs with.
               final meal = stats.currentMeal;
-              final mealForDialogs = (meal == 'Lunch' || meal == 'Dinner')
-                  ? meal
-                  : (stats.nextMeal == 'Dinner' ? 'Dinner' : 'Lunch');
-              final mealTag = meal == 'None' ? '' : ' • $meal';
-              final eaten = stats.eaten;
+              final String mealForDialogs = stats.meal;
+              final mealTag = meal == null ? '' : ' • $meal';
+              final eaten = stats.eating;
               final onLeave = stats.onLeave;
               final skipped = stats.skipped;
-              final eligible = stats.totalActiveMembers;
-              final remaining =
-                  (eligible - eaten - onLeave - skipped).clamp(0, 1 << 30);
+              final eligible = stats.eligible;
+              // The backend works "remaining" out itself, so take its number
+              // rather than subtracting here and risking a different answer.
+              final remaining = stats.remaining;
 
               return CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -272,7 +277,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
                                 subtitle: mealTag.isNotEmpty
                                     ? mealTag.substring(3)
                                     : '',
-                                value: (stats.dailyMembers ?? 0).toString(),
+                                value: stats.walkins.toString(),
                                 icon: Icons.calendar_today_rounded,
                                 gradient: const LinearGradient(
                                   colors: [
@@ -516,7 +521,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
     );
 
     try {
-      List<Map<String, dynamic>> data;
+      List<DashboardMember> data;
       switch (type) {
         case 'eating':
           data = await ref
@@ -539,7 +544,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
               .getMembersRemaining(effectiveMeal);
           break;
         default:
-          data = const <Map<String, dynamic>>[];
+          data = const <DashboardMember>[];
       }
 
       // Dismiss loading dialog simply using Navigator.of(context, rootNavigator: true).pop()
@@ -552,11 +557,7 @@ class _ManagerHomeScreenState extends ConsumerState<ManagerHomeScreen> {
         loadingVisible = false;
       }
 
-      // normalize entries
-      final membersList = data
-          .whereType<Map>()
-          .map((m) => Map<String, dynamic>.from(m))
-          .toList();
+      final membersList = data;
 
       if (membersList.isEmpty) {
         if (context.mounted)
@@ -866,7 +867,7 @@ class _ModernStatCard extends StatelessWidget {
 
 // Modern Menu Card Widget
 class _ModernMenuCard extends StatelessWidget {
-  final AsyncValue<Map<String, dynamic>?> todaysMenu;
+  final AsyncValue<Menu?> todaysMenu;
   final VoidCallback onEdit;
 
   const _ModernMenuCard({
@@ -911,10 +912,8 @@ class _ModernMenuCard extends StatelessWidget {
           ),
         ),
         data: (menu) {
-          final lunch = (menu?['lunchItems'] as List?)?.cast<String>() ??
-              const <String>[];
-          final dinner = (menu?['dinnerItems'] as List?)?.cast<String>() ??
-              const <String>[];
+          final lunch = menu?.lunchItems ?? const <String>[];
+          final dinner = menu?.dinnerItems ?? const <String>[];
 
           return Padding(
             padding: const EdgeInsets.all(24),
@@ -1063,8 +1062,8 @@ class _ModernMenuCard extends StatelessWidget {
 
 // Modern Action Center Widget
 class _ModernActionCenter extends StatelessWidget {
-  final AsyncValue<List<Map<String, dynamic>>> approvals;
-  final AsyncValue<List<Map<String, dynamic>>> joinRequests;
+  final AsyncValue<List<Bill>> approvals;
+  final AsyncValue<List<Membership>> joinRequests;
   final ValueChanged<String> onApprovePayment;
   final ValueChanged<String> onRejectPayment;
   final ValueChanged<String> onApproveMember;
@@ -1177,12 +1176,9 @@ class _ModernActionCenter extends StatelessWidget {
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final bill = bills[index];
-                      final billId = (bill['_id'] ?? '').toString();
-                      final memberName = (bill['member']?['name'] ??
-                              bill['user']?['name'] ??
-                              'Member')
-                          .toString();
-                      final amount = (bill['amount'] ?? 0).toString();
+                      final billId = bill.id;
+                      final memberName = bill.memberName ?? 'Member';
+                      final amount = bill.totalRupees.toStringAsFixed(0);
 
                       return Container(
                         decoration: BoxDecoration(
@@ -1364,10 +1360,9 @@ class _ModernActionCenter extends StatelessWidget {
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final member = joins[index];
-                      final membershipId = (member['_id'] ?? '').toString();
-                      final uName =
-                          (member['user']?['name'] ?? 'Member').toString();
-                      final planName = (member['planName'] ?? '-').toString();
+                      final membershipId = member.id;
+                      final uName = member.memberName ?? 'Member';
+                      final planName = member.planName;
 
                       return Container(
                         decoration: BoxDecoration(

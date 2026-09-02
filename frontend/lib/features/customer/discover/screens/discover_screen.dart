@@ -554,7 +554,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                   _buildPlaceholderImage(),
 
                 // Rating badge
-                if (mess.averageRating != null && mess.averageRating! > 0)
+                if (mess.rating.count > 0)
                   Positioned(
                     top: 12,
                     right: 12,
@@ -579,7 +579,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                               size: 16, color: Colors.white),
                           const SizedBox(width: 4),
                           Text(
-                            mess.averageRating!.toStringAsFixed(1),
+                            mess.rating.average.toStringAsFixed(1),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 13,
@@ -592,7 +592,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                   ),
 
                 // Distance badge
-                if (mess.distance != null)
+                if (mess.distanceMetres != null)
                   Positioned(
                     top: 12,
                     left: 12,
@@ -617,7 +617,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                               size: 14, color: AppTheme.primaryOrange),
                           const SizedBox(width: 4),
                           Text(
-                            '${(mess.distance! / 1000).toStringAsFixed(1)} km',
+                            '${(mess.distanceMetres! / 1000).toStringAsFixed(1)} km',
                             style: const TextStyle(
                               color: AppTheme.primaryOrange,
                               fontSize: 12,
@@ -766,8 +766,8 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
       );
     }
     final center = first ??
-        LatLng(messes.first.location.coordinates[1],
-            messes.first.location.coordinates[0]);
+        LatLng(messes.first.location.latitude,
+            messes.first.location.longitude);
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -792,9 +792,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
 
   LatLng? _extractLatLng(Mess m) {
     try {
-      if (m.location.coordinates.length == 2) {
-        return LatLng(m.location.coordinates[1], m.location.coordinates[0]);
-      }
+      return LatLng(m.location.latitude, m.location.longitude);
     } catch (_) {}
     return null;
   }
@@ -902,7 +900,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      if (mess.distance != null)
+                      if (mess.distanceMetres != null)
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.all(12),
@@ -919,7 +917,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '${(mess.distance! / 1000).toStringAsFixed(1)} km',
+                                  '${(mess.distanceMetres! / 1000).toStringAsFixed(1)} km',
                                   style: const TextStyle(
                                     color: AppTheme.primaryOrange,
                                     fontWeight: FontWeight.bold,
@@ -930,8 +928,8 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                             ),
                           ),
                         ),
-                      if (mess.distance != null) const SizedBox(width: 12),
-                      if (mess.averageRating != null && mess.averageRating! > 0)
+                      if (mess.distanceMetres != null) const SizedBox(width: 12),
+                      if (mess.rating.count > 0)
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.all(12),
@@ -945,7 +943,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                                     color: Colors.amber, size: 20),
                                 const SizedBox(height: 4),
                                 Text(
-                                  mess.averageRating!.toStringAsFixed(1),
+                                  mess.rating.average.toStringAsFixed(1),
                                   style: const TextStyle(
                                     color: Colors.amber,
                                     fontWeight: FontWeight.bold,

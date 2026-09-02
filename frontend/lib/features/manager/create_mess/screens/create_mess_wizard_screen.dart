@@ -39,6 +39,15 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
     TextEditingController(text: 'Monthly (Lunch Only)'),
     TextEditingController(text: 'Monthly (Dinner Only)'),
   ];
+
+  // Which meals each preset plan covers, sent to the server as real data.
+  // A plan's name is a label the manager can rename freely - it never decides
+  // what the plan includes.
+  static const List<List<String>> _planMeals = [
+    ['Lunch', 'Dinner'],
+    ['Lunch'],
+    ['Dinner'],
+  ];
   final List<TextEditingController> _planRateControllers = [
     TextEditingController(),
     TextEditingController(),
@@ -65,9 +74,12 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(createMessProvider.notifier).updateFormData('plans', [
-        {'name': _planNameControllers[0].text, 'rate': null},
-        {'name': _planNameControllers[1].text, 'rate': null},
-        {'name': _planNameControllers[2].text, 'rate': null},
+        for (var i = 0; i < _planNameControllers.length; i++)
+          {
+            'name': _planNameControllers[i].text,
+            'rateRupees': null,
+            'meals': _planMeals[i],
+          },
       ]);
     });
   }
@@ -118,16 +130,11 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
     if (picked != null) {
       final formattedTime =
           '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
-      final path = isLunch
-          ? (isStart
-              ? ['timings', 'lunch', 'start']
-              : ['timings', 'lunch', 'end'])
-          : (isStart
-              ? ['timings', 'dinner', 'start']
-              : ['timings', 'dinner', 'end']);
-      ref
-          .read(createMessProvider.notifier)
-          .updateNestedFormData(path, formattedTime);
+      // Four flat HH:MM fields, not a nested timings object.
+      final field = isLunch
+          ? (isStart ? 'lunchStart' : 'lunchEnd')
+          : (isStart ? 'dinnerStart' : 'dinnerEnd');
+      ref.read(createMessProvider.notifier).updateFormData(field, formattedTime);
     }
   }
 
@@ -170,37 +177,35 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
             (formData['contactPhone'] as String?)?.length == 10 &&
             formData['serviceType'] != null &&
             formData['cuisine'] != null &&
-            formData['basicThaliDetails'] != null &&
-            formData['maxCapacity'] != null &&
-            (formData['maxCapacity'] as num) > 0;
+            formData['basicThaliDetails'] != null;
       case 1:
         return formData['location'] != null &&
             formData['address'] != null &&
             formData['city'] != null;
       case 2:
         final plans = formData['plans'] as List?;
-        bool allPlansValid = plans?.every((p) =>
+        bool anyPlanPriced = plans?.any((p) =>
                 p is Map &&
                 p['name'] != null &&
-                p['rate'] != null &&
-                (p['rate'] as num?)! > 0) ??
+                p['rateRupees'] is num &&
+                (p['rateRupees'] as num) > 0) ??
             false;
         bool dailyRateValid = true;
         if (formData['serviceType'] == 'Both Daily & Monthly') {
-          dailyRateValid = formData['dailyThaliRate'] != null &&
-              (formData['dailyThaliRate'] as num?)! > 0;
+          dailyRateValid = formData['dailyThaliRateRupees'] != null &&
+              (formData['dailyThaliRateRupees'] as num?)! > 0;
         }
-        return allPlansValid && dailyRateValid;
+        return anyPlanPriced && dailyRateValid;
       case 3:
         return formData['rules']?['minLeaveDaysForRebate'] != null &&
             (formData['rules']?['minLeaveDaysForRebate'] as num?)! > 0 &&
-            formData['rules']?['rebatePerThali'] != null &&
-            (formData['rules']?['rebatePerThali'] as num?)! >= 0;
+            formData['rules']?['rebatePerThaliRupees'] != null &&
+            (formData['rules']?['rebatePerThaliRupees'] as num?)! >= 0;
       case 4:
-        return formData['timings']?['lunch']?['start'] != null &&
-            formData['timings']?['lunch']?['end'] != null &&
-            formData['timings']?['dinner']?['start'] != null &&
-            formData['timings']?['dinner']?['end'] != null &&
+        return formData['lunchStart'] != null &&
+            formData['lunchEnd'] != null &&
+            formData['dinnerStart'] != null &&
+            formData['dinnerEnd'] != null &&
             formData['rules']?['skipAllowancePercent'] != null &&
             (formData['rules']?['skipAllowancePercent'] as num?)! >= 0;
       default:
@@ -211,16 +216,30 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
   Future<void> _submitMess() async {
     final success = await ref.read(createMessProvider.notifier).submitMess();
     if (success && mounted) {
+      // The mess is created either way; only the picture may have missed.
+      final pictureFailed = ref.read(createMessProvider).pictureUploadFailed;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.check_circle, color: Colors.white),
+              Icon(
+                pictureFailed ? Icons.info_outline : Icons.check_circle,
+                color: Colors.white,
+              ),
               const SizedBox(width: 12),
-              const Text('Mess created successfully!'),
+              Expanded(
+                child: Text(
+                  pictureFailed
+                      ? 'Mess created. The photo did not upload - you can add '
+                          'it from your mess profile.'
+                      : 'Mess created successfully!',
+                ),
+              ),
             ],
           ),
-          backgroundColor: AppTheme.successGreen,
+          backgroundColor:
+              pictureFailed ? AppTheme.warningYellow : AppTheme.successGreen,
           behavior: SnackBarBehavior.floating,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -625,7 +644,7 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
             return null;
           },
           onChanged: (value) =>
-              notifier.updateFormData('maxCapacity', int.tryParse(value) ?? 0),
+              notifier.updateFormData('maxCapacity', int.tryParse(value)),
         ),
         const SizedBox(height: 24),
 
@@ -681,12 +700,9 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
       CreateMessState state, CreateMessNotifier notifier) {
     LatLng? initialMapLocation;
     final locationData = state.formData['location'] as Map?;
-    final coordinates = locationData?['coordinates'] as List?;
-    double? displayLat;
-    double? displayLng;
-    if (coordinates != null && coordinates.length == 2) {
-      displayLng = (coordinates[0] as num).toDouble();
-      displayLat = (coordinates[1] as num).toDouble();
+    final displayLng = (locationData?['longitude'] as num?)?.toDouble();
+    final displayLat = (locationData?['latitude'] as num?)?.toDouble();
+    if (displayLng != null && displayLat != null) {
       initialMapLocation = LatLng(displayLat, displayLng);
     }
 
@@ -868,7 +884,7 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
                   hint: 'Enter daily rate',
                   prefixText: '₹ ',
                   keyboardType: TextInputType.number,
-                  initialValue: state.formData['dailyThaliRate']?.toString(),
+                  initialValue: state.formData['dailyThaliRateRupees']?.toString(),
                   validator: (value) {
                     if (value == null || value.isEmpty)
                       return 'Daily rate is required';
@@ -878,7 +894,7 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
                     return null;
                   },
                   onChanged: (value) => notifier.updateFormData(
-                      'dailyThaliRate', double.tryParse(value) ?? 0.0),
+                      'dailyThaliRateRupees', double.tryParse(value) ?? 0.0),
                 ),
               ],
             ),
@@ -961,7 +977,7 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
                     hint: 'Enter rate',
                     prefixText: '₹ ',
                     keyboardType: TextInputType.number,
-                    initialValue: plans[index]['rate']?.toString(),
+                    initialValue: plans[index]['rateRupees']?.toString(),
                     validator: (value) {
                       if (value == null || value.isEmpty)
                         return 'Rate required';
@@ -973,7 +989,8 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
                       final newPlans = List<Map<String, dynamic>>.from(plans);
                       newPlans[index] = {
                         'name': _planNameControllers[index].text,
-                        'rate': double.tryParse(value)
+                        'rateRupees': double.tryParse(value),
+                        'meals': _planMeals[index],
                       };
                       notifier.updateFormData('plans', newPlans);
                     },
@@ -1025,7 +1042,7 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
           icon: Icons.money_off,
           prefixText: '₹ ',
           keyboardType: TextInputType.number,
-          initialValue: state.formData['rules']?['rebatePerThali']?.toString(),
+          initialValue: state.formData['rules']?['rebatePerThaliRupees']?.toString(),
           validator: (value) {
             if (value == null || value.isEmpty) return 'Rebate amount required';
             if (double.tryParse(value) == null || double.parse(value) < 0)
@@ -1033,7 +1050,7 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
             return null;
           },
           onChanged: (value) => notifier.updateNestedFormData(
-              ['rules', 'rebatePerThali'], double.tryParse(value) ?? 0.0),
+              ['rules', 'rebatePerThaliRupees'], double.tryParse(value) ?? 0.0),
         ),
         const SizedBox(height: 12),
         Container(
@@ -1085,9 +1102,9 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
           icon: Icons.account_balance_wallet,
           prefixText: '₹ ',
           keyboardType: TextInputType.number,
-          initialValue: state.formData['rules']?['securityDeposit']?.toString(),
+          initialValue: state.formData['rules']?['securityDepositRupees']?.toString(),
           onChanged: (value) => notifier.updateNestedFormData(
-              ['rules', 'securityDeposit'], double.tryParse(value)),
+              ['rules', 'securityDepositRupees'], double.tryParse(value)),
         ),
         const SizedBox(height: 20),
         _buildModernTextField(
@@ -1097,9 +1114,9 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
           prefixText: '₹ ',
           keyboardType: TextInputType.number,
           initialValue:
-              state.formData['rules']?['minMonthlyCharge']?.toString(),
+              state.formData['rules']?['minMonthlyChargeRupees']?.toString(),
           onChanged: (value) => notifier.updateNestedFormData(
-              ['rules', 'minMonthlyCharge'], double.tryParse(value)),
+              ['rules', 'minMonthlyChargeRupees'], double.tryParse(value)),
         ),
       ],
     );
@@ -1107,10 +1124,10 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
 
   Widget _buildStep5Timings(
       CreateMessState state, CreateMessNotifier notifier) {
-    final lunchStart = _getTimeFromState(['timings', 'lunch', 'start']);
-    final lunchEnd = _getTimeFromState(['timings', 'lunch', 'end']);
-    final dinnerStart = _getTimeFromState(['timings', 'dinner', 'start']);
-    final dinnerEnd = _getTimeFromState(['timings', 'dinner', 'end']);
+    final lunchStart = _getTimeFromState(['lunchStart']);
+    final lunchEnd = _getTimeFromState(['lunchEnd']);
+    final dinnerStart = _getTimeFromState(['dinnerStart']);
+    final dinnerEnd = _getTimeFromState(['dinnerEnd']);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1140,7 +1157,7 @@ class _CreateMessWizardScreenState extends ConsumerState<CreateMessWizardScreen>
             return null;
           },
           onChanged: (value) => notifier.updateNestedFormData(
-              ['rules', 'skipAllowancePercent'], double.tryParse(value) ?? 0.0),
+              ['rules', 'skipAllowancePercent'], int.tryParse(value) ?? 0),
         ),
         const SizedBox(height: 32),
         _buildTimingSection(

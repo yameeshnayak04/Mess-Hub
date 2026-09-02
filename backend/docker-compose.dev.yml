@@ -1,0 +1,68 @@
+# new_backend/docker-compose.dev.yml
+#
+# This is the committed, canonical setup for local development. Run it with:
+#
+#     docker compose -f docker-compose.dev.yml up --build
+#
+# (`docker-compose.yml` is git-ignored and reserved for your own local
+# overrides - copy this file to that name if you want tweaks that should not
+# be committed, and plain `docker compose up` will pick them up.)
+#
+# This file lives INSIDE new_backend/ (not at the repo root) on purpose — the
+# whole point of new_backend/ is that it's a self-contained project. Anyone
+# should be able to run it with nothing else from the rest of the repo. (The
+# old `backend/` folder is completely separate and this does not touch it.)
+#
+# Two services:
+#   db      — Postgres with the PostGIS extension already built in (we use
+#             PostGIS for "find messes near me" map searches).
+#   backend — our Node app, built from the Dockerfile next to this file.
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Sets the *database server's* default timezone to IST. Our app also
+      # sets this per-connection in db/knexfile.js — that's the setting that
+      # actually matters for correctness. This one is a backup: even a plain
+      # `psql` session connecting straight to this container (skipping our
+      # app entirely) will still default to IST instead of Postgres' usual UTC.
+      TZ: Asia/Kolkata
+      PGTZ: Asia/Kolkata
+    ports:
+      # Exposed to your host machine too, so you can point a DB GUI tool
+      # (e.g. TablePlus, pgAdmin) at localhost:5544 while developing.
+      - '5544:5432'
+    volumes:
+      # Named volume — this is what makes your data survive
+      # `docker compose down` / container restarts. Without this, every
+      # restart would give you a completely empty database.
+      - messhub_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      # "Started" and "ready to accept connections" are different things for
+      # Postgres — pg_isready checks the real thing. The backend service
+      # below waits for this healthcheck to pass before it starts, so
+      # migrations never race against a database that isn't ready yet.
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    env_file: .env
+    environment:
+      # Overrides whatever DATABASE_URL is in .env — inside Docker's network,
+      # the database isn't at "localhost", it's at the service name "db".
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    ports:
+      - '${PORT:-4000}:4000'
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  messhub_pg_data:

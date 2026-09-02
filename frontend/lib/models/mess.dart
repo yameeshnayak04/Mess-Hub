@@ -1,12 +1,12 @@
 // lib/models/mess.dart
 import 'user.dart';
+import '../core/utils/json_parse.dart';
 
 class Mess {
   final String id;
   final String messName;
   final String? messImage;
-  final Location
-      location; // GeoJSON: { type: 'Point', coordinates: [lng, lat] }
+  final Location location; // { longitude, latitude }
   final String address;
   final String city;
   final String contactPhone;
@@ -15,14 +15,18 @@ class Mess {
   final int? maxCapacity;
   final bool tiffinService;
   final String basicThaliDetails;
-  final MessTimings timings; // strings "HH:mm"
-  final List<MessPlan> plans; // typed
-  final double?
-      dailyThaliRate; // required if serviceType == 'Both Daily & Monthly'
+  final MessTimings timings;
+  final List<MessPlan> plans; // only on /messes/:id and /messes/my-mess
+  final double? dailyThaliRateRupees;
   final MessRules rules;
-  final double? averageRating; // computed/populated
-  final int? reviewCount; // computed/populated
-  final double? distance; // meters from /mess/discover
+  final MessRating rating;
+
+  /// Only on /messes/discover.
+  final double? distanceMetres;
+
+  /// Only on /messes/:id - whether a meal is being served right now.
+  final String? liveStatus; // 'Open' | 'Closed'
+  final String? currentMeal; // 'Lunch' | 'Dinner' | null
 
   Mess({
     required this.id,
@@ -39,71 +43,52 @@ class Mess {
     required this.basicThaliDetails,
     required this.timings,
     required this.plans,
-    this.dailyThaliRate,
+    this.dailyThaliRateRupees,
     required this.rules,
-    this.averageRating,
-    this.reviewCount,
-    this.distance,
+    required this.rating,
+    this.distanceMetres,
+    this.liveStatus,
+    this.currentMeal,
   });
 
   factory Mess.fromJson(Map<String, dynamic> json) {
-    double? _toDouble(dynamic v) {
-      if (v == null) return null;
-      if (v is num) return v.toDouble();
-      final s = v.toString().trim();
-      return double.tryParse(s);
-    }
-
-    int? _toInt(dynamic v) {
-      if (v == null) return null;
-      if (v is num) return v.toInt();
-      final s = v.toString().trim();
-      return int.tryParse(s);
-    }
-
-    List<MessPlan> _parsePlans(dynamic jsonList) {
-      if (jsonList is List) {
-        return jsonList
-            .where((e) => e is Map)
-            .map((e) => MessPlan.fromJson(e as Map<String, dynamic>))
-            .toList();
-      }
-      return <MessPlan>[];
-    }
-
     return Mess(
-      id: json['_id'] as String,
-      messName: json['messName'] as String,
+      id: asId(json['id']),
+      messName: json['messName'] as String? ?? '',
       messImage: json['messImage'] as String?,
-      location: json['location'] != null
-          ? Location.fromJson(json['location'] as Map<String, dynamic>)
-          : Location(type: 'Point', coordinates: const [0.0, 0.0]),
+      location: json['location'] is Map
+          ? Location.fromJson(
+              Map<String, dynamic>.from(json['location'] as Map))
+          : Location(longitude: 0, latitude: 0),
       address: json['address'] as String? ?? 'N/A',
       city: json['city'] as String? ?? 'N/A',
       contactPhone: json['contactPhone'] as String? ?? 'N/A',
       serviceType: json['serviceType'] as String? ?? 'N/A',
       cuisine: json['cuisine'] as String? ?? 'N/A',
-      maxCapacity: _toInt(json['maxCapacity']),
-      tiffinService: (json['tiffinService'] as bool?) ?? false,
+      maxCapacity: asInt(json['maxCapacity']),
+      tiffinService: asBool(json['tiffinService']),
       basicThaliDetails: json['basicThaliDetails'] as String? ?? '',
-      timings: json['timings'] != null
-          ? MessTimings.fromJson(json['timings'] as Map<String, dynamic>)
-          : MessTimings(
-              lunch: MealTiming(start: '00:00', end: '00:00'),
-              dinner: MealTiming(start: '00:00', end: '00:00'),
-            ),
-      plans: _parsePlans(json['plans']),
-      dailyThaliRate: _toDouble(json['dailyThaliRate']),
-      rules: json['rules'] != null
-          ? MessRules.fromJson(json['rules'] as Map<String, dynamic>)
-          : MessRules(
-              minLeaveDaysForRebate: 99,
-              rebatePerThali: 0,
-              skipAllowancePercent: 0,
-            ),
-      averageRating: _toDouble(json['averageRating']), // accepts "0.0" or 0
-      reviewCount: _toInt(json['reviewCount']),
-      distance: _toDouble(json['distance']),
+      timings: json['timings'] is Map
+          ? MessTimings.fromJson(
+              Map<String, dynamic>.from(json['timings'] as Map))
+          : MessTimings.empty(),
+      plans: (json['plans'] is List)
+          ? (json['plans'] as List)
+              .whereType<Map>()
+              .map((e) => MessPlan.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const <MessPlan>[],
+      dailyThaliRateRupees: asDouble(json['dailyThaliRateRupees']),
+      rules: json['rules'] is Map
+          ? MessRules.fromJson(Map<String, dynamic>.from(json['rules'] as Map))
+          : MessRules.empty(),
+      rating: json['rating'] is Map
+          ? MessRating.fromJson(
+              Map<String, dynamic>.from(json['rating'] as Map))
+          : const MessRating(average: 0, count: 0),
+      distanceMetres: asDouble(json['distanceMetres']),
+      liveStatus: json['liveStatus'] as String?,
+      currentMeal: json['currentMeal'] as String?,
     );
   }
 
@@ -122,11 +107,12 @@ class Mess {
     String? basicThaliDetails,
     MessTimings? timings,
     List<MessPlan>? plans,
-    double? dailyThaliRate,
+    double? dailyThaliRateRupees,
     MessRules? rules,
-    double? averageRating,
-    int? reviewCount,
-    double? distance,
+    MessRating? rating,
+    double? distanceMetres,
+    String? liveStatus,
+    String? currentMeal,
   }) {
     return Mess(
       id: id ?? this.id,
@@ -143,140 +129,153 @@ class Mess {
       basicThaliDetails: basicThaliDetails ?? this.basicThaliDetails,
       timings: timings ?? this.timings,
       plans: plans ?? this.plans,
-      dailyThaliRate: dailyThaliRate ?? this.dailyThaliRate,
+      dailyThaliRateRupees: dailyThaliRateRupees ?? this.dailyThaliRateRupees,
       rules: rules ?? this.rules,
-      averageRating: averageRating ?? this.averageRating,
-      reviewCount: reviewCount ?? this.reviewCount,
-      distance: distance ?? this.distance,
+      rating: rating ?? this.rating,
+      distanceMetres: distanceMetres ?? this.distanceMetres,
+      liveStatus: liveStatus ?? this.liveStatus,
+      currentMeal: currentMeal ?? this.currentMeal,
     );
   }
-
-  Map<String, dynamic> toJson() => {
-        '_id': id,
-        'messName': messName,
-        if (messImage != null) 'messImage': messImage,
-        'location': location.toJson(),
-        'address': address,
-        'city': city,
-        'contactPhone': contactPhone,
-        'serviceType': serviceType,
-        'cuisine': cuisine,
-        if (maxCapacity != null) 'maxCapacity': maxCapacity,
-        'tiffinService': tiffinService,
-        'basicThaliDetails': basicThaliDetails,
-        'timings': timings.toJson(),
-        'plans': plans.map((e) => e.toJson()).toList(),
-        if (dailyThaliRate != null) 'dailyThaliRate': dailyThaliRate,
-        'rules': rules.toJson(),
-        if (averageRating != null) 'averageRating': averageRating,
-        if (reviewCount != null) 'reviewCount': reviewCount,
-        if (distance != null) 'distance': distance,
-      };
 }
 
+/// Flat HH:MM strings, matching the backend's four TIME columns.
 class MessTimings {
-  final MealTiming lunch;
-  final MealTiming dinner;
+  final String lunchStart;
+  final String lunchEnd;
+  final String dinnerStart;
+  final String dinnerEnd;
 
-  MessTimings({required this.lunch, required this.dinner});
+  MessTimings({
+    required this.lunchStart,
+    required this.lunchEnd,
+    required this.dinnerStart,
+    required this.dinnerEnd,
+  });
 
-  factory MessTimings.fromJson(Map<String, dynamic> json) {
-    final defaultTiming = MealTiming(start: '00:00', end: '00:00');
-    return MessTimings(
-      lunch: json['lunch'] != null
-          ? MealTiming.fromJson(json['lunch'] as Map<String, dynamic>)
-          : defaultTiming,
-      dinner: json['dinner'] != null
-          ? MealTiming.fromJson(json['dinner'] as Map<String, dynamic>)
-          : defaultTiming,
-    );
-  }
+  factory MessTimings.empty() => MessTimings(
+        lunchStart: '00:00',
+        lunchEnd: '00:00',
+        dinnerStart: '00:00',
+        dinnerEnd: '00:00',
+      );
+
+  factory MessTimings.fromJson(Map<String, dynamic> json) => MessTimings(
+        lunchStart: json['lunchStart'] as String? ?? '00:00',
+        lunchEnd: json['lunchEnd'] as String? ?? '00:00',
+        dinnerStart: json['dinnerStart'] as String? ?? '00:00',
+        dinnerEnd: json['dinnerEnd'] as String? ?? '00:00',
+      );
 
   Map<String, dynamic> toJson() => {
-        'lunch': lunch.toJson(),
-        'dinner': dinner.toJson(),
+        'lunchStart': lunchStart,
+        'lunchEnd': lunchEnd,
+        'dinnerStart': dinnerStart,
+        'dinnerEnd': dinnerEnd,
       };
 }
 
-class MealTiming {
-  final String start; // "HH:mm"
-  final String end; // "HH:mm"
-
-  MealTiming({required this.start, required this.end});
-
-  factory MealTiming.fromJson(Map<String, dynamic> json) {
-    return MealTiming(
-      start: json['start'] as String? ?? 'N/A',
-      end: json['end'] as String? ?? 'N/A',
-    );
-  }
-
-  Map<String, dynamic> toJson() => {'start': start, 'end': end};
-}
-
+/// A plan now has a real id and an explicit list of meals it covers, instead
+/// of the meals being inferred from its name.
 class MessPlan {
+  final String id;
+  final String messId;
   final String name;
-  final double rate;
+  final double rateRupees;
+  final List<String> meals; // 'Lunch' and/or 'Dinner'
+  final bool isActive;
 
-  MessPlan({required this.name, required this.rate});
+  MessPlan({
+    required this.id,
+    required this.messId,
+    required this.name,
+    required this.rateRupees,
+    required this.meals,
+    this.isActive = true,
+  });
 
-  factory MessPlan.fromJson(Map<String, dynamic> json) {
-    double _toDouble(dynamic v) =>
-        v is num ? v.toDouble() : double.tryParse(v.toString()) ?? 0.0;
-    return MessPlan(
-      name: json['name'] as String,
-      rate: _toDouble(json['rate']),
-    );
-  }
+  factory MessPlan.fromJson(Map<String, dynamic> json) => MessPlan(
+        id: asId(json['id']),
+        messId: asId(json['messId']),
+        name: json['name'] as String? ?? '',
+        rateRupees: asDouble(json['rateRupees']) ?? 0,
+        meals: asStringList(json['meals']),
+        isActive: json['isActive'] == null ? true : asBool(json['isActive']),
+      );
 
-  Map<String, dynamic> toJson() => {
+  /// The request shape for creating/updating a plan.
+  Map<String, dynamic> toRequestJson() => {
         'name': name,
-        'rate': rate,
+        'rateRupees': rateRupees,
+        'meals': meals,
       };
+
+  bool get includesLunch => meals.contains('Lunch');
+  bool get includesDinner => meals.contains('Dinner');
+
+  String get mealsLabel {
+    if (includesLunch && includesDinner) return 'Lunch + Dinner';
+    if (includesLunch) return 'Lunch only';
+    if (includesDinner) return 'Dinner only';
+    return 'No meals';
+  }
 }
 
 class MessRules {
   final int minLeaveDaysForRebate;
-  final double rebatePerThali;
+  final double rebatePerThaliRupees;
   final double skipAllowancePercent;
   final bool allowAbsentRebate;
-  final double? securityDeposit;
-  final double? minMonthlyCharge;
+  final double? minMonthlyChargeRupees;
+
+  /// Advertised caution money. The app only displays it - the backend does not
+  /// collect, track or bill it.
+  final double? securityDepositRupees;
 
   MessRules({
     required this.minLeaveDaysForRebate,
-    required this.rebatePerThali,
+    required this.rebatePerThaliRupees,
     required this.skipAllowancePercent,
     this.allowAbsentRebate = false,
-    this.securityDeposit,
-    this.minMonthlyCharge,
+    this.minMonthlyChargeRupees,
+    this.securityDepositRupees,
   });
 
-  factory MessRules.fromJson(Map<String, dynamic> json) {
-    double? _toDouble(dynamic v) => v == null
-        ? null
-        : (v is num ? v.toDouble() : double.tryParse(v.toString()));
-    int _toInt(dynamic v) =>
-        v is num ? v.toInt() : int.tryParse(v.toString()) ?? 99;
-    bool _toBool(dynamic v) =>
-        v == true || (v is String && v.toLowerCase() == 'true');
+  factory MessRules.empty() => MessRules(
+        minLeaveDaysForRebate: 1,
+        rebatePerThaliRupees: 0,
+        skipAllowancePercent: 0,
+      );
 
-    return MessRules(
-      minLeaveDaysForRebate: _toInt(json['minLeaveDaysForRebate']),
-      rebatePerThali: _toDouble(json['rebatePerThali']) ?? 0,
-      skipAllowancePercent: _toDouble(json['skipAllowancePercent']) ?? 0,
-      allowAbsentRebate: _toBool(json['allowAbsentRebate']),
-      securityDeposit: _toDouble(json['securityDeposit']),
-      minMonthlyCharge: _toDouble(json['minMonthlyCharge']),
-    );
-  }
+  factory MessRules.fromJson(Map<String, dynamic> json) => MessRules(
+        minLeaveDaysForRebate: asInt(json['minLeaveDaysForRebate']) ?? 1,
+        rebatePerThaliRupees: asDouble(json['rebatePerThaliRupees']) ?? 0,
+        skipAllowancePercent: asDouble(json['skipAllowancePercent']) ?? 0,
+        allowAbsentRebate: asBool(json['allowAbsentRebate']),
+        minMonthlyChargeRupees: asDouble(json['minMonthlyChargeRupees']),
+        securityDepositRupees: asDouble(json['securityDepositRupees']),
+      );
 
   Map<String, dynamic> toJson() => {
         'minLeaveDaysForRebate': minLeaveDaysForRebate,
-        'rebatePerThali': rebatePerThali,
+        'rebatePerThaliRupees': rebatePerThaliRupees,
         'skipAllowancePercent': skipAllowancePercent,
         'allowAbsentRebate': allowAbsentRebate,
-        if (securityDeposit != null) 'securityDeposit': securityDeposit,
-        if (minMonthlyCharge != null) 'minMonthlyCharge': minMonthlyCharge,
+        if (minMonthlyChargeRupees != null)
+          'minMonthlyChargeRupees': minMonthlyChargeRupees,
+        if (securityDepositRupees != null)
+          'securityDepositRupees': securityDepositRupees,
       };
+}
+
+class MessRating {
+  final double average;
+  final int count;
+
+  const MessRating({required this.average, required this.count});
+
+  factory MessRating.fromJson(Map<String, dynamic> json) => MessRating(
+        average: asDouble(json['average']) ?? 0,
+        count: asInt(json['count']) ?? 0,
+      );
 }
